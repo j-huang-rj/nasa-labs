@@ -1,0 +1,100 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: external
+    conn_name: external-dhcp
+    default_conn_name: "cloud-init eth0"
+
+  - ifname: eth1
+    zone: dmz
+    ip4: 172.16.0.254/24
+    conn_name: dmz-static
+    default_conn_name: "cloud-init eth1"
+
+  - ifname: eth2
+    zone: internal
+    ip4: 172.16.1.254/24
+    conn_name: internal-static
+    default_conn_name: "cloud-init eth2"
+
+# WireGuard Config
+wireguard_enabled: true
+
+# Firewall Config
+firewall_custom_zones:
+  - vpn
+
+firewall_bindings:
+  - ifname: wg0
+    zone: vpn
+
+firewall_policies:
+  - name: vpn-to-lan
+    priority: -200
+    target: REJECT
+    ingress_zones:
+      - vpn
+    egress_zones:
+      - dmz
+      - internal
+    protocols: []
+    ports:
+      - port: 2222
+        proto: tcp
+
+  - name: allow-icmp
+    priority: -100
+    target: CONTINUE
+    ingress_zones:
+      - ANY
+    egress_zones:
+      - ANY
+    protocols:
+      - icmp
+    ports: []
+
+  - name: dmz-to-internal
+    priority: -50
+    target: REJECT
+    ingress_zones:
+      - dmz
+    egress_zones:
+      - internal
+    protocols: []
+    ports:
+      - port: 55688
+        proto: tcp
+
+  - name: lan-to-wan
+    priority: -10
+    target: ACCEPT
+    ingress_zones:
+      - dmz
+      - internal
+    egress_zones:
+      - external
+    protocols: []
+    ports: []
+
+firewall_masquerade_zones:
+  - dmz
+  - internal
+  - vpn
+
+firewall_forward_ports:
+  - zone: vpn
+    port: 10001
+    proto: tcp
+    toport: 2222
+    toaddr: 172.16.0.123
+
+  - zone: vpn
+    port: 10002
+    proto: tcp
+    toport: 2222
+    toaddr: 172.16.1.123
+
+firewall_rich_rules:
+  - zone: vpn
+    rule: 'rule service name="ssh" reject'

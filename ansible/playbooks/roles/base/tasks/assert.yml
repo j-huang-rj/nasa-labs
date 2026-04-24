@@ -1,0 +1,17 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate base role variables and host requirements"
+
+- name: "PHASE [assert : Assert RHEL Family]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts['os_family'] == 'RedHat'
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

@@ -1,0 +1,24 @@
+---
+- name: Router Bootstrap
+  hosts: router
+  gather_facts: true
+  become: true
+  roles:
+    - role: base
+    - role: firewall
+    - role: routing
+    - role: network
+    - role: wireguard
+      when: wireguard_enabled
+
+- name: Zone Hosts Bootstrap
+  hosts: dmz, internal
+  gather_facts: true
+  become: true
+  roles:
+    - role: base
+    - role: firewall
+    - role: network
+    - role: wireguard
+      when: wireguard_enabled
+    - role: docker

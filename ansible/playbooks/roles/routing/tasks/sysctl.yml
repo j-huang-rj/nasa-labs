@@ -1,0 +1,18 @@
+---
+- name: "PHASE [sysctl : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure kernel sysctl settings for packet forwarding"
+- name: "PHASE [sysctl : Enable IPv4 Forwarding]"
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-ipforward.conf
+    sysctl_set: true
+    reload: true
+
+- name: "PHASE [sysctl : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed sysctl phase"

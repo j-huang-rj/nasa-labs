@@ -1,0 +1,26 @@
+---
+- name: "PHASE [ping : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Verify SSH connectivity and display host facts"
+
+- name: "PHASE [ping : Verify SSH Connectivity]"
+  become: false
+  ansible.builtin.ping:
+
+- name: "PHASE [ping : Show Facts]"
+  become: false
+  ansible.builtin.debug:
+    msg:
+      - "SSH: {{ 'ProxyJump' if ansible_ssh_common_args is defined
+        and 'ProxyJump' in ansible_ssh_common_args else 'Direct' }}"
+      - "Target: {{ ansible_host }}:{{ ansible_port }}"
+      - "OS: {{ ansible_facts['distribution'] }}
+        {{ ansible_facts['distribution_version'] }}
+        {{ ansible_facts['architecture'] }}
+        ({{ ansible_facts['os_family'] }})"
+
+- name: "PHASE [ping : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed ping phase"

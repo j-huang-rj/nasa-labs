@@ -1,0 +1,26 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install WireGuard and configure tunnels"
+- name: "PHASE [setup : Install WireGuard Services]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Create WireGuard Configuration Files]"
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: "PHASE [setup : Enable and Start WireGuard Tunnels]"
+  ansible.builtin.systemd:
+    name: wg-quick@wg0
+    enabled: true
+    state: started
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

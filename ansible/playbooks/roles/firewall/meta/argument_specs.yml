@@ -1,0 +1,141 @@
+---
+argument_specs:
+  main:
+    short_description: Validate firewall role variables
+    options:
+      firewall_builtin_zones:
+        type: list
+        elements: str
+        required: true
+      firewall_custom_zones:
+        type: list
+        elements: str
+        required: false
+        default: []
+      firewall_masquerade_zones:
+        type: list
+        elements: str
+        required: false
+        default: []
+      firewall_bindings:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        options:
+          ifname:
+            type: str
+            required: true
+          zone:
+            type: str
+            required: true
+      firewall_forward_ports:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        options:
+          zone:
+            type: str
+            required: true
+          port:
+            type: raw
+            required: true
+          proto:
+            type: str
+            required: true
+            choices:
+              - tcp
+              - udp
+              - sctp
+              - dccp
+          toport:
+            type: raw
+            required: true
+          toaddr:
+            type: str
+            required: true
+      firewall_zone_ports:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        options:
+          zone:
+            type: str
+            required: true
+          port:
+            type: raw
+            required: true
+          proto:
+            type: str
+            required: true
+            choices:
+              - tcp
+              - udp
+              - sctp
+              - dccp
+      firewall_rich_rules:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        options:
+          zone:
+            type: str
+            required: true
+          rule:
+            type: str
+            required: true
+      firewall_policies:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        options:
+          name:
+            type: str
+            required: true
+          priority:
+            type: int
+            required: true
+          target:
+            type: str
+            required: true
+            choices:
+              - ACCEPT
+              - REJECT
+              - DROP
+              - CONTINUE
+          ingress_zones:
+            type: list
+            elements: str
+            required: false
+            default: []
+          egress_zones:
+            type: list
+            elements: str
+            required: false
+            default: []
+          protocols:
+            type: list
+            elements: str
+            required: false
+            default: []
+          ports:
+            type: list
+            elements: dict
+            required: false
+            default: []
+            options:
+              port:
+                type: raw
+                required: true
+              proto:
+                type: str
+                required: true
+                choices:
+                  - tcp
+                  - udp
+                  - sctp
+                  - dccp

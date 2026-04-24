@@ -1,0 +1,9 @@
+---
+docker_binfmt_enabled: false
+docker_binfmt_image: tonistiigi/binfmt:qemu-v10.0.4
+docker_binfmt_test_image: alpine:3.23
+
+docker_image_archives: []
+docker_containers: []
+docker_container_network_mode: bridge
+docker_container_restart_policy: unless-stopped

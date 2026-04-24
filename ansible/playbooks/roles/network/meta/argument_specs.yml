@@ -1,0 +1,32 @@
+---
+argument_specs:
+  main:
+    short_description: Validate network role variables
+    options:
+      network_interfaces:
+        type: list
+        elements: dict
+        required: true
+        options:
+          ifname:
+            type: str
+            required: true
+          conn_name:
+            type: str
+            required: true
+          default_conn_name:
+            type: str
+            required: true
+          zone:
+            type: str
+            required: true
+          ip4:
+            type: str
+            required: false
+          gw4:
+            type: str
+            required: false
+          dns4:
+            type: list
+            elements: str
+            required: false

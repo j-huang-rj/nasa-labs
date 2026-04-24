@@ -1,0 +1,13 @@
+---
+- name: "PHASE [handler : Reactivate changed NetworkManager connections]"
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - up
+      - "{{ item.item.conn_name }}"
+  loop: "{{ network_configure_interfaces.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.conn_name }}"
+  when: item.changed
+  changed_when: true

@@ -1,0 +1,49 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: internal
+    ip4: 172.16.1.123/24
+    gw4: 172.16.1.254
+    dns4:
+      - 8.8.8.8
+      - 1.1.1.1
+    conn_name: internal-static
+    default_conn_name: "cloud-init eth0"
+
+# Firewall Config
+firewall_custom_zones:
+  - vpn
+
+firewall_bindings:
+  - ifname: wg0
+    zone: vpn
+
+firewall_zone_ports:
+  - zone: internal
+    port: 2222
+    proto: tcp
+
+  - zone: internal
+    port: 55688
+    proto: tcp
+
+firewall_rich_rules:
+  - zone: vpn
+    rule: 'rule service name="ssh" reject'
+
+# Docker Workload Config
+docker_binfmt_enabled: true
+
+docker_image_archives:
+  - name: nap-agent
+    src: nap-agent.tar
+    image: nap-agent:latest
+    dest: /var/lib/nap/image-archives/nap-agent.tar
+
+docker_containers:
+  - name: nap-agent
+    image: nap-agent:latest
+    network_mode: host
+    platform: linux/amd64
+    restart_policy: unless-stopped

@@ -1,0 +1,73 @@
+---
+- name: "PHASE [multiarch : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure Docker binfmt emulation support"
+- name: "PHASE [multiarch : Ensure binfmt registration image is available]"
+  community.docker.docker_image_pull:
+    name: "{{ docker_binfmt_image }}"
+
+- name: "PHASE [multiarch : Install boot-time binfmt registration unit]"
+  ansible.builtin.template:
+    src: docker-binfmt-register.service.j2
+    dest: /etc/systemd/system/docker-binfmt-register.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - "HANDLER [docker : Restart docker-binfmt-register service]"
+
+- name: "PHASE [multiarch : Ensure boot-time binfmt registration unit is enabled and started]"
+  ansible.builtin.systemd:
+    name: docker-binfmt-register.service
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: "PHASE [multiarch : Apply pending systemd handler actions]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [multiarch : Check qemu-x86_64 registration file exists]"
+  ansible.builtin.stat:
+    path: /proc/sys/fs/binfmt_misc/qemu-x86_64
+  register: docker_binfmt_qemu_x86_64
+
+- name: "PHASE [multiarch : Assert qemu-x86_64 registration file exists]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - docker_binfmt_qemu_x86_64.stat.exists
+    fail_msg: "qemu-x86_64 binfmt registration file was not created"
+
+- name: "PHASE [multiarch : Pre-pull amd64 test image]"
+  community.docker.docker_image_pull:
+    name: "{{ docker_binfmt_test_image }}"
+    platform: linux/amd64
+
+- name: "PHASE [multiarch : Verify amd64 container execution]"
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --pull=never
+      - --platform=linux/amd64
+      - "{{ docker_binfmt_test_image }}"
+      - uname
+      - -m
+  register: docker_binfmt_test
+  changed_when: false
+
+- name: "PHASE [multiarch : Assert amd64 container execution output]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - docker_binfmt_test.stdout == 'x86_64'
+    fail_msg: >-
+      Expected amd64 emulation test to print x86_64, got:
+      {{ docker_binfmt_test.stdout | default('') }}
+
+- name: "PHASE [multiarch : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed multiarch phase"

@@ -1,0 +1,75 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate docker role variables"
+
+- name: "PHASE [assert : Check Docker Image Archive Definitions]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.name | length > 0
+      - item.src | length > 0
+      - item.dest | length > 0
+      - item.image | length > 0
+      - item.dest is match('^/')
+      - item.image.rsplit('/', 1)[-1] is match('^[^:]+:[^:]+$')
+    fail_msg: "docker_image_archives entries must define non-empty name, src, dest, and image fields, and dest must be an absolute path"
+  loop: "{{ docker_image_archives | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+
+- name: "PHASE [assert : Check Docker Image Archive Names Are Unique]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - (docker_image_archives | default([]) | map(attribute='name') | list | unique | length) == (docker_image_archives | default([]) | length)
+    fail_msg: "docker_image_archives entries must use unique name values"
+
+- name: "PHASE [assert : Check Docker Container Definitions]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.name | length > 0
+      - item.image | length > 0
+      - item.image.rsplit('/', 1)[-1] is match('^[^:]+:[^:]+$')
+    fail_msg: "docker_containers entries must define non-empty name and an explicitly tagged image field"
+  loop: "{{ docker_containers | default([]) }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+
+- name: "PHASE [assert : Check Docker Container Names Are Unique]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - (docker_containers | default([]) | map(attribute='name') | list | unique | length) == (docker_containers | default([]) | length)
+    fail_msg: "docker_containers entries must use unique name values"
+
+- name: "PHASE [assert : Check Docker Binfmt Image Reference Format]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - not (docker_binfmt_enabled | default(false) | bool) or docker_binfmt_image is defined
+      - docker_binfmt_image is not defined or '@' not in docker_binfmt_image
+      - docker_binfmt_image is not defined or (docker_binfmt_image.rsplit('/', 1)[-1] is match('^[^:]+:[^:]+$'))
+    fail_msg: "docker_binfmt_enabled requires docker_binfmt_image, and docker_binfmt_image must include an explicit tag, for example tonistiigi/binfmt:latest"
+
+- name: "PHASE [assert : Check Docker Binfmt Test Image Reference Format]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - not (docker_binfmt_enabled | default(false) | bool) or docker_binfmt_test_image is defined
+      - docker_binfmt_test_image is not defined or '@' not in docker_binfmt_test_image
+      - docker_binfmt_test_image is not defined or (docker_binfmt_test_image.rsplit('/', 1)[-1] is match('^[^:]+:[^:]+$'))
+    fail_msg: "docker_binfmt_test_image must include an explicit tag so the amd64 verification image is reproducible"
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

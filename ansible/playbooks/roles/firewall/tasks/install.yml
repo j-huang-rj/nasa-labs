@@ -1,0 +1,22 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install and start firewall services"
+- name: "PHASE [install : Install Firewall Services]"
+  ansible.builtin.dnf:
+    name:
+      - firewalld
+      - python3-firewall
+    state: present
+
+- name: "PHASE [install : Enable and Start Firewall Services]"
+  ansible.builtin.systemd:
+    name: firewalld
+    enabled: true
+    state: started
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"

@@ -1,0 +1,33 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate network role variables"
+
+- name: "PHASE [assert : Check Network Interface Names Are Unique]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - (network_interfaces | map(attribute='ifname') | list | length) == (network_interfaces | map(attribute='ifname') | list | unique | length)
+    fail_msg: "network_interfaces contains duplicate ifname entries"
+
+- name: "PHASE [assert : Check Network Interface Zones Are Known]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.zone in firewall_known_zones
+    fail_msg: >-
+      network_interfaces[].zone {{ item.zone }} is neither a firewalld built-in zone
+      nor declared in firewall_custom_zones.
+  vars:
+    firewall_known_zones: "{{ firewall_builtin_zones + (firewall_custom_zones | default([])) }}"
+  loop: "{{ network_interfaces }}"
+  loop_control:
+    label: "{{ item.conn_name }}"
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"
