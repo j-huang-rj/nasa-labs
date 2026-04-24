@@ -1,0 +1,16 @@
+---
+- name: "START"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting execution of firewall role"
+
+- name: Validate Firewall Role Variables
+  ansible.builtin.import_tasks: assert.yml
+
+- name: Configure Firewall Workflow
+  ansible.builtin.import_tasks: setup.yml
+
+- name: "END"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed execution of firewall role"

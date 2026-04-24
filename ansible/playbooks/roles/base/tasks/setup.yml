@@ -1,0 +1,20 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up the base system prerequisites and packages"
+
+- name: "PHASE [setup : Upgrade System]"
+  ansible.builtin.import_tasks: upgrade.yml
+  when: base_upgrade_enabled | default(true)
+
+- name: "PHASE [setup : Install Base Packages]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Reboot Checkpoint]"
+  ansible.builtin.import_tasks: reboot.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

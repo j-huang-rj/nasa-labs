@@ -1,0 +1,131 @@
+---
+- name: "PHASE [workloads : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure Docker image archives and containers"
+- name: "PHASE [workloads : Ensure Docker archive directories exist]"
+  ansible.builtin.file:
+    path: "{{ item.dest | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ docker_image_archives | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+- name: "PHASE [workloads : Copy Docker image archives from search paths]"
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+  register: docker_archive_copy
+  loop: "{{ docker_image_archives | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+# Disabled archive entries are skipped intentionally.
+# Existing tar files and loaded Docker images are left in place so disabling
+# archive management is non-destructive, unlike disabled containers below.
+
+- name: "PHASE [workloads : Check Docker image archive references before loading]"
+  community.docker.docker_image_info:
+    name: "{{ item.image }}"
+  register: docker_workload_image_info_preload
+  loop: "{{ docker_image_archives | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+- name: "PHASE [workloads : Load updated or missing Docker image archives into local daemon]"
+  community.docker.docker_image_load:
+    path: "{{ item.item.dest }}"
+  loop: "{{ docker_archive_copy.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not (item.skipped | default(false))
+    - >-
+      item.changed | default(false) or
+      (
+        (
+          docker_workload_image_info_preload.results
+          | default([])
+          | selectattr('item.name', 'equalto', item.item.name)
+          | map(attribute='images')
+          | first
+          | default([])
+        ) | length
+      ) == 0
+
+- name: "PHASE [workloads : Check Docker image archive references]"
+  community.docker.docker_image_info:
+    name: "{{ item.image }}"
+  register: docker_workload_image_info
+  loop: "{{ docker_image_archives | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+- name: "PHASE [workloads : Assert Docker image archive references are available]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - (item.images | default([])) | length > 0
+    fail_msg: >-
+      Loaded archive {{ item.item.name }} does not provide Docker image reference {{ item.item.image }}.
+      Update docker_image_archives[].image to match the archive tags.
+  loop: "{{ docker_workload_image_info.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not (item.skipped | default(false))
+
+- name: "PHASE [workloads : Remove disabled Docker containers]"
+  community.docker.docker_container:
+    name: "{{ item.name }}"
+    state: absent
+  loop: "{{ docker_containers | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (item.enabled | default(true) | bool)
+
+- name: "PHASE [workloads : Ensure Docker containers are running]"
+  community.docker.docker_container:
+    name: "{{ item.name }}"
+    image: "{{ item.image }}"
+    state: started
+    pull: never
+    restart_policy: "{{ item.restart_policy | default(docker_container_restart_policy) }}"
+    network_mode: "{{ item.network_mode | default(docker_container_network_mode) }}"
+    platform: "{{ item.platform | default(omit) }}"
+  loop: "{{ docker_containers | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+- name: "PHASE [workloads : Check Docker container states]"
+  community.docker.docker_container_info:
+    name: "{{ item.name }}"
+  register: docker_workload_container_info
+  loop: "{{ docker_containers | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+- name: "PHASE [workloads : Assert Docker containers are running]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.exists and item.container.State.Status == 'running'
+    fail_msg: "Container {{ item.item.name }} is not running after deployment"
+  loop: "{{ docker_workload_container_info.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not (item.skipped | default(false))
+
+- name: "PHASE [workloads : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed workloads phase"

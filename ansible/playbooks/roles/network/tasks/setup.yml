@@ -1,0 +1,12 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up network interface configuration workflow"
+- name: "PHASE [setup : Configure NetworkManager Connections]"
+  ansible.builtin.import_tasks: nmcli.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

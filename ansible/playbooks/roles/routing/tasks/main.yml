@@ -1,0 +1,13 @@
+---
+- name: "START"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting execution of routing role"
+
+- name: Setup Routing
+  ansible.builtin.import_tasks: setup.yml
+
+- name: "END"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed execution of routing role"

@@ -1,0 +1,22 @@
+---
+- name: "PHASE [bind : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Apply firewalld bindings"
+- name: "PHASE [bind : Apply Firewall Bindings]"
+  ansible.posix.firewalld:
+    zone: "{{ item.zone }}"
+    interface: "{{ item.ifname }}"
+    state: enabled
+    permanent: true
+    immediate: false
+  loop: "{{ firewall_bindings | default([]) }}"
+  notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [bind : Flush Firewall Handlers]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [bind : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed bind phase"

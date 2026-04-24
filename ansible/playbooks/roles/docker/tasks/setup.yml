@@ -1,0 +1,23 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up Docker installation workflow"
+- name: "PHASE [setup : Install Docker]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Configure Multiarch Emulation]"
+  ansible.builtin.import_tasks: multiarch.yml
+  when: docker_binfmt_enabled | default(false)
+
+- name: "PHASE [setup : Configure Docker Workloads]"
+  ansible.builtin.import_tasks: workloads.yml
+  when: >-
+    (docker_image_archives | default([]) | length > 0)
+    or
+    (docker_containers | default([]) | length > 0)
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

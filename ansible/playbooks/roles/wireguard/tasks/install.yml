@@ -1,0 +1,15 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install wireguard services"
+- name: "PHASE [install : Install Wireguard Services]"
+  ansible.builtin.dnf:
+    name:
+      - wireguard-tools
+    state: present
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"

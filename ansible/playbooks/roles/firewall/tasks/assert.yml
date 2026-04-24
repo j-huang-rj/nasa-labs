@@ -1,0 +1,140 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate firewall role variables"
+
+- name: "PHASE [assert : Check Firewall Builtin Zones]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - firewall_builtin_zones | length > 0
+
+- name: "PHASE [assert : Check Firewall Bindings Are Unique]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (firewall_bindings | default([]) | map(attribute='ifname') | list | length)
+        ==
+        ((firewall_bindings | default([]) | map(attribute='ifname') | list | unique | length))
+    fail_msg: "firewall_bindings contains duplicate firewalld bindings"
+
+- name: "PHASE [assert : Check Network-managed Interfaces Do Not Overlap Firewall Bindings]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - firewall_network_interface_overlap | length == 0
+    fail_msg: >-
+      Interfaces managed by network_interfaces must not also appear in firewall_bindings:
+      {{ firewall_network_interface_overlap | join(', ') }}
+  vars:
+    firewall_network_interface_overlap: >-
+      {{
+        (network_interfaces | default([]) | map(attribute='ifname') | list)
+        | intersect(firewall_bindings | default([]) | map(attribute='ifname') | list)
+      }}
+
+- name: "PHASE [assert : Validate Firewall Policy Semantics]"
+  vars:
+    firewall_known_zones: "{{ firewall_builtin_zones + (firewall_custom_zones | default([])) }}"
+    firewall_policy_allowed_zone_refs: "{{ ['ANY', 'HOST'] + firewall_known_zones }}"
+  block:
+    - name: "PHASE [assert : Check Firewall Policy Ingress Zones Are Not Empty]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (item.ingress_zones | default([])) | length > 0
+        fail_msg: "Policy {{ item.name }} must declare at least one ingress zone"
+      loop: "{{ firewall_policies | default([]) }}"
+      loop_control:
+        label: "{{ item.name | default('undefined') }}"
+
+    - name: "PHASE [assert : Check Firewall Policy Egress Zones Are Not Empty]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (item.egress_zones | default([])) | length > 0
+        fail_msg: "Policy {{ item.name }} must declare at least one egress zone"
+      loop: "{{ firewall_policies | default([]) }}"
+      loop_control:
+        label: "{{ item.name | default('undefined') }}"
+
+    - name: "PHASE [assert : Check Firewall Policy Names Do Not Collide with Zones]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.name not in firewall_known_zones
+        fail_msg: "Policy name {{ item.name }} collides with an existing firewalld zone name"
+      loop: "{{ firewall_policies | default([]) }}"
+      loop_control:
+        label: "{{ item.name | default('undefined') }}"
+
+    - name: "PHASE [assert : Check Firewall Policy Ingress Zones Values]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.1 in firewall_policy_allowed_zone_refs
+        fail_msg: "Policy {{ item.0.name }} has invalid ingress zone {{ item.1 }}"
+      loop: "{{ firewall_policies | default([]) | subelements('ingress_zones', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} -> {{ item.1 }}"
+
+    - name: "PHASE [assert : Check Firewall Policy Egress Zones Values]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.1 in firewall_policy_allowed_zone_refs
+        fail_msg: "Policy {{ item.0.name }} has invalid egress zone {{ item.1 }}"
+      loop: "{{ firewall_policies | default([]) | subelements('egress_zones', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} -> {{ item.1 }}"
+
+- name: "PHASE [assert : Validate Referenced Zones]"
+  vars:
+    firewall_known_zones: "{{ firewall_builtin_zones + (firewall_custom_zones | default([])) }}"
+  block:
+    - name: "PHASE [assert : Check Referenced Zones Exist for Interfaces, Forward Ports, and Rich Rules]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.zone in firewall_known_zones
+        fail_msg: "Zone {{ item.zone }} is referenced but not declared in built-in zones or firewall_custom_zones"
+      vars:
+        firewall_zone_reference_items: >-
+          {{
+            (network_interfaces | default([]) | selectattr('zone', 'defined') | list)
+            +
+            (firewall_bindings | default([]))
+            + (firewall_zone_ports | default([]))
+            + (firewall_forward_ports | default([]))
+            + (firewall_rich_rules | default([]))
+          }}
+      loop: "{{ firewall_zone_reference_items }}"
+      loop_control:
+        label: "{{ item.zone | default('undefined') }}"
+
+    - name: "PHASE [assert : Check Referenced Masquerade Zones Exist]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item in firewall_known_zones
+        fail_msg: "Masquerade zone {{ item }} is not declared in built-in zones or firewall_custom_zones"
+      loop: "{{ firewall_masquerade_zones | default([]) }}"
+      loop_control:
+        label: "{{ item | default('undefined') }}"
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

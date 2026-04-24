@@ -1,0 +1,37 @@
+# OS / Editor
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*~
+*.swp
+*.swo
+
+# Python / Tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Ansible
+.ansible/
+*.retry
+ansible.log
+ansible/inventory/hosts.yml
+!ansible/inventory/hosts.example.yml
+ansible/inventory/host_vars/*/secrets.yml
+!ansible/inventory/host_vars/*/secrets.example.yml
+
+# cloud-init generated artifacts
+cloud-init/**/seed.iso
+cloud-init/**/user-data
+cloud-init/**/meta-data
+cloud-init/**/network-config
+
+# Local workspace
+.opencode/

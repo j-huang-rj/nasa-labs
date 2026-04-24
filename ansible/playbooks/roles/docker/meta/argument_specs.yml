@@ -1,0 +1,88 @@
+---
+argument_specs:
+  main:
+    short_description: Validate docker role variables
+    options:
+      docker_binfmt_enabled:
+        type: bool
+        required: false
+        default: false
+
+      docker_binfmt_image:
+        type: str
+        required: false
+        default: tonistiigi/binfmt:latest
+
+      docker_binfmt_test_image:
+        type: str
+        required: false
+        default: alpine:3.22
+
+      docker_image_archives:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        options:
+          name:
+            type: str
+            required: true
+          image:
+            type: str
+            required: true
+          src:
+            type: str
+            required: true
+          dest:
+            type: str
+            required: true
+          enabled:
+            type: bool
+            required: false
+            default: true
+
+      docker_containers:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        options:
+          name:
+            type: str
+            required: true
+          image:
+            type: str
+            required: true
+          platform:
+            type: str
+            required: false
+          network_mode:
+            type: str
+            required: false
+          restart_policy:
+            type: str
+            required: false
+            choices:
+              - "no"
+              - always
+              - on-failure
+              - unless-stopped
+          enabled:
+            type: bool
+            required: false
+            default: true
+
+      docker_container_network_mode:
+        type: str
+        required: false
+        default: bridge
+
+      docker_container_restart_policy:
+        type: str
+        required: false
+        default: unless-stopped
+        choices:
+          - "no"
+          - always
+          - on-failure
+          - unless-stopped

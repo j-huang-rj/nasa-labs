@@ -1,0 +1,19 @@
+---
+- name: "START"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting execution of base role"
+
+- name: Verify SSH Connectivity
+  ansible.builtin.import_tasks: ping.yml
+
+- name: Assert Role Variables
+  ansible.builtin.import_tasks: assert.yml
+
+- name: Configure Base System
+  ansible.builtin.import_tasks: setup.yml
+
+- name: "END"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed execution of base role"

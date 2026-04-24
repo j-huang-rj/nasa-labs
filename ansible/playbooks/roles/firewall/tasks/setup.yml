@@ -1,0 +1,18 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up firewalld configuration workflow"
+- name: "PHASE [setup : Install and Start Firewall Services]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Apply Policy Pass]"
+  ansible.builtin.import_tasks: policy.yml
+
+- name: "PHASE [setup : Apply Bind Pass]"
+  ansible.builtin.import_tasks: bind.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

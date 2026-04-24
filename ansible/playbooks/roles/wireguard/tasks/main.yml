@@ -1,0 +1,13 @@
+---
+- name: "START"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting execution of wireguard role"
+
+- name: "Configure WireGuard"
+  ansible.builtin.import_tasks: setup.yml
+
+- name: "END"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed execution of wireguard role"

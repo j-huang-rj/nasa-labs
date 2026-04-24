@@ -1,0 +1,12 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up routing configuration workflow"
+- name: "PHASE [setup : Configure sysctl]"
+  ansible.builtin.import_tasks: sysctl.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

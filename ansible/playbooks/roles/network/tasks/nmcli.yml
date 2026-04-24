@@ -1,0 +1,76 @@
+---
+- name: "PHASE [nmcli : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Manage NetworkManager connections and bring interfaces online"
+- name: "PHASE [nmcli : Get All Connection Names]"
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - NAME
+      - connection
+      - show
+  register: network_conn_names
+  changed_when: false
+
+- name: "PHASE [nmcli : Get UUID of Default Connections]"
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -g
+      - connection.uuid
+      - connection
+      - show
+      - "{{ item.default_conn_name }}"
+  register: network_default_conn_uuids
+  loop: "{{ network_interfaces }}"
+  loop_control:
+    label: "{{ item.conn_name }}"
+  when:
+    - item.default_conn_name in network_conn_names.stdout_lines
+    - item.conn_name not in network_conn_names.stdout_lines
+  changed_when: false
+
+- name: "PHASE [nmcli : Rename Default Connections]"
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - uuid
+      - "{{ item.stdout | trim }}"
+      - connection.id
+      - "{{ item.item.conn_name }}"
+  loop: "{{ network_default_conn_uuids.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.conn_name }}"
+  when:
+    - item is not skipped
+    - item.rc == 0
+  changed_when: true
+
+- name: "PHASE [nmcli : Configure Interfaces]"
+  community.general.nmcli:
+    conn_name: "{{ item.conn_name }}"
+    ifname: "{{ item.ifname }}"
+    zone: "{{ item.zone | default(omit) }}"
+    ip4: "{{ item.ip4 | default(omit) }}"
+    gw4: "{{ item.gw4 | default(omit) }}"
+    dns4: "{{ item.dns4 | default(omit) }}"
+    type: ethernet
+    method4: "{{ 'manual' if item.ip4 is defined else 'auto' }}"
+    state: present
+  register: network_configure_interfaces
+  loop: "{{ network_interfaces }}"
+  loop_control:
+    label: "{{ item.conn_name }}"
+  notify: "PHASE [handler : Reactivate changed NetworkManager connections]"
+
+- name: "PHASE [nmcli : Flush Handlers Before Activation]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [nmcli : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed nmcli phase"

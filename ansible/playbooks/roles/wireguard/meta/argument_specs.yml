@@ -1,0 +1,26 @@
+---
+argument_specs:
+  main:
+    short_description: Validate wireguard role variables
+    options:
+      wireguard_address:
+        type: str
+        required: true
+      wireguard_private_key:
+        type: str
+        required: true
+      wireguard_peer_public_key:
+        type: str
+        required: true
+      wireguard_preshared_key:
+        type: str
+        required: true
+      wireguard_allowed_ips:
+        type: str
+        required: true
+      wireguard_peer_endpoint:
+        type: str
+        required: true
+      wireguard_persistent_keepalive:
+        type: int
+        required: false

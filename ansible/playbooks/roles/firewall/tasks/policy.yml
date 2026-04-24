@@ -1,0 +1,479 @@
+---
+- name: "PHASE [policy : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Apply firewalld policies"
+- name: "PHASE [policy : Manage Custom Zones]"
+  ansible.posix.firewalld:
+    zone: "{{ item }}"
+    state: present
+    permanent: true
+    immediate: false
+  loop: "{{ firewall_custom_zones | default([]) }}"
+  notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Manage Policy Objects]"
+  when: firewall_policies is defined
+  block:
+    - name: "PHASE [policy : Query Firewall Policy Objects]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - --get-policies
+      register: firewall_policy_presence
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Objects Exist]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--new-policy={{ item.name }}"
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.name not in ((firewall_policy_presence.stdout | trim | split) if (firewall_policy_presence.stdout | trim | length > 0) else [])
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Get Firewall Policy Priority]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.name }}"
+          - --get-priority
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: firewall_policy_priority_state
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Priority]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.item.name }}"
+          - "--set-priority={{ item.item.priority }}"
+      loop: "{{ firewall_policy_priority_state.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: (item.stdout | trim) != (item.item.priority | string)
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Get Firewall Policy Target]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.name }}"
+          - --get-target
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: firewall_policy_target_state
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Target]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.item.name }}"
+          - "--set-target={{ item.item.target }}"
+      loop: "{{ firewall_policy_target_state.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: (item.stdout | trim) != item.item.target
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Get Firewall Policy Ingress Zones]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.name }}"
+          - --list-ingress-zones
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: firewall_policy_ingress_state
+      changed_when: false
+
+    - name: "PHASE [policy : Initialize Ingress Zone Maps]"
+      ansible.builtin.set_fact:
+        firewall_policy_ingress_desired_map: {}
+        firewall_policy_ingress_current_map: {}
+      changed_when: false
+
+    - name: "PHASE [policy : Build Desired Ingress Zone Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_ingress_desired_map: >-
+          {{
+            firewall_policy_ingress_desired_map
+            | combine({ item.name: (item.ingress_zones | default([])) })
+          }}
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Build Current Ingress Zone Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_ingress_current_map: >-
+          {{
+            firewall_policy_ingress_current_map
+            | combine({
+              item.item.name: (
+                (item.stdout | trim | split)
+                if (item.stdout | trim | length > 0)
+                else []
+              )
+            })
+          }}
+      loop: "{{ firewall_policy_ingress_state.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Ingress Zones]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.name }}"
+          - "--add-ingress-zone={{ item.1 }}"
+      loop: "{{ firewall_policies | subelements('ingress_zones', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_policy_ingress_current_map[item.0.name] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Remove Stale Firewall Policy Ingress Zones]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.key }}"
+          - "--remove-ingress-zone={{ item.1 }}"
+      loop: "{{ firewall_policy_ingress_current_map | dict2items | subelements('value', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.key }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_policy_ingress_desired_map[item.0.key] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Get Firewall Policy Egress Zones]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.name }}"
+          - --list-egress-zones
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: firewall_policy_egress_state
+      changed_when: false
+
+    - name: "PHASE [policy : Initialize Egress Zone Maps]"
+      ansible.builtin.set_fact:
+        firewall_policy_egress_desired_map: {}
+        firewall_policy_egress_current_map: {}
+      changed_when: false
+
+    - name: "PHASE [policy : Build Desired Egress Zone Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_egress_desired_map: >-
+          {{
+            firewall_policy_egress_desired_map
+            | combine({ item.name: (item.egress_zones | default([])) })
+          }}
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Build Current Egress Zone Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_egress_current_map: >-
+          {{
+            firewall_policy_egress_current_map
+            | combine({
+              item.item.name: (
+                (item.stdout | trim | split)
+                if (item.stdout | trim | length > 0)
+                else []
+              )
+            })
+          }}
+      loop: "{{ firewall_policy_egress_state.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Egress Zones]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.name }}"
+          - "--add-egress-zone={{ item.1 }}"
+      loop: "{{ firewall_policies | subelements('egress_zones', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_policy_egress_current_map[item.0.name] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Remove Stale Firewall Policy Egress Zones]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.key }}"
+          - "--remove-egress-zone={{ item.1 }}"
+      loop: "{{ firewall_policy_egress_current_map | dict2items | subelements('value', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.key }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_policy_egress_desired_map[item.0.key] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Get Firewall Policy Protocols]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.name }}"
+          - --list-protocols
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: firewall_policy_protocol_state
+      changed_when: false
+
+    - name: "PHASE [policy : Initialize Protocol Maps]"
+      ansible.builtin.set_fact:
+        firewall_policy_protocol_desired_map: {}
+        firewall_policy_protocol_current_map: {}
+      changed_when: false
+
+    - name: "PHASE [policy : Build Desired Protocol Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_protocol_desired_map: >-
+          {{
+            firewall_policy_protocol_desired_map
+            | combine({ item.name: (item.protocols | default([])) })
+          }}
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Build Current Protocol Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_protocol_current_map: >-
+          {{
+            firewall_policy_protocol_current_map
+            | combine({
+              item.item.name: (
+                (item.stdout | trim | split)
+                if (item.stdout | trim | length > 0)
+                else []
+              )
+            })
+          }}
+      loop: "{{ firewall_policy_protocol_state.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Protocols]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.name }}"
+          - "--add-protocol={{ item.1 }}"
+      loop: "{{ firewall_policies | subelements('protocols', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_policy_protocol_current_map[item.0.name] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Remove Stale Firewall Policy Protocols]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.key }}"
+          - "--remove-protocol={{ item.1 }}"
+      loop: "{{ firewall_policy_protocol_current_map | dict2items | subelements('value', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.key }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_policy_protocol_desired_map[item.0.key] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Get Firewall Policy Ports]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.name }}"
+          - --list-ports
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: firewall_policy_port_state
+      changed_when: false
+
+    - name: "PHASE [policy : Initialize Port Maps]"
+      ansible.builtin.set_fact:
+        firewall_policy_port_desired_map: {}
+        firewall_policy_port_current_map: {}
+      changed_when: false
+
+    - name: "PHASE [policy : Build Desired Port Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_port_desired_map: >-
+          {{
+            firewall_policy_port_desired_map
+            | combine({
+              item.name: (
+                (item.ports | default([]) | map(attribute='port') | map('string') | list)
+                | zip(item.ports | default([]) | map(attribute='proto') | map('string') | list)
+                | map('join', '/')
+                | list
+              )
+            })
+          }}
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Build Current Port Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_port_current_map: >-
+          {{
+            firewall_policy_port_current_map
+            | combine({
+              item.item.name: (
+                (item.stdout | trim | split)
+                if (item.stdout | trim | length > 0)
+                else []
+              )
+            })
+          }}
+      loop: "{{ firewall_policy_port_state.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Ports]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.name }}"
+          - "--add-port={{ firewall_policy_port_token }}"
+      vars:
+        firewall_policy_port_token: "{{ item.1.port }}/{{ item.1.proto }}"
+      loop: "{{ firewall_policies | subelements('ports', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} -> {{ item.1.port }}/{{ item.1.proto }}"
+      when: firewall_policy_port_token not in (firewall_policy_port_current_map[item.0.name] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Remove Stale Firewall Policy Ports]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.key }}"
+          - "--remove-port={{ item.1 }}"
+      loop: "{{ firewall_policy_port_current_map | dict2items | subelements('value', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.key }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_policy_port_desired_map[item.0.key] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Disable Forwarding For All Active Zones By Default]"
+  ansible.posix.firewalld:
+    zone: "{{ item }}"
+    forward: true
+    state: disabled
+    permanent: true
+    immediate: false
+  loop: "{{ firewall_active_zones }}"
+  vars:
+    firewall_active_zones: >-
+      {{
+        (
+          (network_interfaces | default([]) | selectattr('zone', 'defined') | map(attribute='zone') | list)
+          + (firewall_bindings | default([]) | map(attribute='zone') | list)
+        ) | unique
+      }}
+  notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Enable Masquerade For Zones]"
+  ansible.posix.firewalld:
+    zone: "{{ item }}"
+    masquerade: true
+    state: enabled
+    permanent: true
+    immediate: false
+  loop: "{{ firewall_masquerade_zones | default([]) }}"
+  notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Configure Port Forwarding]"
+  ansible.posix.firewalld:
+    zone: "{{ item.zone }}"
+    port_forward:
+      - port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        toport: "{{ item.toport }}"
+        toaddr: "{{ item.toaddr }}"
+    state: enabled
+    permanent: true
+    immediate: false
+  loop: "{{ firewall_forward_ports | default([]) }}"
+  notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Configure Zone Ports]"
+  ansible.posix.firewalld:
+    zone: "{{ item.zone }}"
+    port: "{{ item.port }}/{{ item.proto }}"
+    state: enabled
+    permanent: true
+    immediate: false
+  loop: "{{ firewall_zone_ports | default([]) }}"
+  notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Configure Rich Rules]"
+  ansible.posix.firewalld:
+    zone: "{{ item.zone }}"
+    rich_rule: "{{ item.rule }}"
+    state: enabled
+    permanent: true
+    immediate: false
+  loop: "{{ firewall_rich_rules | default([]) }}"
+  notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Flush Firewall Handlers]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [policy : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed policy phase"

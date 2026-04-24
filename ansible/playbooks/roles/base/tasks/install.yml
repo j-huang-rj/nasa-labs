@@ -1,0 +1,60 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install base packages"
+
+- name: "PHASE [install : Install EPEL Release Repository]"
+  ansible.builtin.dnf:
+    name: epel-release
+    state: present
+
+- name: "PHASE [install : Install General Tools and Network Utilities]"
+  ansible.builtin.dnf:
+    name:
+      # DNF Repo Management
+      - dnf-plugins-core
+
+      # VM Integration
+      - qemu-guest-agent
+
+      # General Tools
+      - wget
+      - git
+      - vim
+
+      # DNS & Connectivity
+      - bind-utils
+      - traceroute
+      - mtr
+
+      # Scanning & Capture
+      - nmap
+      - nmap-ncat
+      - wireshark-cli
+      - whois
+
+      # Extra Packages
+      - fastfetch
+
+    state: present
+    update_cache: true
+
+- name: "PHASE [install : Install Kernel Modules Extra]"
+  ansible.builtin.dnf:
+    name: kernel-modules-extra
+    state: present
+  register: base_kernel_modules_extra_result
+
+- name: "PHASE [install : Enable and Start Required Services]"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - qemu-guest-agent
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"

@@ -1,0 +1,17 @@
+---
+- name: "PHASE [upgrade : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Upgrade all system packages to current versions"
+
+- name: "PHASE [upgrade : Upgrade all system packages]"
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest # noqa: package-latest
+    update_cache: true
+  register: base_upgrade_result
+
+- name: "PHASE [upgrade : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed upgrade phase"
