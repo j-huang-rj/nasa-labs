@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/canonical/cloud-init/main/cloudinit/config/schemas/schema-cloud-config-v1.json
+---
+#cloud-config
+
+timezone: Asia/Taipei
+locale: en_US.UTF-8
+
+system_info:
+  default_user:
+    name: student
+
+users:
+  - name: student
+    groups: wheel
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEPLACEHOLDERKEYFORLOCALUSEONLY student@example.invalid
+
+# SSH key for auth only
+ssh_pwauth: false
+
+# Disable direct login as root
+disable_root: true
+
+# Expand the root filesystem to fill the available disk
+resize_rootfs: true
+
+power_state:
+  mode: reboot
+  message: "Reboot system after cloud-init setup"
+  condition: true
