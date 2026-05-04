@@ -28,6 +28,14 @@ firewall_zone_ports:
     port: 55688
     proto: tcp
 
+  - zone: internal
+    port: 53
+    proto: udp
+
+  - zone: internal
+    port: 53
+    proto: tcp
+
 firewall_rich_rules:
   - zone: vpn
     rule: 'rule service name="ssh" reject'
