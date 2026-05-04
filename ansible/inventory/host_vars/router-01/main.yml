@@ -70,6 +70,30 @@ firewall_policies:
       - port: 53
         proto: tcp
 
+  - name: internal-to-vpn
+    priority: -40
+    target: REJECT
+    ingress_zones:
+      - internal
+    egress_zones:
+      - vpn
+    protocols: []
+    ports:
+      - port: 53
+        proto: udp
+      - port: 53
+        proto: tcp
+
+  - name: internal-to-dmz
+    priority: -30
+    target: ACCEPT
+    ingress_zones:
+      - internal
+    egress_zones:
+      - dmz
+    protocols: []
+    ports: []
+
   - name: lan-to-wan
     priority: -10
     target: ACCEPT

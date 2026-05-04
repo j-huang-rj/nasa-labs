@@ -12,13 +12,6 @@ network_interfaces:
     default_conn_name: "cloud-init eth0"
 
 # Firewall Config
-firewall_custom_zones:
-  - vpn
-
-firewall_bindings:
-  - ifname: wg0
-    zone: vpn
-
 firewall_zone_ports:
   - zone: internal
     port: 2222
@@ -28,19 +21,8 @@ firewall_zone_ports:
     port: 55688
     proto: tcp
 
-  - zone: internal
-    port: 53
-    proto: udp
-
-  - zone: internal
-    port: 53
-    proto: tcp
-
-firewall_rich_rules:
-  - zone: vpn
-    rule: 'rule service name="ssh" reject'
-
 # Docker Workload Config
+docker_enabled: true
 docker_binfmt_enabled: true
 
 docker_image_archives:

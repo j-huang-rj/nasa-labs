@@ -19,10 +19,28 @@ all:
           ansible_ssh_common_args: >-
             -o ProxyJump=student@127.0.0.1:2787
 
+        secondary-ns-01:
+          ansible_host: 172.16.0.53
+          ansible_port: 22
+          ansible_ssh_common_args: >-
+            -o ProxyJump=student@127.0.0.1:2787
+
     internal:
       hosts:
         internal-agent-01:
           ansible_host: 172.16.1.123
+          ansible_port: 22
+          ansible_ssh_common_args: >-
+            -o ProxyJump=student@127.0.0.1:2787
+
+        primary-ns-01:
+          ansible_host: 172.16.1.53
+          ansible_port: 22
+          ansible_ssh_common_args: >-
+            -o ProxyJump=student@127.0.0.1:2787
+
+        dns-01:
+          ansible_host: 172.16.1.153
           ansible_port: 22
           ansible_ssh_common_args: >-
             -o ProxyJump=student@127.0.0.1:2787

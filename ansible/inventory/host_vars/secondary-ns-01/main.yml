@@ -3,7 +3,7 @@
 network_interfaces:
   - ifname: eth0
     zone: dmz
-    ip4: 172.16.0.123/24
+    ip4: 172.16.0.53/24
     gw4: 172.16.0.254
     dns4:
       - 8.8.8.8
@@ -24,26 +24,24 @@ firewall_bindings:
 
 firewall_zone_ports:
   - zone: dmz
-    port: 2222
+    port: 53
+    proto: udp
+
+  - zone: dmz
+    port: 53
+    proto: tcp
+
+  - zone: vpn
+    port: 53
+    proto: udp
+
+  - zone: vpn
+    port: 53
     proto: tcp
 
 firewall_rich_rules:
   - zone: vpn
     rule: 'rule service name="ssh" reject'
 
-# Docker Workload Config
-docker_enabled: true
-docker_binfmt_enabled: true
-
-docker_image_archives:
-  - name: nap-agent
-    image: nap-agent:latest
-    src: nap-agent.tar
-    dest: /var/lib/nap/image-archives/nap-agent.tar
-
-docker_containers:
-  - name: nap-agent
-    image: nap-agent:latest
-    network_mode: host
-    platform: linux/amd64
-    restart_policy: unless-stopped
+# BIND9 Config
+bind9_enabled: true
