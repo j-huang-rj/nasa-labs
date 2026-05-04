@@ -65,6 +65,10 @@ firewall_policies:
     ports:
       - port: 55688
         proto: tcp
+      - port: 53
+        proto: udp
+      - port: 53
+        proto: tcp
 
   - name: lan-to-wan
     priority: -10
