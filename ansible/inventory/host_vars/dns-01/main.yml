@@ -1,0 +1,25 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: internal
+    ip4: 172.16.1.153/24
+    gw4: 172.16.1.254
+    dns4:
+      - 8.8.8.8
+      - 1.1.1.1
+    conn_name: internal-static
+    default_conn_name: "cloud-init eth0"
+
+# Firewall Config
+firewall_zone_ports:
+  - zone: internal
+    port: 53
+    proto: udp
+
+  - zone: internal
+    port: 53
+    proto: tcp
+
+# BIND9 Config
+bind9_enabled: true

@@ -1,6 +1,8 @@
 ---
 base_upgrade_enabled: false
 wireguard_enabled: false
+docker_enabled: false
+bind9_enabled: false
 
 firewall_builtin_zones:
   - public

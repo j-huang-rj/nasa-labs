@@ -22,3 +22,6 @@
     - role: wireguard
       when: wireguard_enabled
     - role: docker
+      when: docker_enabled
+    - role: bind9
+      when: bind9_enabled
