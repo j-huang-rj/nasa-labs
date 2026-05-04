@@ -450,6 +450,73 @@
   loop: "{{ firewall_forward_ports | default([]) }}"
   notify: "PHASE [handler : Reload firewalld]"
 
+- name: "PHASE [policy : Reconcile Zone Ports]"
+  when: firewall_zone_ports is defined
+  block:
+    - name: "PHASE [policy : Query Zone Ports]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--zone={{ item }}"
+          - --list-ports
+      loop: "{{ firewall_zone_port_zones }}"
+      loop_control:
+        label: "{{ item }}"
+      register: firewall_zone_port_state
+      changed_when: false
+      vars:
+        firewall_zone_port_zones: "{{ firewall_zone_ports | map(attribute='zone') | unique | list }}"
+
+    - name: "PHASE [policy : Initialize Zone Port Maps]"
+      ansible.builtin.set_fact:
+        firewall_zone_port_desired_map: {}
+        firewall_zone_port_current_map: {}
+      changed_when: false
+
+    - name: "PHASE [policy : Build Desired Zone Port Map]"
+      ansible.builtin.set_fact:
+        firewall_zone_port_desired_map: >-
+          {{
+            firewall_zone_port_desired_map
+            | combine({ item.zone: (firewall_zone_port_desired_map[item.zone] | default([])) + [item.port ~ '/' ~ item.proto] })
+          }}
+      loop: "{{ firewall_zone_ports }}"
+      loop_control:
+        label: "{{ item.zone }} -> {{ item.port }}/{{ item.proto }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Build Current Zone Port Map]"
+      ansible.builtin.set_fact:
+        firewall_zone_port_current_map: >-
+          {{
+            firewall_zone_port_current_map
+            | combine({
+              item.item: (
+                (item.stdout | trim | split)
+                if (item.stdout | trim | length > 0)
+                else []
+              )
+            })
+          }}
+      loop: "{{ firewall_zone_port_state.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Remove Stale Zone Ports]"
+      ansible.posix.firewalld:
+        zone: "{{ item.0.key }}"
+        port: "{{ item.1 }}"
+        state: disabled
+        permanent: true
+        immediate: false
+      loop: "{{ firewall_zone_port_current_map | dict2items | subelements('value', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.key }} -> {{ item.1 }}"
+      when: item.1 not in (firewall_zone_port_desired_map[item.0.key] | default([]))
+      notify: "PHASE [handler : Reload firewalld]"
+
 - name: "PHASE [policy : Configure Zone Ports]"
   ansible.posix.firewalld:
     zone: "{{ item.zone }}"
