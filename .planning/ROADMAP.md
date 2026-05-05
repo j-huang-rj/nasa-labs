@@ -2,7 +2,9 @@
 
 ## Overview
 
-This roadmap delivers the BIND9 lab in the dependency order the grader will experience it: first a reusable Ansible `bind9` role and runtime lab identity derivation, then the primary authoritative service, then secured replication and updates, then DNSSEC trust artifacts, and finally the internal resolver plus end-to-end verification. Each phase ends with behavior that can be observed with `dig`, `nsupdate`, service checks, or consecutive Ansible runs.
+This roadmap delivers the BIND9 lab in the dependency order the grader will experience it: first a reusable Ansible `bind9` role with lab identity from inventory, then the primary authoritative service, then secured replication and updates, then DNSSEC trust artifacts, and finally the internal resolver plus end-to-end verification.
+
+**Lab identity:** `lab_id: 14` (set in group/host vars, referenced as `{{ lab_id }}` in templates). Each phase ends with behavior that can be observed with `dig`, `nsupdate`, service checks, or consecutive Ansible runs.
 
 ## Phases
 
@@ -21,20 +23,20 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Bind9 Role Foundation
-**Goal**: Operator can provision the primary, secondary, and resolver hosts from one `bind9` component role that derives the lab identity at runtime instead of hardcoding `${ID}`.
+**Goal**: Operator can provision the primary, secondary, and resolver hosts from one `bind9` component role that uses `lab_id: 14` from inventory instead of hardcoding `${ID}`.
 **Depends on**: Nothing (first phase)
 **Requirements**: AUTH-01, SEC-01, RES-01, AUTO-01
 **Success Criteria** (what must be TRUE):
   1. Operator can run the playbook and end with `named` installed, enabled, and listening on port 53 on `172.16.1.53`, `172.16.0.53`, and `172.16.1.153`.
   2. The same `bind9` role renders host-mode-specific configuration for primary, secondary, and resolver hosts from inventory data without manual file editing on the VMs.
-  3. The lab VPN subnet inputs and `${ID}`-dependent zone names are derived into the role context at runtime rather than committed as hardcoded values.
+  3. The lab identity (`lab_id: 14`) and VPN subnet inputs are sourced from inventory variables rather than committed as hardcoded values in templates.
   4. Re-running the role with unchanged inputs does not rewrite BIND configuration or drift host state.
 **Plans**: 3 plans
 
 Plans:
 - [ ] 01-01: Define the `bind9` role schema, host-mode switch, validation tasks, and logging markers to match existing component-role conventions.
 - [ ] 01-02: Implement package, service, directory, template, and config-validation scaffolding shared by all DNS hosts.
-- [ ] 01-03: Add runtime VPN subnet and `${ID}` derivation flow and expose the derived values to templates and verification tasks.
+- [ ] 01-03: Wire `lab_id` and VPN subnet variables from inventory into templates and verification tasks.
 
 ### Phase 2: Primary Authoritative Zones
 **Goal**: Internal and external clients receive the correct authoritative forward and reverse answers from the primary server for the lab-owned zones.
