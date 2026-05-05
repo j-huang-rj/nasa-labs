@@ -34,9 +34,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Define the `bind9` role schema, host-mode switch, validation tasks, and logging markers to match existing component-role conventions.
-- [ ] 01-02: Implement package, service, directory, template, and config-validation scaffolding shared by all DNS hosts.
-- [ ] 01-03: Wire `lab_id` and VPN subnet variables from inventory into templates and verification tasks.
+**Wave 1**
+- [ ] 01-01-PLAN.md — Define the bind9 role schema, defaults, and entrypoint scaffolding.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md — Implement shared bind package, config, template, handler, and service scaffolding.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-03-PLAN.md — Wire inventory-driven lab identity, host modes, ACL derivation, and final verification.
 
 ### Phase 2: Primary Authoritative Zones
 **Goal**: Internal and external clients receive the correct authoritative forward and reverse answers from the primary server for the lab-owned zones.
