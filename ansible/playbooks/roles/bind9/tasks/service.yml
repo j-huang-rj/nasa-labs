@@ -4,8 +4,8 @@
     cmd: named-checkconf {{ bind9_conf_path }}
   changed_when: false
 
-- name: "PHASE [service : Enable and restart named service]"
+- name: "PHASE [service : Enable and start named service]"
   ansible.builtin.systemd_service:
     name: "{{ bind9_service_name }}"
     enabled: true
-    state: restarted
+    state: started
