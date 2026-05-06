@@ -1,5 +1,4 @@
 ---
-- name: "PHASE [handler : Restart named]"
-  ansible.builtin.systemd_service:
-    name: "{{ bind9_service_name }}"
-    state: restarted
+# No handlers currently in use.
+# Config-driven restarts are handled inline in service.yml
+# via register + conditional restart pattern.

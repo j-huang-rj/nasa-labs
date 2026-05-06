@@ -4,28 +4,38 @@
   ansible.builtin.debug:
     msg: "Verify bind9 configuration and service state"
 
-- name: "PHASE [verify : Check named service is enabled]"
-  ansible.builtin.systemd_service:
-    name: "{{ bind9_service_name }}"
-    enabled: true
-  check_mode: true
-  register: _bind9_verify_enabled
+- name: "PHASE [verify : Gather service facts]"
+  ansible.builtin.service_facts:
 
-- name: "PHASE [verify : Check named service is active]"
-  ansible.builtin.systemd_service:
-    name: "{{ bind9_service_name }}"
-    state: started
-  check_mode: true
-  register: _bind9_verify_active
+- name: "PHASE [verify : Assert named service is enabled]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.services["named.service"] is defined
+      - ansible_facts.services["named.service"].status == "enabled"
+    fail_msg: >-
+      named service is not enabled.
+      Current status: {{ ansible_facts.services["named.service"].status | default("not found") }}
+
+- name: "PHASE [verify : Assert named service is running]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.services["named.service"] is defined
+      - ansible_facts.services["named.service"].state == "running"
+    fail_msg: >-
+      named service is not running.
+      Current state: {{ ansible_facts.services["named.service"].state | default("not found") }}
 
 - name: "PHASE [verify : Check named is listening on each configured address]"
-  ansible.builtin.shell:
-    cmd: "set -o pipefail && ss -ltnu | grep -E '{{ item | replace('.', '\\.') }}:53[[:space:]]'"
-    executable: /bin/bash
+  ansible.builtin.wait_for:
+    host: "{{ item }}"
+    port: 53
+    timeout: 10
+    state: started
   loop: "{{ bind9_listen_ipv4 }}"
-  changed_when: false
-  register: _bind9_verify_listen
-  failed_when: _bind9_verify_listen.rc != 0
+  loop_control:
+    label: "{{ item }}:53"
 
 - name: "PHASE [verify : END]"
   become: false
