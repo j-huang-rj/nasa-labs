@@ -1,4 +1,9 @@
 ---
+- name: "PHASE [config : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Generate bind9 configuration"
+
 - name: "PHASE [config : Derive VPN identity from inventory]"
   block:
     - name: "PHASE [config : Read source host wireguard_address]"
@@ -75,3 +80,8 @@
     mode: "0640"
     setype: "named_conf_t"
   notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed config phase"
