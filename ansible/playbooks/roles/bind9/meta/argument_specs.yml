@@ -39,3 +39,17 @@ argument_specs:
       bind9_identity_source_host:
         type: str
         required: false
+      bind9_views:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          List of view definitions for authoritative_primary mode.
+          Each entry must have name, order, and match_clients keys.
+      bind9_zones:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          List of zone definitions for authoritative_primary mode.
+          Each entry must have name, view, type, and file keys.
