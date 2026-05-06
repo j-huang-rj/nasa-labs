@@ -110,6 +110,35 @@
     setype: "named_conf_t"
   notify: "PHASE [handler : Restart named]"
 
+- name: "PHASE [config : Create private zone directory]"
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/private"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_cache_t"
+
+- name: "PHASE [config : Create public zone directory]"
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/public"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_cache_t"
+
+- name: "PHASE [config : Render zone data files]"
+  ansible.builtin.template:
+    src: db.zone.j2
+    dest: "{{ bind9_zone_dir }}/{{ item.file }}"
+    owner: named
+    group: named
+    mode: "0640"
+    setype: "named_cache_t"
+  loop: "{{ bind9_zones }}"
+  notify: "PHASE [handler : Restart named]"
+
 - name: "PHASE [config : Flush handlers]"
   ansible.builtin.meta: flush_handlers
 

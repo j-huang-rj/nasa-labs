@@ -1,0 +1,14 @@
+$TTL 86400
+@ IN SOA {{ bind9_primary_mname }} {{ item.soa.admin }} (
+    {{ item.soa.serial }}  ; serial
+    {{ item.soa.refresh }}  ; refresh
+    {{ item.soa.retry }}  ; retry
+    {{ item.soa.expire }}  ; expire
+    {{ item.soa.minimum }}  ; minimum
+)
+{% for ns in item.ns %}
+@ IN NS {{ ns }}
+{% endfor %}
+{% for record in item.records %}
+{{ record.name }} IN {{ record.type }} {{ record.value }}
+{% endfor %}
