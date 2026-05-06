@@ -4,9 +4,6 @@ wireguard_enabled: false
 docker_enabled: false
 bind9_enabled: false
 
-# Lab identity — shared across all hosts
-lab_id: 14
-
 firewall_builtin_zones:
   - public
   - trusted

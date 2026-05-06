@@ -17,16 +17,6 @@
         bind9_vpn_network_cidr: "{{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (_bind9_wg_octets[3] | int // 16) * 16 }}/{{ _bind9_wg_prefix }}"
         bind9_derived_lab_id: "{{ (_bind9_wg_octets[2] | int * 16) + ((_bind9_wg_octets[3] | int // 16) * 16) // 16 }}"
       when: _bind9_source_wg_address | length > 0
-
-    - name: "PHASE [config : Assert lab_id matches derived VPN identity]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - lab_id | int == bind9_derived_lab_id | int
-        fail_msg: >-
-          lab_id ({{ lab_id }}) does not match derived VPN identity ({{ bind9_derived_lab_id }}).
-          Check wireguard_address in host_vars/{{ bind9_identity_source_host }}/secrets.yml.
-      when: _bind9_source_wg_address | length > 0
   when: bind9_mode != 'resolver'
 
 - name: "PHASE [config : Create bind9 configuration directory]"
