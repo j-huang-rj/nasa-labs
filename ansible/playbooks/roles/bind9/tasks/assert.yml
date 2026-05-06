@@ -17,6 +17,7 @@
   ansible.builtin.assert:
     quiet: true
     that:
+      - bind9_mode is defined
       - bind9_mode in ['authoritative_primary', 'authoritative_secondary', 'resolver']
     fail_msg: >-
       bind9_mode must be one of authoritative_primary, authoritative_secondary, or resolver;
