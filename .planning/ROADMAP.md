@@ -38,7 +38,7 @@ Plans:
 - [x] 01-01-PLAN.md — Define the bind9 role schema, defaults, and entrypoint scaffolding.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-02-PLAN.md — Implement shared bind package, config, template, handler, and service scaffolding.
+- [x] 01-02-PLAN.md — Implement shared bind package, config, template, handler, and service scaffolding.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-03-PLAN.md — Wire inventory-driven lab identity, host modes, ACL derivation, and final verification.
