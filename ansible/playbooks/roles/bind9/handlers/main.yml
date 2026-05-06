@@ -1,5 +1,5 @@
 ---
-- name: "PHASE [handler : Reload named]"
+- name: "PHASE [handler : Restart named]"
   ansible.builtin.systemd_service:
     name: "{{ bind9_service_name }}"
-    state: reloaded
+    state: restarted
