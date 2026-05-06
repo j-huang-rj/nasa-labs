@@ -2,5 +2,6 @@
 // Role: bind9 | Template: named.conf.j2
 
 include "{{ bind9_conf_dir }}/named.options.conf";
+include "{{ bind9_conf_dir }}/named.acl.conf";
 
-// Include statements for ACLs and views will be appended by later configuration phases
+// Include statements for views will be appended by later configuration phases
