@@ -1,0 +1,56 @@
+---
+argument_specs:
+  main:
+    short_description: Validate bind9 role variables
+    options:
+      bind9_enabled:
+        type: bool
+        required: true
+      bind9_mode:
+        type: str
+        required: true
+        choices:
+          - authoritative_primary
+          - authoritative_secondary
+          - resolver
+      bind9_listen_ipv4:
+        type: list
+        elements: str
+        required: true
+      bind9_packages:
+        type: list
+        elements: str
+        required: false
+        default: "{{ bind9_packages }}"
+      bind9_service_name:
+        type: str
+        required: false
+        default: named
+      bind9_conf_path:
+        type: str
+        required: false
+        default: /etc/named.conf
+      bind9_conf_dir:
+        type: str
+        required: false
+        default: /etc/named
+      bind9_zone_dir:
+        type: str
+        required: false
+        default: /var/named
+      bind9_dynamic_zone_dir:
+        type: str
+        required: false
+        default: /var/named/dynamic
+      bind9_config_validate_enabled:
+        type: bool
+        required: false
+        default: true
+      bind9_runtime_verify_enabled:
+        type: bool
+        required: false
+        default: true
+      bind9_identity_source_host:
+        type: str
+        required: false
+        default: router-01
