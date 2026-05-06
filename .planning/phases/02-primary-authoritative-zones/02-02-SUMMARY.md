@@ -107,8 +107,10 @@ None — no external service configuration required.
 
 ## Self-Check: PASSED
 
-- All 4 key files exist on disk
-- Both task commits verified in git log (f68f82d, 9e4ea7f)
+- All 4 key files exist on disk (main.yml, config.yml, service.yml, db.zone.j2)
+- Task 1 commit verified: f68f82d
+- Task 2 commit verified: 9e4ea7f
+- Docs commit verified: 6f6e629
 - No accidental file deletions in any commit
 - ansible-playbook --syntax-check passes
 - Pattern verification confirms: private/db, public/db, private-ns, bind9_vpn_router_ip, bind9_vpn_client_ip, bind9_vpn_ns_ip, named-checkzone, db.zone.j2
