@@ -14,13 +14,13 @@ options {
     recursion yes;
     allow-query {
         127.0.0.1;
-        172.16.0.0/24;
-        172.16.1.0/24;
+        bind9_dmz_clients;
+        bind9_internal_clients;
     };
     allow-recursion {
         127.0.0.1;
-        172.16.0.0/24;
-        172.16.1.0/24;
+        bind9_dmz_clients;
+        bind9_internal_clients;
     };
 {% else %}
     recursion no;
