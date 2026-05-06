@@ -56,7 +56,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 02-01-PLAN.md — Establish the primary view contract, ordered ACL matching, and runtime-derived DNS identity facts.
+- [x] 02-01-PLAN.md — Establish the primary view contract, ordered ACL matching, and runtime-derived DNS identity facts.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 02-02-PLAN.md — Populate forward-zone data and add generic per-view zone-file rendering with `named-checkzone` gating.

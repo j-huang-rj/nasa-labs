@@ -10,7 +10,7 @@ Requirements for the DNS lab assignment. All are mandatory per the spec.
 ### Primary Authoritative NS
 
 - [ ] **AUTH-01**: BIND9 installed, running, and listening on port 53 on primary-ns-01 (172.16.1.53)
-- [ ] **AUTH-02**: Two views configured — `private` (matching DMZ + Private zones) and `public` (matching any other source)
+- [x] **AUTH-02**: Two views configured — `private` (matching DMZ + Private zones) and `public` (matching any other source)
 - [ ] **AUTH-03**: Forward zone `${ID}.nasa` with all required A records in both views (private view: internal IPs; public view: VPN IPs)
 - [ ] **AUTH-04**: SOA record with MNAME = `private-ns.${ID}.nasa.`
 - [ ] **AUTH-05**: Reverse zones for `172.16.0.in-addr.arpa` and `172.16.1.in-addr.arpa` (both views)
@@ -22,7 +22,7 @@ Requirements for the DNS lab assignment. All are mandatory per the spec.
 
 ### Secondary Authoritative NS
 
-- [ ] **SEC-01**: BIND9 installed, running, and listening on port 53 on secondary-ns-01 (172.16.0.53)
+- [x] **SEC-01**: BIND9 installed, running, and listening on port 53 on secondary-ns-01 (172.16.0.53)
 - [ ] **SEC-02**: Same two-view structure as primary, but all zones are `type slave`
 - [ ] **SEC-03**: `primaries` pointing at 172.16.1.53; zone transfer completes within 10 seconds
 - [ ] **SEC-04**: No `allow-update`, no `allow-transfer` — read-only replica
@@ -39,7 +39,7 @@ Requirements for the DNS lab assignment. All are mandatory per the spec.
 
 ### Automation & Submission
 
-- [ ] **AUTO-01**: All BIND9 config generated idempotently by Ansible `bind9` role
+- [x] **AUTO-01**: All BIND9 config generated idempotently by Ansible `bind9` role
 - [ ] **AUTO-02**: DS records generated and ready for OJ upload
 - [ ] **AUTO-03**: TSIG key generated and ready for OJ upload
 
@@ -65,7 +65,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Complete |
 | AUTH-03 | Phase 2 | Pending |
 | AUTH-04 | Phase 2 | Pending |
 | AUTH-05 | Phase 2 | Pending |
@@ -74,7 +74,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-08 | Phase 3 | Pending |
 | AUTH-09 | Phase 4 | Pending |
 | AUTH-10 | Phase 4 | Pending |
-| SEC-01 | Phase 1 | Pending |
+| SEC-01 | Phase 1 + Quick 260506-i20 | Done |
 | SEC-02 | Phase 3 | Pending |
 | SEC-03 | Phase 3 | Pending |
 | SEC-04 | Phase 3 | Pending |
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RES-04 | Phase 5 | Pending |
 | RES-05 | Phase 5 | Pending |
 | RES-06 | Phase 5 | Pending |
-| AUTO-01 | Phase 1 | Pending |
+| AUTO-01 | Phase 1 + Quick 260506-i20 | Done |
 | AUTO-02 | Phase 4 | Pending |
 | AUTO-03 | Phase 3 | Pending |
 
@@ -96,4 +96,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-05-05*
-*Last updated: 2026-05-05 after roadmap creation*
+*Last updated: 2026-05-06 after quick task 260506-i20*
