@@ -13,3 +13,7 @@ bind9_dynamic_zone_dir: /var/named/dynamic
 
 # Runtime identity — which host to derive VPN subnet info from
 bind9_identity_source_host: router-01
+
+# View and zone data — populated by host_vars for authoritative_primary mode
+bind9_views: []
+bind9_zones: []

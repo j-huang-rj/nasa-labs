@@ -32,6 +32,61 @@
       - bind9_listen_ipv4 | length > 0
     fail_msg: "bind9_listen_ipv4 must be defined as a non-empty list of IPv4 addresses"
 
+- name: "PHASE [assert : Validate bind9_views For Authoritative Primary Mode]"
+  when: bind9_mode == 'authoritative_primary'
+  block:
+    - name: "PHASE [assert : Check bind9_views Has Exactly Private And Public]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_views is defined
+          - bind9_views | length == 2
+          - bind9_views | map(attribute='name') | list | sort == ['private', 'public']
+        fail_msg: >-
+          bind9_views must contain exactly two views named 'private' and 'public';
+          got {{ bind9_views | default([]) | map(attribute='name') | default(['(missing)']) }}
+
+    - name: "PHASE [assert : Check Each View Has Required Keys]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.name is defined
+          - item.order is defined
+          - item.match_clients is defined
+        fail_msg: >-
+          Each bind9_views entry must have 'name', 'order', and 'match_clients' keys;
+          got {{ item.keys() | default([]) | list }}
+      loop: "{{ bind9_views }}"
+      loop_control:
+        label: "{{ item.name | default('(unnamed)') }}"
+
+    - name: "PHASE [assert : Check Private View Precedes Public View]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            (bind9_views | selectattr('name', 'equalto', 'private') | map(attribute='order') | first)
+            <
+            (bind9_views | selectattr('name', 'equalto', 'public') | map(attribute='order') | first)
+        fail_msg: >-
+          Private view must have a lower order than public view to prevent the
+          'any' match-clients clause from shadowing internal clients.
+
+    - name: "PHASE [assert : Check bind9_zones Reference Only Declared Views]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            bind9_zones | default([]) | map(attribute='view') | list
+            | difference(bind9_views | map(attribute='name') | list)
+            | length == 0
+        fail_msg: >-
+          Every bind9_zones[].view must reference a view name declared in bind9_views.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:

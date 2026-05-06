@@ -27,3 +27,18 @@ bind9_mode: authoritative_primary
 bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.1.53
+
+# View policy: private view must precede public view (BIND9 first-match)
+bind9_views:
+  - name: private
+    order: 10
+    match_clients:
+      - "bind9_dmz_clients"
+      - "bind9_internal_clients"
+  - name: public
+    order: 99
+    match_clients:
+      - "any"
+
+# Zone data placeholder — populated in later plans
+bind9_zones: []
