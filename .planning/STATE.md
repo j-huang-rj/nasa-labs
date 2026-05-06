@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Roadmap creation complete; Phase 1 is ready for `/gsd-plan-phase 1`.
-last_updated: "2026-05-06T05:08:00.000Z"
-last_activity: 2026-05-06 - Completed quick task 260506-i20: add SELinux setype attributes to bind9 role
+status: executing
+stopped_at: Phase 2 discuss-phase complete; 4 decisions locked (D2-1 through D2-4)
+last_updated: "2026-05-06T10:02:07.709Z"
+last_activity: 2026-05-06 -- Phase 02 planning complete
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 3
+  total_plans: 6
   completed_plans: 3
-  percent: 100
+  percent: 50
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05)
 
 **Core value:** Pass all OJ grading checkpoints for authoritative DNS, resolver behavior, dynamic updates, transfers, and DNSSEC.
-**Current focus:** Phase 01 — bind9-role-foundation
+**Current focus:** Phase 02 — primary-authoritative-zones
 
 ## Current Position
 
-Phase: 01 — COMPLETE
-Plan: 1 of 3
-Status: Phase 01 complete
-Last activity: 2026-05-06 -- Phase 01 marked complete
+Phase: 02 — DISCUSS COMPLETE
+Plan: 0 of 3
+Status: Ready to execute
+Last activity: 2026-05-06 -- Phase 02 planning complete
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -62,6 +62,10 @@ Recent decisions affecting current work:
 - [Phase 1]: Derive VPN `${ID}` and zone naming at runtime; do not hardcode student-specific values.
 - [Phase 1]: Preserve existing repo conventions: router-first play ordering, component roles, START/END markers, and whole-file templating.
 - [Quick 260506-i20]: Use named_conf_t for bind9 config paths and named_cache_t for dynamic zone dir via Ansible-native setype attributes (no restorecon).
+- [Phase 2]: Zone data schema: hybrid `bind9_views` (policy) + `bind9_zones` (data) with structured records and special-cased SOA/NS.
+- [Phase 2]: Zone rendering: `named.zones.conf` include + separate zone data files in `/var/named/`.
+- [Phase 2]: VPN IP derivation: extend existing `config.yml` arithmetic to compute router/client/NS IPs from CIDR.
+- [Phase 2]: SOA serial: YYYYMMDDNN with static NN=01; timers: refresh=3600, retry=1800, expire=604800, minimum=86400.
 
 ### Pending Todos
 
@@ -89,5 +93,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-05-06
-Stopped at: Completed quick task 260506-i20 (SELinux setype for bind9)
-Resume file: None
+Stopped at: Phase 2 discuss-phase complete; 4 decisions locked (D2-1 through D2-4)
+Resume file: .planning/phases/02-primary-authoritative-zones/CONTEXT.md

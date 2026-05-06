@@ -55,9 +55,14 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: Build shared ACLs and private/public view templates with correct first-match ordering for DMZ, Private, and external clients.
-- [ ] 02-02: Render forward zone data for both views, including the required host records, NS data, and SOA values.
-- [ ] 02-03: Render reverse zones for `172.16.0`, `172.16.1`, and the RFC 2317 VPN delegation, then validate them with BIND tooling and `dig`.
+**Wave 1**
+- [ ] 02-01-PLAN.md — Establish the primary view contract, ordered ACL matching, and runtime-derived DNS identity facts.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-02-PLAN.md — Populate forward-zone data and add generic per-view zone-file rendering with `named-checkzone` gating.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-03-PLAN.md — Add reverse/RFC 2317 zone data and runtime dig verification for both private and public answers.
 
 ### Phase 3: Secured Updates & Secondary Replica
 **Goal**: Authorized updates land on the primary and reach a read-only secondary replica quickly and safely.
