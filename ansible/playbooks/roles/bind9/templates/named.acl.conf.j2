@@ -1,5 +1,4 @@
-// BIND9 ACL definitions — managed by Ansible, do not edit manually
-// Role: bind9 | Template: named.acl.conf.j2
+// Managed by Ansible, do not edit manually
 
 acl "bind9_dmz_clients" { 172.16.0.0/24; };
 acl "bind9_internal_clients" { 172.16.1.0/24; };
