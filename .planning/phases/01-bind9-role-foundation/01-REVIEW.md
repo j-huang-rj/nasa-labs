@@ -1,6 +1,6 @@
 ---
 phase: 01-bind9-role-foundation
-reviewed: 2026-05-06T12:00:00Z
+reviewed: 2026-05-06T18:30:00Z
 depth: standard
 files_reviewed: 17
 files_reviewed_list:
@@ -23,9 +23,9 @@ files_reviewed_list:
   - ansible/playbooks/roles/bind9/templates/named.options.conf.j2
 findings:
   critical: 0
-  warning: 5
-  info: 3
-  total: 8
+  warning: 6
+  info: 5
+  total: 11
 status: issues_found
 ---
 
@@ -38,9 +38,9 @@ status: issues_found
 
 ## Summary
 
-Reviewed the complete bind9 Ansible role (defaults, handlers, argument specs, 6 task files, 3 templates) plus 4 inventory files. The role follows the project's component-role architecture with proper phase markers, SELinux contexts, and a verification pipeline. No hardcoded secrets, no dangerous functions, no debug artifacts found.
+Reviewed the complete bind9 Ansible role (defaults, handlers, argument specs, 6 task files, 3 templates) plus 4 inventory files. The role follows the project's component-role architecture with proper phase markers, SELinux contexts, and a verification pipeline. No hardcoded secrets, dangerous functions, or debug artifacts found.
 
-Five warnings identified: a handler that can't propagate listen-address changes, an assertion that crashes on undefined input, a silent-failure path in VPN derivation, hardcoded subnets bypassing ACL definitions, and self-referencing defaults in argument specs. Three info items on missing phase markers, redundant validation, and unused computed facts.
+Six warnings identified: a handler that can't propagate listen-address changes, an assertion that crashes on undefined input, a silent-failure path in VPN derivation, hardcoded subnets bypassing ACL definitions, self-referencing defaults in argument specs, and an unnecessary no-op arithmetic pattern. Five info items on missing phase markers, redundant validation, unused computed facts, unescaped regex in verification, and a forward-reference comment.
 
 ## Warnings
 
@@ -59,8 +59,8 @@ Five warnings identified: a handler that can't propagate listen-address changes,
 ### WR-02: `bind9_mode` assertion crashes on undefined instead of failing cleanly
 
 **File:** `ansible/playbooks/roles/bind9/tasks/assert.yml:20`
-**Issue:** The assertion `bind9_mode in ['authoritative_primary', 'authoritative_secondary', 'resolver']` evaluates `bind9_mode` directly. If `bind9_mode` is not defined, Jinja2 raises an undefined variable error before the `fail_msg` on line 21-23 is evaluated. The operator sees a raw Jinja2 traceback instead of the helpful failure message. The `fail_msg` already uses `bind9_mode | default("(undefined)")` which shows awareness of this case, but the `that` condition doesn't protect against it.
-**Fix:** Add a `is defined` precondition or use a default filter in the `that` clause:
+**Issue:** The assertion `bind9_mode in ['authoritative_primary', 'authoritative_secondary', 'resolver']` evaluates `bind9_mode` directly. If `bind9_mode` is not defined, Jinja2 raises an `UndefinedError` before the `fail_msg` on lines 21-23 is evaluated. The operator sees a raw Jinja2 traceback instead of the helpful failure message. The `fail_msg` already uses `bind9_mode | default("(undefined)")` which shows awareness of this case, but the `that` condition doesn't protect against it.
+**Fix:** Add a `is defined` precondition before the membership test:
 ```yaml
 that:
   - bind9_mode is defined
@@ -71,11 +71,13 @@ that:
 
 **File:** `ansible/playbooks/roles/bind9/tasks/config.yml:3-20`
 **Issue:** The VPN derivation block reads `hostvars[bind9_identity_source_host].wireguard_address` with `default('')`. If `router-01` doesn't have `wireguard_address` defined (WireGuard not yet provisioned, or secrets.yml missing), the entire VPN derivation silently produces no result. `bind9_vpn_network_cidr` is never set, and `named.acl.conf.j2` silently omits the `bind9_vpn_clients` ACL. For `secondary-ns-01` — which has `wireguard_enabled: true`, VPN firewall rules on port 53, and `bind9_mode: authoritative_secondary` — this means DNS resolution from VPN clients silently fails with no error during the playbook run.
-**Fix:** Add an assertion or warning when running in authoritative mode and the VPN address is empty:
+**Fix:** Add a warning or assertion when running in authoritative mode and the VPN address is empty:
 ```yaml
 - name: "PHASE [config : Warn if VPN address unavailable for authoritative mode]"
   ansible.builtin.debug:
-    msg: "WARNING: bind9_identity_source_host '{{ bind9_identity_source_host }}' has no wireguard_address; VPN ACL will be omitted"
+    msg: >-
+      WARNING: bind9_identity_source_host '{{ bind9_identity_source_host }}'
+      has no wireguard_address; VPN ACL will be omitted
   when: _bind9_source_wg_address | length == 0
 ```
 
@@ -102,15 +104,21 @@ Note: This requires `named.acl.conf` to be included before `named.options.conf` 
 
 **File:** `ansible/playbooks/roles/bind9/meta/argument_specs.yml:24,28,32,36,40,44,48,52,56`
 **Issue:** Nine options define `default: "{{ variable_name }}"` where `variable_name` is the same option being documented (e.g., `bind9_packages` has `default: "{{ bind9_packages }}"`). Ansible resolves these against `defaults/main.yml` at runtime, so it works — but the circular reference is fragile documentation. If a variable is removed from `defaults/main.yml` but not from `argument_specs.yml`, the self-reference produces an undefined variable in documentation output. The pattern also obscures what the actual default value is when reading the specs.
-**Fix:** Use literal values matching `defaults/main.yml`:
+**Fix:** Omit `default:` from the spec for these 9 options. The spec's job is validation (type, choices, required), not configuration — `defaults/main.yml` already provides the values:
 ```yaml
 bind9_packages:
   type: list
   elements: str
   required: false
-  default:
-    - bind
-    - bind-utils
+```
+
+### WR-06: No-op arithmetic in `bind9_derived_lab_id` calculation
+
+**File:** `ansible/playbooks/roles/bind9/tasks/config.yml:18`
+**Issue:** The expression `((_bind9_wg_octets[3] | int // 16) * 16) // 16` contains a redundant `* 16` followed by `// 16`. For any non-negative integer `x`, `(x // 16 * 16) // 16` simplifies to `x // 16` — the multiplication and division cancel out. This is not a correctness bug (the result is the same), but the unnecessary complexity makes the formula harder to understand and reason about.
+**Fix:** Simplify the expression:
+```yaml
+bind9_derived_lab_id: "{{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}"
 ```
 
 ## Info
@@ -143,11 +151,28 @@ bind9_packages:
 ### IN-03: `bind9_derived_lab_id` and `bind9_vpn_network_base` computed but unused
 
 **File:** `ansible/playbooks/roles/bind9/tasks/config.yml:16-18`
-**Issue:** These facts are set via `set_fact` but never consumed by any template or task in the bind9 role. A codebase-wide grep confirms no other role reads them either. Per planning docs (260506-h79), they were intentionally retained for potential future use. Noting for awareness — if no future phase consumes them, they should be removed as dead code.
+**Issue:** These facts are set via `set_fact` but never consumed by any template or task in the bind9 role. They appear to be retained for potential future use. If no future phase consumes them, they should be removed as dead code.
 **Fix:** No immediate action required. Track consumption in future phases; remove if unused after phase 01 is complete.
+
+### IN-04: Unescaped regex metacharacters in IP-based grep pattern
+
+**File:** `ansible/playbooks/roles/bind9/tasks/verify.yml:31`
+**Issue:** The listen-address verification uses `grep -E '({{ bind9_listen_ipv4 | join("|") }}):53\s'`. Dots in IPv4 addresses are regex metacharacters that match any character. For example, `172.16.1.53` would also match `172x16x1x53`. This is a minor issue since IPs come from validated host_vars and unlikely to produce false positives in practice.
+**Fix:** Escape dots in the IP addresses for the regex:
+```yaml
+cmd: >-
+  ss -ltnu | grep -E '({{ bind9_listen_ipv4 | map('regex_replace', '([.])', '\\1') | join("|") }}):53\s'
+```
+Or simply accept the minor imprecision since the IPs are controlled input.
+
+### IN-05: Forward-reference comment for unimplemented views mechanism
+
+**File:** `ansible/playbooks/roles/bind9/templates/named.conf.j2:7`
+**Issue:** The comment "Include statements for views will be appended by later configuration phases" references a mechanism that doesn't exist in the current codebase. No task appends view includes to `named.conf`. If this is planned future work, the comment is fine as a roadmap note. If plans have changed, the comment is stale.
+**Fix:** No action required if views are still planned. Otherwise, remove the comment.
 
 ---
 
-_Reviewed: 2026-05-06T12:00:00Z_
+_Reviewed: 2026-05-06T18:30:00Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
