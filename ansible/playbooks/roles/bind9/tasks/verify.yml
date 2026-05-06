@@ -18,10 +18,10 @@
   register: _bind9_verify_active
   failed_when: _bind9_verify_active.rc != 0
 
-- name: "PHASE [verify : Check named is listening on configured addresses]"
+- name: "PHASE [verify : Check named is listening on each configured address]"
   ansible.builtin.shell:
-    cmd: >-
-      ss -ltnu | grep -E '({{ bind9_listen_ipv4 | map("replace", ".", "\\.") | join("|") }}):53[[:space:]]'
+    cmd: "ss -ltnu | grep -E '{{ item | replace('.', '\\.') }}:53[[:space:]]'"
+  loop: "{{ bind9_listen_ipv4 }}"
   changed_when: false
   register: _bind9_verify_listen
   failed_when: _bind9_verify_listen.rc != 0
