@@ -3,7 +3,7 @@ id: SEED-001
 status: dormant
 planted: 2026-05-06
 planted_during: Phase 01 — bind9-role-foundation (complete)
-trigger_when: When zone files are added to bind9
+trigger_when: Phase 2 — Primary Authoritative Zones
 scope: Small
 ---
 
@@ -17,13 +17,13 @@ Without this, zone file reads will fail silently under enforcing mode.
 
 ## When to Surface
 
-**Trigger:** When zone files are added to bind9
+**Trigger:** Phase 2 — Primary Authoritative Zones
 
-This seed should be presented during `/gsd-new-milestone` when the milestone
-scope matches any of these conditions:
-- Adding zone file templates or tasks to the bind9 role
-- Configuring authoritative DNS zones (primary or secondary)
-- Writing files to `bind9_zone_dir` (`/var/named`)
+This seed should be presented during `/gsd-plan-phase 2` when planning
+zone file tasks for the bind9 role. Specifically:
+- When adding zone file template/copy tasks to `bind9/tasks/config.yml`
+- When writing files to `bind9_zone_dir` (`/var/named`)
+- When configuring authoritative forward or reverse zones
 
 ## Scope Estimate
 
@@ -40,4 +40,4 @@ Related code and decisions found in the current codebase:
 
 ## Notes
 
-This was identified during the SELinux setype quick task (260506-i20). The `named_zone_t` type was intentionally deferred because no zone file tasks exist yet — it should be applied when zone file template/copy tasks are added in a future phase.
+This was identified during the SELinux setype quick task (260506-i20). The `named_zone_t` type was intentionally deferred because no zone file tasks exist yet — it should be applied when zone file template/copy tasks are added in Phase 2 (Primary Authoritative Zones).
