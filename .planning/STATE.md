@@ -5,7 +5,7 @@ milestone_name: milestone
 status: completed
 stopped_at: Roadmap creation complete; Phase 1 is ready for `/gsd-plan-phase 1`.
 last_updated: "2026-05-06T03:52:04.389Z"
-last_activity: 2026-05-06 -- Phase 01 marked complete
+last_activity: 2026-05-06 - Completed quick task 260506-h79: bind9 inventory cleanup
 progress:
   total_phases: 5
   completed_phases: 1
@@ -71,6 +71,12 @@ None yet.
 - The requested `.planning/codebase/MAP.md` file is absent; roadmap context came from the available codebase analysis docs instead.
 - Per-view transfer behavior between split-view primary and secondary needs careful validation during Phase 3.
 - Runtime source of VPN subnet/`${ID}` derivation must be finalized early so later templates stay stable.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260506-h79 | bind9 inventory cleanup: derive listen_ipv4, remove stale lab_id, move bind-utils, reference defaults in argument_specs | 2026-05-06 | 8d0d54a | Verified | [260506-h79-bind9-inventory-cleanup-derive-listen-ip](./quick/260506-h79-bind9-inventory-cleanup-derive-listen-ip/) |
 
 ## Deferred Items
 
