@@ -45,3 +45,6 @@ firewall_rich_rules:
 
 # BIND9 Config
 bind9_enabled: true
+bind9_mode: authoritative_secondary
+bind9_listen_ipv4:
+  - 172.16.0.53

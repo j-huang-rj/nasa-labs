@@ -23,3 +23,6 @@ firewall_zone_ports:
 
 # BIND9 Config
 bind9_enabled: true
+bind9_mode: resolver
+bind9_listen_ipv4:
+  - 172.16.1.153
