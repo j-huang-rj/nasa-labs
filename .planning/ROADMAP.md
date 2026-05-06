@@ -62,7 +62,7 @@ Plans:
 - [x] 02-02-PLAN.md — Populate forward-zone data and add generic per-view zone-file rendering with `named-checkzone` gating.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 02-03-PLAN.md — Add reverse/RFC 2317 zone data and runtime dig verification for both private and public answers.
+- [x] 02-03-PLAN.md — Add reverse/RFC 2317 zone data and runtime dig verification for both private and public answers.
 
 ### Phase 3: Secured Updates & Secondary Replica
 **Goal**: Authorized updates land on the primary and reach a read-only secondary replica quickly and safely.
@@ -118,7 +118,7 @@ Phases execute in numeric order: 1 → 1.1 → 1.2 → 2 → 2.1 → 3 → 4 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Bind9 Role Foundation | 0/3 | Not started | - |
-| 2. Primary Authoritative Zones | 2/3 | In Progress|  |
+| 2. Primary Authoritative Zones | 3/3 | Complete | 2026-05-06 |
 | 3. Secured Updates & Secondary Replica | 0/3 | Not started | - |
 | 4. Authoritative DNSSEC Trust Chain | 0/2 | Not started | - |
 | 5. Internal Resolver & Final Verification | 0/3 | Not started | - |

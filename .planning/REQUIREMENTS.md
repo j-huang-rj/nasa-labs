@@ -11,10 +11,10 @@ Requirements for the DNS lab assignment. All are mandatory per the spec.
 
 - [ ] **AUTH-01**: BIND9 installed, running, and listening on port 53 on primary-ns-01 (172.16.1.53)
 - [x] **AUTH-02**: Two views configured — `private` (matching DMZ + Private zones) and `public` (matching any other source)
-- [ ] **AUTH-03**: Forward zone `${ID}.nasa` with all required A records in both views (private view: internal IPs; public view: VPN IPs)
-- [ ] **AUTH-04**: SOA record with MNAME = `private-ns.${ID}.nasa.`
-- [ ] **AUTH-05**: Reverse zones for `172.16.0.in-addr.arpa` and `172.16.1.in-addr.arpa` (both views)
-- [ ] **AUTH-06**: Classless reverse zone `{ID}-sub28.{x}.168.192.in-addr.arpa` using RFC 2317 delegation (both views)
+- [x] **AUTH-03**: Forward zone `${ID}.nasa` with all required A records in both views (private view: internal IPs; public view: VPN IPs)
+- [x] **AUTH-04**: SOA record with MNAME = `private-ns.${ID}.nasa.`
+- [x] **AUTH-05**: Reverse zones for `172.16.0.in-addr.arpa` and `172.16.1.in-addr.arpa` (both views)
+- [x] **AUTH-06**: Classless reverse zone `{ID}-sub28.{x}.168.192.in-addr.arpa` using RFC 2317 delegation (both views)
 - [ ] **AUTH-07**: TSIG key for dynamic updates; `update-policy` allows only `dynamic1-4` A records + PTR records
 - [ ] **AUTH-08**: `allow-transfer` to secondary NS (172.16.0.53); `also-notify` to secondary NS
 - [ ] **AUTH-09**: DNSSEC signing with algorithm 13 (ECDSAP256SHA256), digest 2 (SHA-256) for forward zone + VPN reverse zone
@@ -66,10 +66,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 2 | Complete |
-| AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 2 | Pending |
-| AUTH-05 | Phase 2 | Pending |
-| AUTH-06 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Complete |
+| AUTH-04 | Phase 2 | Complete |
+| AUTH-05 | Phase 2 | Complete |
+| AUTH-06 | Phase 2 | Complete |
 | AUTH-07 | Phase 3 | Pending |
 | AUTH-08 | Phase 3 | Pending |
 | AUTH-09 | Phase 4 | Pending |

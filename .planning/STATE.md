@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-05-06T10:24:38.889Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-05-06T10:32:36Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 
 ## Current Position
 
-Phase: 02 (primary-authoritative-zones) — EXECUTING
+Phase: 02 (primary-authoritative-zones) — COMPLETE
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete
 Last activity: 2026-05-06
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -52,6 +52,8 @@ Progress: [████████░░] 83%
 - Trend: Stable
 
 | Phase 02 P01 | 3min | 2 tasks | 7 files |
+| Phase 02 P02 | 4min | 2 tasks | 4 files |
+| Phase 02 P03 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -69,6 +71,9 @@ Recent decisions affecting current work:
 - [Phase 2]: VPN IP derivation: extend existing `config.yml` arithmetic to compute router/client/NS IPs from CIDR.
 - [Phase 2]: SOA serial: YYYYMMDDNN with static NN=01; timers: refresh=3600, retry=1800, expire=604800, minimum=86400.
 - [Phase 02]: Ordered view rendering uses Jinja2 sort(attribute=order) to guarantee private-before-public rendering — Runtime-derived identity facts keep inventory free of lab-specific state
+- [Phase 02 P03]: Private 1.16.172 reverse zone exposes private-ns PTR; public maps host 53 to ns only — no private-ns exposure
+- [Phase 02 P03]: RFC 2317 carrier zone uses CNAME delegation; child zone holds actual PTRs for VPN IPs
+- [Phase 02 P03]: Source-bound dig queries (-b flag) force BIND9 view selection for verification
 
 ### Pending Todos
 
@@ -95,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-06T10:24:38.883Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-05-06T10:32:36Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
