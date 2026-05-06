@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — Define the bind9 role schema, defaults, and entrypoint scaffolding.
+- [x] 01-01-PLAN.md — Define the bind9 role schema, defaults, and entrypoint scaffolding.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — Implement shared bind package, config, template, handler, and service scaffolding.
