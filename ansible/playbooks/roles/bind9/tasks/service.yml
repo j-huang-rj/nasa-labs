@@ -1,0 +1,14 @@
+---
+# Validate generated configuration before starting the service
+- name: "PHASE [service : Validate named configuration]"
+  ansible.builtin.command:
+    cmd: named-checkconf {{ bind9_conf_path }}
+  changed_when: false
+  register: _bind9_checkconf_result
+  when: bind9_config_validate_enabled | bool
+
+- name: "PHASE [service : Enable and start named service]"
+  ansible.builtin.systemd_service:
+    name: "{{ bind9_service_name }}"
+    enabled: true
+    state: started
