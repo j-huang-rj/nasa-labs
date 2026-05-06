@@ -26,6 +26,7 @@
     owner: root
     group: named
     mode: "0750"
+    setype: "named_conf_t"
 
 - name: "PHASE [config : Create dynamic zone directory]"
   ansible.builtin.file:
@@ -34,6 +35,7 @@
     owner: named
     group: named
     mode: "0750"
+    setype: "named_cache_t"
 
 - name: "PHASE [config : Render main named.conf]"
   ansible.builtin.template:
@@ -42,6 +44,7 @@
     owner: root
     group: named
     mode: "0640"
+    setype: "named_conf_t"
   notify: "PHASE [handler : Reload named]"
 
 - name: "PHASE [config : Render named options conf]"
@@ -51,6 +54,7 @@
     owner: root
     group: named
     mode: "0640"
+    setype: "named_conf_t"
   notify: "PHASE [handler : Reload named]"
 
 - name: "PHASE [config : Render ACL conf]"
@@ -60,4 +64,5 @@
     owner: root
     group: named
     mode: "0640"
+    setype: "named_conf_t"
   notify: "PHASE [handler : Reload named]"
