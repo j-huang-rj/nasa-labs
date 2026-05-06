@@ -5,10 +5,13 @@
     msg: "Generate bind9 configuration"
 
 - name: "PHASE [config : Derive VPN identity from inventory]"
+  when: bind9_mode != 'resolver'
   block:
     - name: "PHASE [config : Read source host wireguard_address]"
       ansible.builtin.set_fact:
-        _bind9_source_wg_address: "{{ hostvars[bind9_identity_source_host].wireguard_address | default('') }}"
+        _bind9_source_wg_address: >-
+          {{ hostvars[bind9_identity_source_host].wireguard_address
+             | default('') }}
 
     - name: "PHASE [config : Derive VPN CIDR from wireguard_address]"
       ansible.builtin.set_fact:
@@ -19,10 +22,11 @@
     - name: "PHASE [config : Compute bind9_vpn_network_base and CIDR]"
       ansible.builtin.set_fact:
         bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 }}"
-        bind9_vpn_network_cidr: "{{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (_bind9_wg_octets[3] | int // 16) * 16 }}/{{ _bind9_wg_prefix }}"
-        bind9_derived_lab_id: "{{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}"
+        bind9_vpn_network_cidr: >-
+          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (_bind9_wg_octets[3] | int // 16) * 16 }}/{{ _bind9_wg_prefix }}
+        bind9_derived_lab_id: >-
+          {{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}
       when: _bind9_source_wg_address | length > 0
-  when: bind9_mode != 'resolver'
 
 - name: "PHASE [config : Warn if VPN address unavailable for authoritative mode]"
   ansible.builtin.debug:

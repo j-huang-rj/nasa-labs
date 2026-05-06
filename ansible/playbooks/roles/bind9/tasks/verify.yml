@@ -5,22 +5,23 @@
     msg: "Verify bind9 configuration and service state"
 
 - name: "PHASE [verify : Check named service is enabled]"
-  ansible.builtin.command:
-    cmd: systemctl is-enabled named
-  changed_when: false
+  ansible.builtin.systemd_service:
+    name: "{{ bind9_service_name }}"
+    enabled: true
+  check_mode: true
   register: _bind9_verify_enabled
-  failed_when: _bind9_verify_enabled.rc != 0
 
 - name: "PHASE [verify : Check named service is active]"
-  ansible.builtin.command:
-    cmd: systemctl is-active named
-  changed_when: false
+  ansible.builtin.systemd_service:
+    name: "{{ bind9_service_name }}"
+    state: started
+  check_mode: true
   register: _bind9_verify_active
-  failed_when: _bind9_verify_active.rc != 0
 
 - name: "PHASE [verify : Check named is listening on each configured address]"
   ansible.builtin.shell:
-    cmd: "ss -ltnu | grep -E '{{ item | replace('.', '\\.') }}:53[[:space:]]'"
+    cmd: "set -o pipefail && ss -ltnu | grep -E '{{ item | replace('.', '\\.') }}:53[[:space:]]'"
+    executable: /bin/bash
   loop: "{{ bind9_listen_ipv4 }}"
   changed_when: false
   register: _bind9_verify_listen
