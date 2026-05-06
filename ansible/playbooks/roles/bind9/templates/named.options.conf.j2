@@ -1,0 +1,29 @@
+// BIND9 options — managed by Ansible, do not edit manually
+// Role: bind9 | Template: named.options.conf.j2
+
+options {
+    directory "{{ bind9_zone_dir }}";
+    listen-on port 53 {
+{% for addr in bind9_listen_ipv4 %}
+        {{ addr }};
+{% endfor %}
+    };
+    listen-on-v6 { none; };
+
+{% if bind9_mode == 'resolver' %}
+    recursion yes;
+    allow-query {
+        127.0.0.1;
+        172.16.0.0/24;
+        172.16.1.0/24;
+    };
+    allow-recursion {
+        127.0.0.1;
+        172.16.0.0/24;
+        172.16.1.0/24;
+    };
+{% else %}
+    recursion no;
+    allow-query { any; };
+{% endif %}
+};

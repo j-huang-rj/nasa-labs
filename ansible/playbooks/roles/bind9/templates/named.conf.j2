@@ -1,0 +1,6 @@
+// BIND9 main configuration — managed by Ansible, do not edit manually
+// Role: bind9 | Template: named.conf.j2
+
+include "{{ bind9_conf_dir }}/named.options.conf";
+
+// Include statements for ACLs and views will be appended by later configuration phases
