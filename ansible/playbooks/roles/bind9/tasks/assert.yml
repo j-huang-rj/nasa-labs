@@ -1,0 +1,37 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate bind9 role variables"
+
+- name: "PHASE [assert : Check bind9_enabled Is True]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_enabled | bool
+    fail_msg: "bind9_enabled must be true when the bind9 role is invoked"
+
+- name: "PHASE [assert : Check bind9_mode Is Valid]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_mode in ['authoritative_primary', 'authoritative_secondary', 'resolver']
+    fail_msg: >-
+      bind9_mode must be one of authoritative_primary, authoritative_secondary, or resolver;
+      got '{{ bind9_mode | default("(undefined)") }}'
+
+- name: "PHASE [assert : Check bind9_listen_ipv4 Is Defined And Non-Empty]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_listen_ipv4 is defined
+      - bind9_listen_ipv4 | length > 0
+    fail_msg: "bind9_listen_ipv4 must be defined as a non-empty list of IPv4 addresses"
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

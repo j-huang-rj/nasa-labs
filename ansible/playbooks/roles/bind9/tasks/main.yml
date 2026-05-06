@@ -1,3 +1,16 @@
 ---
-# BIND9 DNS server configuration
-# TODO: Implement for Lab 2 (DNS)
+- name: "START"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting execution of bind9 role"
+
+- name: Validate Bind9 Role Variables
+  ansible.builtin.import_tasks: assert.yml
+
+- name: Configure Bind9
+  ansible.builtin.import_tasks: setup.yml
+
+- name: "END"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed execution of bind9 role"
