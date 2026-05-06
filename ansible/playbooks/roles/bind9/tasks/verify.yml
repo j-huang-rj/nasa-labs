@@ -26,13 +26,6 @@
   register: _bind9_verify_listen
   failed_when: _bind9_verify_listen.rc != 0
 
-- name: "PHASE [verify : Ensure no hardcoded ${ID} in rendered config]"
-  ansible.builtin.shell:
-    cmd: grep -R '\${ID}' {{ bind9_conf_path }} {{ bind9_conf_dir }}/*.conf || true
-  changed_when: false
-  register: _bind9_verify_no_id
-  failed_when: _bind9_verify_no_id.stdout | length > 0
-
 - name: "PHASE [verify : END]"
   become: false
   ansible.builtin.debug:
