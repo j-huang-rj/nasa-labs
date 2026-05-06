@@ -11,9 +11,5 @@ bind9_conf_dir: /etc/named
 bind9_zone_dir: /var/named
 bind9_dynamic_zone_dir: /var/named/dynamic
 
-# Validation and verification toggles
-bind9_config_validate_enabled: true
-bind9_runtime_verify_enabled: true
-
 # Runtime identity — which host to derive VPN subnet info from
 bind9_identity_source_host: router-01
