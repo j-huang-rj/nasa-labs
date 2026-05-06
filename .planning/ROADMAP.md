@@ -41,7 +41,7 @@ Plans:
 - [x] 01-02-PLAN.md — Implement shared bind package, config, template, handler, and service scaffolding.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-03-PLAN.md — Wire inventory-driven lab identity, host modes, ACL derivation, and final verification.
+- [x] 01-03-PLAN.md — Wire inventory-driven lab identity, host modes, ACL derivation, and final verification.
 
 ### Phase 2: Primary Authoritative Zones
 **Goal**: Internal and external clients receive the correct authoritative forward and reverse answers from the primary server for the lab-owned zones.
