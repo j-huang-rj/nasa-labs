@@ -177,9 +177,15 @@ bind9_zones:
       - "ns.{{ bind9_forward_zone_name }}."
       - "private-ns.{{ bind9_forward_zone_name }}."
     records:
-      - { name: "{{ bind9_vpn_router_ip.split('.')[-1] }}", type: "CNAME", value: "{{ bind9_vpn_router_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}." }
-      - { name: "{{ bind9_vpn_client_ip.split('.')[-1] }}", type: "CNAME", value: "{{ bind9_vpn_client_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}." }
-      - { name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}", type: "CNAME", value: "{{ bind9_vpn_ns_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}." }
+      - name: "{{ bind9_vpn_router_ip.split('.')[-1] }}"
+        type: CNAME
+        value: "{{ bind9_vpn_router_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
+      - name: "{{ bind9_vpn_client_ip.split('.')[-1] }}"
+        type: CNAME
+        value: "{{ bind9_vpn_client_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
+      - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
+        type: CNAME
+        value: "{{ bind9_vpn_ns_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
 
   - name: "{{ bind9_vpn_parent_reverse_zone_name }}"
     view: public
@@ -195,9 +201,15 @@ bind9_zones:
     ns:
       - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - { name: "{{ bind9_vpn_router_ip.split('.')[-1] }}", type: "CNAME", value: "{{ bind9_vpn_router_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}." }
-      - { name: "{{ bind9_vpn_client_ip.split('.')[-1] }}", type: "CNAME", value: "{{ bind9_vpn_client_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}." }
-      - { name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}", type: "CNAME", value: "{{ bind9_vpn_ns_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}." }
+      - name: "{{ bind9_vpn_router_ip.split('.')[-1] }}"
+        type: CNAME
+        value: "{{ bind9_vpn_router_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
+      - name: "{{ bind9_vpn_client_ip.split('.')[-1] }}"
+        type: CNAME
+        value: "{{ bind9_vpn_client_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
+      - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
+        type: CNAME
+        value: "{{ bind9_vpn_ns_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
 
   # --- RFC 2317 child zone (delegated /28 reverse) ---
 
