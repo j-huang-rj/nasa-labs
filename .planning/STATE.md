@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: completed
 stopped_at: Roadmap creation complete; Phase 1 is ready for `/gsd-plan-phase 1`.
-last_updated: "2026-05-06T03:52:04.389Z"
-last_activity: 2026-05-06 - Completed quick task 260506-h79: bind9 inventory cleanup
+last_updated: "2026-05-06T05:08:00.000Z"
+last_activity: 2026-05-06 - Completed quick task 260506-i20: add SELinux setype attributes to bind9 role
 progress:
   total_phases: 5
   completed_phases: 1
@@ -61,6 +61,7 @@ Recent decisions affecting current work:
 - [Phase 1]: Use one `bind9` component role with host-mode-driven behavior for primary, secondary, and resolver.
 - [Phase 1]: Derive VPN `${ID}` and zone naming at runtime; do not hardcode student-specific values.
 - [Phase 1]: Preserve existing repo conventions: router-first play ordering, component roles, START/END markers, and whole-file templating.
+- [Quick 260506-i20]: Use named_conf_t for bind9 config paths and named_cache_t for dynamic zone dir via Ansible-native setype attributes (no restorecon).
 
 ### Pending Todos
 
@@ -77,6 +78,7 @@ None yet.
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
 | 260506-h79 | bind9 inventory cleanup: derive listen_ipv4, remove stale lab_id, move bind-utils, reference defaults in argument_specs | 2026-05-06 | 8d0d54a | Verified | [260506-h79-bind9-inventory-cleanup-derive-listen-ip](./quick/260506-h79-bind9-inventory-cleanup-derive-listen-ip/) |
+| 260506-i20 | add SELinux setype attributes to bind9 config-phase tasks: named_conf_t on config paths, named_cache_t on dynamic zone dir | 2026-05-06 | 51a78f6 | Verified | [260506-i20-add-selinux-setype-attributes-to-bind9-r](./quick/260506-i20-add-selinux-setype-attributes-to-bind9-r/) |
 
 ## Deferred Items
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-05 00:00
-Stopped at: Roadmap creation complete; Phase 1 is ready for `/gsd-plan-phase 1`.
+Last session: 2026-05-06
+Stopped at: Completed quick task 260506-i20 (SELinux setype for bind9)
 Resume file: None
