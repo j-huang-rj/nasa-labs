@@ -1,4 +1,34 @@
 ---
+- name: "PHASE [config : Derive VPN identity from inventory]"
+  block:
+    - name: "PHASE [config : Read source host wireguard_address]"
+      ansible.builtin.set_fact:
+        _bind9_source_wg_address: "{{ hostvars[bind9_identity_source_host].wireguard_address | default('') }}"
+
+    - name: "PHASE [config : Derive VPN CIDR from wireguard_address]"
+      ansible.builtin.set_fact:
+        _bind9_wg_octets: "{{ _bind9_source_wg_address.split('/')[0].split('.') }}"
+        _bind9_wg_prefix: "{{ _bind9_source_wg_address.split('/')[1] | default('28') }}"
+      when: _bind9_source_wg_address | length > 0
+
+    - name: "PHASE [config : Compute bind9_vpn_network_base and CIDR]"
+      ansible.builtin.set_fact:
+        bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 }}"
+        bind9_vpn_network_cidr: "{{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (_bind9_wg_octets[3] | int // 16) * 16 }}/{{ _bind9_wg_prefix }}"
+        bind9_derived_lab_id: "{{ (_bind9_wg_octets[2] | int * 16) + ((_bind9_wg_octets[3] | int // 16) * 16) // 16 }}"
+      when: _bind9_source_wg_address | length > 0
+
+    - name: "PHASE [config : Assert lab_id matches derived VPN identity]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - lab_id | int == bind9_derived_lab_id | int
+        fail_msg: >-
+          lab_id ({{ lab_id }}) does not match derived VPN identity ({{ bind9_derived_lab_id }}).
+          Check wireguard_address in host_vars/{{ bind9_identity_source_host }}/secrets.yml.
+      when: _bind9_source_wg_address | length > 0
+  when: bind9_mode != 'resolver'
+
 - name: "PHASE [config : Create bind9 configuration directory]"
   ansible.builtin.file:
     path: "{{ bind9_conf_dir }}"
@@ -28,6 +58,15 @@
   ansible.builtin.template:
     src: named.options.conf.j2
     dest: "{{ bind9_conf_dir }}/named.options.conf"
+    owner: root
+    group: named
+    mode: "0640"
+  notify: "PHASE [handler : Reload named]"
+
+- name: "PHASE [config : Render ACL conf]"
+  ansible.builtin.template:
+    src: named.acl.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.acl.conf"
     owner: root
     group: named
     mode: "0640"
