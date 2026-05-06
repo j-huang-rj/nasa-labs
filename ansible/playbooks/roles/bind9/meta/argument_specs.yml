@@ -25,32 +25,32 @@ argument_specs:
       bind9_service_name:
         type: str
         required: false
-        default: named
+        default: "{{ bind9_service_name }}"
       bind9_conf_path:
         type: str
         required: false
-        default: /etc/named.conf
+        default: "{{ bind9_conf_path }}"
       bind9_conf_dir:
         type: str
         required: false
-        default: /etc/named
+        default: "{{ bind9_conf_dir }}"
       bind9_zone_dir:
         type: str
         required: false
-        default: /var/named
+        default: "{{ bind9_zone_dir }}"
       bind9_dynamic_zone_dir:
         type: str
         required: false
-        default: /var/named/dynamic
+        default: "{{ bind9_dynamic_zone_dir }}"
       bind9_config_validate_enabled:
         type: bool
         required: false
-        default: true
+        default: "{{ bind9_config_validate_enabled }}"
       bind9_runtime_verify_enabled:
         type: bool
         required: false
-        default: true
+        default: "{{ bind9_runtime_verify_enabled }}"
       bind9_identity_source_host:
         type: str
         required: false
-        default: router-01
+        default: "{{ bind9_identity_source_host }}"
