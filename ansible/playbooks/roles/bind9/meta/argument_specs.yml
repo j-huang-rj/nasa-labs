@@ -36,12 +36,6 @@ argument_specs:
       bind9_dynamic_zone_dir:
         type: str
         required: false
-      bind9_config_validate_enabled:
-        type: bool
-        required: false
-      bind9_runtime_verify_enabled:
-        type: bool
-        required: false
       bind9_identity_source_host:
         type: str
         required: false

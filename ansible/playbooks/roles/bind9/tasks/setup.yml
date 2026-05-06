@@ -15,7 +15,6 @@
 
 - name: "PHASE [setup : Verify bind9 configuration and service]"
   ansible.builtin.import_tasks: verify.yml
-  when: bind9_runtime_verify_enabled | bool
 
 - name: "PHASE [setup : END]"
   become: false

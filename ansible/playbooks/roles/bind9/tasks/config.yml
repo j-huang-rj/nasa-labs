@@ -63,7 +63,7 @@
     group: named
     mode: "0640"
     setype: "named_conf_t"
-  register: _bind9_config_main
+  notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Render named options conf]"
   ansible.builtin.template:
@@ -73,7 +73,7 @@
     group: named
     mode: "0640"
     setype: "named_conf_t"
-  register: _bind9_config_options
+  notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Render ACL conf]"
   ansible.builtin.template:
@@ -83,7 +83,10 @@
     group: named
     mode: "0640"
     setype: "named_conf_t"
-  register: _bind9_config_acl
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Flush handlers]"
+  ansible.builtin.meta: flush_handlers
 
 - name: "PHASE [config : END]"
   become: false
