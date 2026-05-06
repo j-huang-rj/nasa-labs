@@ -7,8 +7,17 @@
   register: _bind9_checkconf_result
   when: bind9_config_validate_enabled | bool
 
-- name: "PHASE [service : Enable and restart named service]"
+- name: "PHASE [service : Enable and start named service]"
   ansible.builtin.systemd_service:
     name: "{{ bind9_service_name }}"
     enabled: true
+    state: started
+
+- name: "PHASE [service : Restart named if config changed]"
+  ansible.builtin.systemd_service:
+    name: "{{ bind9_service_name }}"
     state: restarted
+  when: >
+    (_bind9_config_main is changed) or
+    (_bind9_config_options is changed) or
+    (_bind9_config_acl is changed)
