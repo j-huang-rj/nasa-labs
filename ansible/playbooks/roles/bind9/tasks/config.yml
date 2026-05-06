@@ -28,6 +28,21 @@
           {{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}
       when: _bind9_source_wg_address | length > 0
 
+    - name: "PHASE [config : Compute VPN host IPs and DNS identity facts]"
+      ansible.builtin.set_fact:
+        bind9_vpn_router_ip: >-
+          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base | int) + 1 }}
+        bind9_vpn_client_ip: >-
+          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base | int) + 2 }}
+        bind9_vpn_ns_ip: >-
+          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base | int) + 3 }}
+        bind9_forward_zone_name: "{{ bind9_derived_lab_id }}.nasa"
+        bind9_vpn_parent_reverse_zone_name: "{{ _bind9_wg_octets[2] }}.168.192.in-addr.arpa"
+        bind9_vpn_child_reverse_zone_name: "{{ bind9_derived_lab_id }}-sub28.{{ _bind9_wg_octets[2] }}.168.192.in-addr.arpa"
+        bind9_primary_mname: "private-ns.{{ bind9_derived_lab_id }}.nasa."
+        bind9_soa_serial: "{{ ansible_date_time.year }}{{ ansible_date_time.month }}{{ ansible_date_time.day }}01"
+      when: _bind9_source_wg_address | length > 0
+
 - name: "PHASE [config : Warn if VPN address unavailable for authoritative mode]"
   ansible.builtin.debug:
     msg: >-
@@ -79,6 +94,16 @@
   ansible.builtin.template:
     src: named.acl.conf.j2
     dest: "{{ bind9_conf_dir }}/named.acl.conf"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Render zones conf]"
+  ansible.builtin.template:
+    src: named.zones.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.zones.conf"
     owner: root
     group: named
     mode: "0640"
