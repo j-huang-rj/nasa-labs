@@ -21,7 +21,7 @@
 - name: "PHASE [verify : Check named is listening on configured addresses]"
   ansible.builtin.shell:
     cmd: >-
-      ss -ltnu | grep -E '({{ bind9_listen_ipv4 | map("regex_replace", "\\.", "\\.") | join("|") }}):53\s'
+      ss -ltnu | grep -E '({{ bind9_listen_ipv4 | map("replace", ".", "\\.") | join("|") }}):53[[:space:]]'
   changed_when: false
   register: _bind9_verify_listen
   failed_when: _bind9_verify_listen.rc != 0
