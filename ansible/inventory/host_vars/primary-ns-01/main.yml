@@ -40,5 +40,47 @@ bind9_views:
     match_clients:
       - "any"
 
-# Zone data placeholder — populated in later plans
-bind9_zones: []
+# Zone data — forward zones for private and public views
+bind9_zones:
+  - name: "{{ bind9_forward_zone_name }}"
+    view: private
+    type: master
+    file: "private/db.{{ bind9_forward_zone_name }}"
+    soa:
+      admin: "hostmaster.{{ bind9_forward_zone_name }}."
+      serial: "{{ bind9_soa_serial }}"
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    ns:
+      - "ns.{{ bind9_forward_zone_name }}."
+      - "private-ns.{{ bind9_forward_zone_name }}."
+    records:
+      - { name: "router", type: "A", value: "172.16.0.254" }
+      - { name: "router", type: "A", value: "172.16.1.254" }
+      - { name: "ns", type: "A", value: "172.16.0.53" }
+      - { name: "agent", type: "A", value: "172.16.0.123" }
+      - { name: "private-ns", type: "A", value: "172.16.1.53" }
+      - { name: "dns", type: "A", value: "172.16.1.153" }
+      - { name: "internal-agent", type: "A", value: "172.16.1.123" }
+
+  - name: "{{ bind9_forward_zone_name }}"
+    view: public
+    type: master
+    file: "public/db.{{ bind9_forward_zone_name }}"
+    soa:
+      admin: "hostmaster.{{ bind9_forward_zone_name }}."
+      serial: "{{ bind9_soa_serial }}"
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    ns:
+      - "ns.{{ bind9_forward_zone_name }}."
+    records:
+      - { name: "router", type: "A", value: "{{ bind9_vpn_router_ip }}" }
+      - { name: "client", type: "A", value: "{{ bind9_vpn_client_ip }}" }
+      - { name: "ns", type: "A", value: "{{ bind9_vpn_ns_ip }}" }
+      - { name: "agent", type: "A", value: "{{ bind9_vpn_router_ip }}" }
+      - { name: "internal-agent", type: "A", value: "{{ bind9_vpn_router_ip }}" }
