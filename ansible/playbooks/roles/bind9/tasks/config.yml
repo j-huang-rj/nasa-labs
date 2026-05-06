@@ -19,6 +19,15 @@
       when: _bind9_source_wg_address | length > 0
   when: bind9_mode != 'resolver'
 
+- name: "PHASE [config : Warn if VPN address unavailable for authoritative mode]"
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: bind9_identity_source_host '{{ bind9_identity_source_host }}'
+      has no wireguard_address; VPN ACL will be omitted
+  when:
+    - bind9_mode != 'resolver'
+    - _bind9_source_wg_address | default('') | length == 0
+
 - name: "PHASE [config : Create bind9 configuration directory]"
   ansible.builtin.file:
     path: "{{ bind9_conf_dir }}"
