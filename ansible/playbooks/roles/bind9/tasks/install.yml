@@ -1,0 +1,5 @@
+---
+- name: "PHASE [install : Install bind9 packages]"
+  ansible.builtin.dnf:
+    name: "{{ bind9_packages }}"
+    state: present

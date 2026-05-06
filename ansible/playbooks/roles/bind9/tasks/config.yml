@@ -1,0 +1,34 @@
+---
+- name: "PHASE [config : Create bind9 configuration directory]"
+  ansible.builtin.file:
+    path: "{{ bind9_conf_dir }}"
+    state: directory
+    owner: root
+    group: named
+    mode: "0750"
+
+- name: "PHASE [config : Create dynamic zone directory]"
+  ansible.builtin.file:
+    path: "{{ bind9_dynamic_zone_dir }}"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+
+- name: "PHASE [config : Render main named.conf]"
+  ansible.builtin.template:
+    src: named.conf.j2
+    dest: "{{ bind9_conf_path }}"
+    owner: root
+    group: named
+    mode: "0640"
+  notify: "PHASE [handler : Reload named]"
+
+- name: "PHASE [config : Render named options conf]"
+  ansible.builtin.template:
+    src: named.options.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.options.conf"
+    owner: root
+    group: named
+    mode: "0640"
+  notify: "PHASE [handler : Reload named]"
