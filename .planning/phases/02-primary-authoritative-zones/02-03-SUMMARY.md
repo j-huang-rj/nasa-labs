@@ -128,6 +128,7 @@ None — no external service configuration required.
 - Both key files exist on disk (main.yml, verify.yml)
 - Task 1 commit verified: 1a3f329
 - Task 2 commit verified: 182b899
+- Docs commit verified: f0bd747
 - No accidental file deletions in any commit
 - ansible-playbook --syntax-check passes
 - ansible-lint passes with 0 failures, 0 warnings
