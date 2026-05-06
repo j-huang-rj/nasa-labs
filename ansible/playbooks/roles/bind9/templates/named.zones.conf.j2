@@ -1,0 +1,15 @@
+// Managed by Ansible, do not edit manually
+
+{% set _views = bind9_views | sort(attribute='order') %}
+{% for _view in _views %}
+view "{{ _view.name }}" {
+    match-clients { {{ _view.match_clients | join('; ') }}; };
+{% for _zone in bind9_zones | selectattr('view', 'equalto', _view.name) %}
+
+    zone "{{ _zone.name }}" {
+        type {{ _zone.type }};
+        file "{{ _zone.file }}";
+    };
+{% endfor %}
+};
+{% endfor %}
