@@ -71,13 +71,14 @@ bind9_views:
 # Zone data: mirror every zone the primary currently serves, but as
 # type: slave with masters: [172.16.1.53].  No records, SOA, NS,
 # allow-transfer, allow-update, or dynamic_update_scope — the secondary
-# is read-only per SEC-04 (D-12).
+# is read-only.
 bind9_zones:
   # --- Private forward zone ---
   - name: "{{ bind9_forward_zone_name }}"
     view: private
     type: slave
-    masters: ["172.16.1.53"]
+    masters:
+      - "172.16.1.53"
     file: "slaves/private/db.{{ bind9_forward_zone_name }}"
     allow_transfer: []
 
@@ -85,7 +86,8 @@ bind9_zones:
   - name: "{{ bind9_forward_zone_name }}"
     view: public
     type: slave
-    masters: ["172.16.1.53"]
+    masters:
+      - "172.16.1.53"
     file: "slaves/public/db.{{ bind9_forward_zone_name }}"
     allow_transfer: []
 
@@ -93,7 +95,8 @@ bind9_zones:
   - name: "0.16.172.in-addr.arpa"
     view: private
     type: slave
-    masters: ["172.16.1.53"]
+    masters:
+      - "172.16.1.53"
     file: "slaves/private/db.0.16.172.in-addr.arpa"
     allow_transfer: []
 
@@ -101,7 +104,8 @@ bind9_zones:
   - name: "1.16.172.in-addr.arpa"
     view: private
     type: slave
-    masters: ["172.16.1.53"]
+    masters:
+      - "172.16.1.53"
     file: "slaves/private/db.1.16.172.in-addr.arpa"
     allow_transfer: []
 
@@ -109,6 +113,7 @@ bind9_zones:
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     view: public
     type: slave
-    masters: ["172.16.1.53"]
+    masters:
+      - "172.16.1.53"
     file: "slaves/public/db.{{ bind9_vpn_child_reverse_zone_name }}"
     allow_transfer: []
