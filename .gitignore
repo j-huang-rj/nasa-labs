@@ -38,3 +38,6 @@ cloud-init/**/seed.iso
 cloud-init/**/user-data
 cloud-init/**/meta-data
 cloud-init/**/network-config
+
+# Agent artifacts
+AGENTS.md
