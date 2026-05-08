@@ -171,3 +171,70 @@ bind9_zones:
 _Reviewed: 2026-05-09T12:00:00Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: deep_
+
+## Re-Review (Iteration 1)
+
+**Reviewed:** 2026-05-09T14:00:00Z
+**Depth:** quick
+**Files Re-Reviewed:** 3
+**Status:** clean
+
+### WR-01 Fix Verification: `allow_transfer: []` on secondary slave zones
+
+**File:** `ansible/inventory/host_vars/secondary-ns-01/main.yml`
+
+**Verdict: ✅ Correct and complete.**
+
+All 5 slave zones now carry `allow_transfer: []`:
+- Line 82: private forward zone ✓
+- Line 90: public forward zone ✓
+- Line 98: private reverse zone `0.16.172.in-addr.arpa` ✓
+- Line 106: private reverse zone `1.16.172.in-addr.arpa` ✓
+- Line 114: public RFC 2317 child zone ✓
+
+The empty list `[]` will render as `allow-transfer { };` in `named.zones.conf.j2` (template line 34-36), denying all zone transfers. This matches the original fix recommendation exactly. No new issues introduced.
+
+### WR-02 Fix Verification: Propagation test IP extraction to `set_fact`
+
+**File:** `ansible/playbooks/roles/bind9/tasks/verify.yml`
+
+**Verdict: ✅ Correct and complete.**
+
+Two `set_fact` tasks were added at lines 328-334:
+- `_bind9_prop_test_ip` set to `"172.16.1.202"` (line 330)
+- `_bind9_prop_test_ip_rev` computed from the IP via Jinja2 `.split('.')` (line 334)
+
+The reverse computation `{{ _bind9_prop_test_ip.split('.')[3] }}.{{ _bind9_prop_test_ip.split('.')[2] }}.{{ _bind9_prop_test_ip.split('.')[1] }}.{{ _bind9_prop_test_ip.split('.')[0] }}.in-addr.arpa` correctly yields `202.1.16.172.in-addr.arpa` for `172.16.1.202`. The Jinja2 expression is verbose but valid and functional.
+
+All 6 downstream references now use the variables:
+- Line 342: nsupdate create A record uses `{{ _bind9_prop_test_ip }}` ✓
+- Line 354: nsupdate create PTR record uses `{{ _bind9_prop_test_ip_rev }}` ✓
+- Line 367: propagation poll `until` condition uses `{{ _bind9_prop_test_ip }}` ✓ (note: the original review example used `'{{ ... }}'` quoting but the actual fix uses the bare variable, which is fine since Ansible evaluates the `until` expression as Jinja2)
+- Line 379: cleanup A delete uses the variable indirectly (references `dynamic2.` record name, not the IP) ✓
+- Line 390: cleanup PTR delete uses `{{ _bind9_prop_test_ip_rev }}` ✓
+
+No hardcoded `172.16.1.202` remains in the propagation block. The `set_fact` tasks are correctly scoped inside the `when: bind9_mode == 'authoritative_secondary'` block. No new issues introduced.
+
+### WR-03 Fix Verification: `.opencode/artifacts/*.txt` in `.gitignore`
+
+**File:** `.gitignore`
+
+**Verdict: ✅ Correct (defense-in-depth).**
+
+Line 23 now reads `.opencode/artifacts/*.txt`. This is technically redundant with line 22 (`.opencode/`) which already ignores the entire directory tree. However, the original finding was specifically about defense-in-depth — if the `.opencode/` line is ever removed during a gitignore cleanup, the artifact-level pattern provides a safety net. The fix serves its stated purpose. No new issues introduced.
+
+### Re-Review Summary
+
+| Finding | Original Severity | Fix Status | New Issues |
+|---------|------------------|------------|------------|
+| WR-01 | Warning | ✅ Fixed | 0 |
+| WR-02 | Warning | ✅ Fixed | 0 |
+| WR-03 | Warning | ✅ Fixed | 0 |
+
+All 3 warnings from the initial review have been correctly addressed. No new issues were introduced by the fixes. The Ansible syntax (set_fact, Jinja2 expressions, empty list values) is valid.
+
+---
+
+_Re-Reviewed: 2026-05-09T14:00:00Z_
+_Reviewer: gsd-code-reviewer_
+_Depth: quick (re-review of 3 fixed files)_
