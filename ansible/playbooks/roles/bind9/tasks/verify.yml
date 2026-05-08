@@ -439,9 +439,9 @@
           rc={{ _bind9_verify_secondary_axfr_reject.rc }},
           stdout={{ _bind9_verify_secondary_axfr_reject.stdout | default('') }}
 
-# --- TSIG key assertion and controller-side artifact export ---
+# --- TSIG key assertion ---
 
-- name: "PHASE [verify : TSIG key assertion and artifact export]"
+- name: "PHASE [verify : TSIG key assertion]"
   when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
   delegate_to: localhost
   run_once: true
@@ -457,21 +457,6 @@
         fail_msg: >-
           bind9_tsig_key must be defined with name, algorithm, and secret on authoritative hosts.
           Ensure host_vars/*/secrets.yml provides the TSIG key.
-
-    - name: "PHASE [verify : Create artifact directory]"
-      ansible.builtin.file:
-        path: "{{ (bind9_tsig_artifact_path | dirname) }}"
-        state: directory
-        mode: "0755"
-
-    - name: "PHASE [verify : Export TSIG key artifact for OJ upload]"
-      ansible.builtin.copy:
-        dest: "{{ bind9_tsig_artifact_path }}"
-        content: |
-          name: {{ bind9_tsig_key.name }}
-          algorithm: {{ bind9_tsig_key.algorithm }}
-          secret: {{ bind9_tsig_key.secret }}
-        mode: "0644"
 
 # --- Resolver: recursive resolution verification ---
 

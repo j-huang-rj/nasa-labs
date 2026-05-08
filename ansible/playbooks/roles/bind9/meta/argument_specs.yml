@@ -130,13 +130,6 @@ argument_specs:
           Included from named.conf before the zones stanza so key definitions are available to
           update-policy and allow-transfer directives.
 
-      bind9_tsig_artifact_path:
-        type: str
-        required: false
-        description: >-
-          Local controller path for the OJ upload artifact. The verify task exports name, algorithm,
-          and secret from bind9_tsig_key to this file for the TA grading system.
-
       bind9_forwarders:
         type: list
         elements: str
@@ -144,3 +137,4 @@ argument_specs:
         description: >-
           Upstream IPv4 addresses used as forwarders in resolver mode. When non-empty, the resolver emits a
           forwarders clause with forward only and does not attempt root-based recursion.
+          
