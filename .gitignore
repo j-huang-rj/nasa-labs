@@ -20,7 +20,6 @@ htmlcov/
 
 # Local workspace
 .opencode/
-.opencode/artifacts/*.txt
 
 # Ansible
 .ansible/

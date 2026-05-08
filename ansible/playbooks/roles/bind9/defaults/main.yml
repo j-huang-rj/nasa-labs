@@ -17,7 +17,7 @@ bind9_identity_source_host: router-01
 # SOA admin contact
 bind9_soa_admin: "admin"
 
-# ACL CIDR defaults — override in host_vars if network subnets differ
+# ACL CIDR defaults
 bind9_dmz_cidr: "172.16.0.0/24"
 bind9_internal_cidr: "172.16.1.0/24"
 
@@ -28,8 +28,7 @@ bind9_vpn_ns_offset: 3
 
 # SOA serial format: YYYYMMDDHH (10 digits, fits uint32).
 # Idempotent within an hour; auto-bumps each hour so same-day re-edits during
-# lab testing produce a higher serial without manual intervention. The value
-# is computed in pre_tasks of ansible/playbooks/dns.yml from ansible_facts.date_time.
+# lab testing produce a higher serial without manual intervention.
 # If you need sub-hour bumping, manually increment zone data or wait for the
 # hour to roll over. For production, consider a content-hash or read-and-bump serial.
 
@@ -54,6 +53,5 @@ bind9_tsig_key:
   algorithm: hmac-sha256
   secret: ""
 
-# Paths for the rendered TSIG key include file and controller-side export artifact.
+# Path for the rendered TSIG key include file.
 bind9_keys_conf_path: /etc/named/named.keys.conf
-bind9_tsig_artifact_path: .opencode/artifacts/phase-03-tsig-upload.txt
