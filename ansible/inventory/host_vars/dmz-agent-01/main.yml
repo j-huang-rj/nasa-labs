@@ -6,8 +6,8 @@ network_interfaces:
     ip4: 172.16.0.123/24
     gw4: 172.16.0.254
     dns4:
-      - 8.8.8.8
       - 1.1.1.1
+      - 8.8.8.8
     conn_name: dmz-static
     default_conn_name: "cloud-init eth0"
 

@@ -6,8 +6,8 @@ network_interfaces:
     ip4: 172.16.1.123/24
     gw4: 172.16.1.254
     dns4:
-      - 8.8.8.8
       - 1.1.1.1
+      - 8.8.8.8
     conn_name: internal-static
     default_conn_name: "cloud-init eth0"
 
