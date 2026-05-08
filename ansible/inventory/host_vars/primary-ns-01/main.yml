@@ -6,8 +6,8 @@ network_interfaces:
     ip4: 172.16.1.53/24
     gw4: 172.16.1.254
     dns4:
-      - 8.8.8.8
       - 1.1.1.1
+      - 8.8.8.8
     conn_name: internal-static
     default_conn_name: "cloud-init eth0"
 
@@ -28,13 +28,19 @@ bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.1.53
 
-# View policy: private view must precede public view (BIND9 first-match)
+# Dynamic update hosts — only these names may be created/modified/deleted
+# via signed nsupdate in the private forward zone.
+bind9_dynamic_hosts: ["dynamic1", "dynamic2", "dynamic3", "dynamic4"]
+
+# View policy: private view precede public view
 bind9_views:
   - name: private
     order: 10
     match_clients:
-      - "bind9_dmz_clients"
-      - "bind9_internal_clients"
+      - "localhost"
+      - "dmz_clients"
+      - "internal_clients"
+
   - name: public
     order: 99
     match_clients:
@@ -46,31 +52,50 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.{{ bind9_forward_zone_name }}"
+    dynamic_update_scope: forward_a_hosts
+    allow_transfer: ["172.16.0.53"]
+    also_notify: ["172.16.0.53"]
     soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800
       minimum: 86400
     ns:
-      - "ns.{{ bind9_forward_zone_name }}."
       - "private-ns.{{ bind9_forward_zone_name }}."
+      - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - { name: "router", type: "A", value: "172.16.0.254" }
-      - { name: "router", type: "A", value: "172.16.1.254" }
-      - { name: "ns", type: "A", value: "172.16.0.53" }
-      - { name: "agent", type: "A", value: "172.16.0.123" }
-      - { name: "private-ns", type: "A", value: "172.16.1.53" }
-      - { name: "dns", type: "A", value: "172.16.1.153" }
-      - { name: "internal-agent", type: "A", value: "172.16.1.123" }
+      - name: "ns"
+        type: "A"
+        value: "172.16.0.53"
+      - name: "private-ns"
+        type: "A"
+        value: "172.16.1.53"
+      - name: "dns"
+        type: "A"
+        value: "172.16.1.153"
+      - name: "router"
+        type: "A"
+        value: "172.16.0.254"
+      - name: "router"
+        type: "A"
+        value: "172.16.1.254"
+      - name: "agent"
+        type: "A"
+        value: "172.16.0.123"
+      - name: "internal-agent"
+        type: "A"
+        value: "172.16.1.123"
 
   - name: "{{ bind9_forward_zone_name }}"
     view: public
     type: master
     file: "public/db.{{ bind9_forward_zone_name }}"
+    allow_transfer: ["172.16.0.53"]
+    also_notify: ["172.16.0.53"]
     soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
@@ -79,11 +104,21 @@ bind9_zones:
     ns:
       - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - { name: "router", type: "A", value: "{{ bind9_vpn_router_ip }}" }
-      - { name: "client", type: "A", value: "{{ bind9_vpn_client_ip }}" }
-      - { name: "ns", type: "A", value: "{{ bind9_vpn_ns_ip }}" }
-      - { name: "agent", type: "A", value: "{{ bind9_vpn_router_ip }}" }
-      - { name: "internal-agent", type: "A", value: "{{ bind9_vpn_router_ip }}" }
+      - name: "ns"
+        type: "A"
+        value: "{{ bind9_vpn_ns_ip }}"
+      - name: "router"
+        type: "A"
+        value: "{{ bind9_vpn_router_ip }}"
+      - name: "agent"
+        type: "A"
+        value: "{{ bind9_vpn_router_ip }}"
+      - name: "internal-agent"
+        type: "A"
+        value: "{{ bind9_vpn_router_ip }}"
+      - name: "client"
+        type: "A"
+        value: "{{ bind9_vpn_client_ip }}"
 
   # --- Reverse zones: 172.16.0/24 ---
 
@@ -91,36 +126,29 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.0.16.172.in-addr.arpa"
+    dynamic_update_scope: ptr_zonesub
+    allow_transfer: ["172.16.0.53"]
+    also_notify: ["172.16.0.53"]
     soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800
       minimum: 86400
     ns:
-      - "ns.{{ bind9_forward_zone_name }}."
       - "private-ns.{{ bind9_forward_zone_name }}."
-    records:
-      - { name: "254", type: "PTR", value: "router.{{ bind9_forward_zone_name }}." }
-      - { name: "53", type: "PTR", value: "ns.{{ bind9_forward_zone_name }}." }
-
-  - name: "0.16.172.in-addr.arpa"
-    view: public
-    type: master
-    file: "public/db.0.16.172.in-addr.arpa"
-    soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
-      refresh: 3600
-      retry: 1800
-      expire: 604800
-      minimum: 86400
-    ns:
       - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - { name: "53", type: "PTR", value: "ns.{{ bind9_forward_zone_name }}." }
-      - { name: "123", type: "PTR", value: "agent.{{ bind9_forward_zone_name }}." }
+      - name: "53"
+        type: "PTR"
+        value: "ns.{{ bind9_forward_zone_name }}."
+      - name: "254"
+        type: "PTR"
+        value: "router.{{ bind9_forward_zone_name }}."
+      - name: "123"
+        type: "PTR"
+        value: "agent.{{ bind9_forward_zone_name }}."
 
   # --- Reverse zones: 172.16.1/24 ---
 
@@ -128,116 +156,50 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.1.16.172.in-addr.arpa"
+    dynamic_update_scope: ptr_zonesub
+    allow_transfer: ["172.16.0.53"]
+    also_notify: ["172.16.0.53"]
     soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800
       minimum: 86400
     ns:
-      - "ns.{{ bind9_forward_zone_name }}."
       - "private-ns.{{ bind9_forward_zone_name }}."
-    records:
-      - { name: "254", type: "PTR", value: "router.{{ bind9_forward_zone_name }}." }
-      - { name: "53", type: "PTR", value: "private-ns.{{ bind9_forward_zone_name }}." }
-      - { name: "153", type: "PTR", value: "dns.{{ bind9_forward_zone_name }}." }
-      - { name: "123", type: "PTR", value: "internal-agent.{{ bind9_forward_zone_name }}." }
-
-  - name: "1.16.172.in-addr.arpa"
-    view: public
-    type: master
-    file: "public/db.1.16.172.in-addr.arpa"
-    soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
-      refresh: 3600
-      retry: 1800
-      expire: 604800
-      minimum: 86400
-    ns:
       - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - { name: "53", type: "PTR", value: "ns.{{ bind9_forward_zone_name }}." }
-
-  # --- RFC 2317 carrier zone (VPN parent reverse) ---
-
-  - name: "{{ bind9_vpn_parent_reverse_zone_name }}"
-    view: private
-    type: master
-    file: "private/db.{{ bind9_vpn_parent_reverse_zone_name }}"
-    soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
-      refresh: 3600
-      retry: 1800
-      expire: 604800
-      minimum: 86400
-    ns:
-      - "ns.{{ bind9_forward_zone_name }}."
-      - "private-ns.{{ bind9_forward_zone_name }}."
-    records:
-      - name: "{{ bind9_vpn_router_ip.split('.')[-1] }}"
-        type: CNAME
-        value: "{{ bind9_vpn_router_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
-      - name: "{{ bind9_vpn_client_ip.split('.')[-1] }}"
-        type: CNAME
-        value: "{{ bind9_vpn_client_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
-      - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
-        type: CNAME
-        value: "{{ bind9_vpn_ns_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
-
-  - name: "{{ bind9_vpn_parent_reverse_zone_name }}"
-    view: public
-    type: master
-    file: "public/db.{{ bind9_vpn_parent_reverse_zone_name }}"
-    soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
-      refresh: 3600
-      retry: 1800
-      expire: 604800
-      minimum: 86400
-    ns:
-      - "ns.{{ bind9_forward_zone_name }}."
-    records:
-      - name: "{{ bind9_vpn_router_ip.split('.')[-1] }}"
-        type: CNAME
-        value: "{{ bind9_vpn_router_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
-      - name: "{{ bind9_vpn_client_ip.split('.')[-1] }}"
-        type: CNAME
-        value: "{{ bind9_vpn_client_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
-      - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
-        type: CNAME
-        value: "{{ bind9_vpn_ns_ip.split('.')[-1] }}.{{ bind9_vpn_child_reverse_zone_name }}."
+      - name: "53"
+        type: "PTR"
+        value: "private-ns.{{ bind9_forward_zone_name }}."
+      - name: "153"
+        type: "PTR"
+        value: "dns.{{ bind9_forward_zone_name }}."
+      - name: "254"
+        type: "PTR"
+        value: "router.{{ bind9_forward_zone_name }}."
+      - name: "123"
+        type: "PTR"
+        value: "internal-agent.{{ bind9_forward_zone_name }}."
 
   # --- RFC 2317 child zone (delegated /28 reverse) ---
-
-  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
-    view: private
-    type: master
-    file: "private/db.{{ bind9_vpn_child_reverse_zone_name }}"
-    soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
-      refresh: 3600
-      retry: 1800
-      expire: 604800
-      minimum: 86400
-    ns:
-      - "ns.{{ bind9_forward_zone_name }}."
-      - "private-ns.{{ bind9_forward_zone_name }}."
-    records:
-      - { name: "{{ bind9_vpn_router_ip.split('.')[-1] }}", type: "PTR", value: "router.{{ bind9_forward_zone_name }}." }
-      - { name: "{{ bind9_vpn_client_ip.split('.')[-1] }}", type: "PTR", value: "client.{{ bind9_forward_zone_name }}." }
-      - { name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}", type: "PTR", value: "ns.{{ bind9_forward_zone_name }}." }
+  #
+  # Parent zone `{x}.168.192.in-addr.arpa` is intentionally NOT hosted here.
+  # The TA's `nasa.` root at 192.168.255.1 is the authoritative parent for the
+  # 192.168 reverse tree and delegates this /28 child directly to us. Hosting
+  # the parent locally would only falsely claim authority on a zone we don't
+  # own; real reverse-lookup flow is: 192.168 root (TA) → delegation → this
+  # child zone.
 
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     view: public
     type: master
     file: "public/db.{{ bind9_vpn_child_reverse_zone_name }}"
+    allow_transfer: ["172.16.0.53"]
+    also_notify: ["172.16.0.53"]
     soa:
-      admin: "hostmaster.{{ bind9_forward_zone_name }}."
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
@@ -246,6 +208,12 @@ bind9_zones:
     ns:
       - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - { name: "{{ bind9_vpn_router_ip.split('.')[-1] }}", type: "PTR", value: "router.{{ bind9_forward_zone_name }}." }
-      - { name: "{{ bind9_vpn_client_ip.split('.')[-1] }}", type: "PTR", value: "client.{{ bind9_forward_zone_name }}." }
-      - { name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}", type: "PTR", value: "ns.{{ bind9_forward_zone_name }}." }
+      - name: "{{ bind9_vpn_router_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "router.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_vpn_client_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "client.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "ns.{{ bind9_forward_zone_name }}."
