@@ -30,7 +30,11 @@ bind9_listen_ipv4:
 
 # Dynamic update hosts — only these names may be created/modified/deleted
 # via signed nsupdate in the private forward zone.
-bind9_dynamic_hosts: ["dynamic1", "dynamic2", "dynamic3", "dynamic4"]
+bind9_dynamic_hosts:
+  - "dynamic1"
+  - "dynamic2"
+  - "dynamic3"
+  - "dynamic4"
 
 # View policy: private view precede public view
 bind9_views:
@@ -53,8 +57,10 @@ bind9_zones:
     type: master
     file: "private/db.{{ bind9_forward_zone_name }}"
     dynamic_update_scope: forward_a_hosts
-    allow_transfer: ["172.16.0.53"]
-    also_notify: ["172.16.0.53"]
+    allow_transfer:
+      - "172.16.0.53"
+    also_notify:
+      - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
@@ -92,8 +98,10 @@ bind9_zones:
     view: public
     type: master
     file: "public/db.{{ bind9_forward_zone_name }}"
-    allow_transfer: ["172.16.0.53"]
-    also_notify: ["172.16.0.53"]
+    allow_transfer:
+      - "172.16.0.53"
+    also_notify:
+      - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
@@ -127,8 +135,10 @@ bind9_zones:
     type: master
     file: "private/db.0.16.172.in-addr.arpa"
     dynamic_update_scope: ptr_zonesub
-    allow_transfer: ["172.16.0.53"]
-    also_notify: ["172.16.0.53"]
+    allow_transfer:
+      - "172.16.0.53"
+    also_notify:
+      - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
@@ -157,8 +167,10 @@ bind9_zones:
     type: master
     file: "private/db.1.16.172.in-addr.arpa"
     dynamic_update_scope: ptr_zonesub
-    allow_transfer: ["172.16.0.53"]
-    also_notify: ["172.16.0.53"]
+    allow_transfer:
+      - "172.16.0.53"
+    also_notify:
+      - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
@@ -196,8 +208,10 @@ bind9_zones:
     view: public
     type: master
     file: "public/db.{{ bind9_vpn_child_reverse_zone_name }}"
-    allow_transfer: ["172.16.0.53"]
-    also_notify: ["172.16.0.53"]
+    allow_transfer:
+      - "172.16.0.53"
+    also_notify:
+      - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       serial: "{{ bind9_soa_serial }}"
