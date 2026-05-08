@@ -283,6 +283,151 @@
           - _bind9_verify_slave_dir.stat.isdir
         fail_msg: "Slave zone directory {{ bind9_zone_dir }}/slaves does not exist"
 
+    # --- Secondary answer checks: verify the secondary serves the same
+    #     answers the primary would, for both private and public views. ---
+
+    - name: "PHASE [verify : Secondary - private view forward A lookup]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b 172.16.0.53 @172.16.0.53
+          ns.{{ bind9_forward_zone_name }} A +noall +answer
+      changed_when: false
+      register: _bind9_verify_secondary_private_fwd
+
+    - name: "PHASE [verify : Assert secondary private forward A lookup]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'172.16.0.53' in _bind9_verify_secondary_private_fwd.stdout"
+        fail_msg: >-
+          Secondary private view did not return expected A record for
+          ns.{{ bind9_forward_zone_name }}.
+          stdout={{ _bind9_verify_secondary_private_fwd.stdout | default('') }}
+
+    - name: "PHASE [verify : Secondary - public view forward A lookup]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @172.16.0.53
+          ns.{{ bind9_forward_zone_name }} A +noall +answer
+      changed_when: false
+      register: _bind9_verify_secondary_public_fwd
+
+    - name: "PHASE [verify : Assert secondary public forward A lookup]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'172.16' in _bind9_verify_secondary_public_fwd.stdout"
+        fail_msg: >-
+          Secondary public view did not return an A record for
+          ns.{{ bind9_forward_zone_name }}.
+          stdout={{ _bind9_verify_secondary_public_fwd.stdout | default('') }}
+
+    # --- Propagation test: update on primary, poll secondary until
+    #     convergence (SEC-03). Capped at 10 seconds via retries/delay. ---
+
+    - name: "PHASE [verify : Propagation - create dynamic2 A record on primary]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server 172.16.1.53
+          zone {{ bind9_forward_zone_name }}
+          update add dynamic2.{{ bind9_forward_zone_name }}. 300 A 172.16.1.202
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_prop_create
+
+    - name: "PHASE [verify : Propagation - add matching PTR record on primary]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server 172.16.1.53
+          zone 1.16.172.in-addr.arpa
+          update add 202.1.16.172.in-addr.arpa. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_prop_ptr_create
+
+    - name: "PHASE [verify : Propagation - poll secondary until dynamic2 appears]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b 172.16.0.53 @172.16.0.53
+          dynamic2.{{ bind9_forward_zone_name }} A +short
+      changed_when: false
+      register: _bind9_verify_prop_poll
+      until: "'172.16.1.202' in _bind9_verify_prop_poll.stdout"
+      retries: 10
+      delay: 1
+
+    # --- Cleanup: remove the dynamic2 test records from the primary ---
+
+    - name: "PHASE [verify : Propagation - delete dynamic2 A record from primary]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server 172.16.1.53
+          zone {{ bind9_forward_zone_name }}
+          update delete dynamic2.{{ bind9_forward_zone_name }}. A
+          send
+          NSUPDATE
+      changed_when: false
+
+    - name: "PHASE [verify : Propagation - delete dynamic2 PTR record from primary]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server 172.16.1.53
+          zone 1.16.172.in-addr.arpa
+          update delete 202.1.16.172.in-addr.arpa. PTR
+          send
+          NSUPDATE
+      changed_when: false
+
+    # --- Refusal checks: direct updates and onward transfers against
+    #     the secondary must be refused (SEC-04, SEC-05). ---
+
+    - name: "PHASE [verify : Secondary - direct signed update must be refused]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server 172.16.0.53
+          zone {{ bind9_forward_zone_name }}
+          update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 10.0.0.1
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_secondary_update_reject
+      failed_when: false
+
+    - name: "PHASE [verify : Assert direct update to secondary was refused]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_verify_secondary_update_reject.rc != 0 or 'REFUSED' in _bind9_verify_secondary_update_reject.stdout or 'NOTAUTH' in _bind9_verify_secondary_update_reject.stdout
+        fail_msg: >-
+          Direct update to secondary was not refused (expected REFUSED or NOTAUTH).
+          rc={{ _bind9_verify_secondary_update_reject.rc }},
+          stdout={{ _bind9_verify_secondary_update_reject.stdout | default('') }},
+          stderr={{ _bind9_verify_secondary_update_reject.stderr | default('') }}
+
+    - name: "PHASE [verify : Secondary - AXFR from non-primary must be refused]"
+      ansible.builtin.command:
+        cmd: "dig @172.16.0.53 {{ bind9_forward_zone_name }} AXFR"
+      changed_when: false
+      register: _bind9_verify_secondary_axfr_reject
+      failed_when: false
+
+    - name: "PHASE [verify : Assert AXFR from secondary was refused]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'REFUSED' in _bind9_verify_secondary_axfr_reject.stdout or _bind9_verify_secondary_axfr_reject.rc != 0"
+        fail_msg: >-
+          AXFR from secondary (non-primary source) was not refused.
+          rc={{ _bind9_verify_secondary_axfr_reject.rc }},
+          stdout={{ _bind9_verify_secondary_axfr_reject.stdout | default('') }}
+
 # --- TSIG key assertion and controller-side artifact export ---
 
 - name: "PHASE [verify : TSIG key assertion and artifact export]"
