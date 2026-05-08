@@ -1,15 +1,72 @@
 // Managed by Ansible, do not edit manually
+{#
+  Zone layout:
+    * Entries in `bind9_zones` with a `view` field render inside that view.
+    * Entries without a `view` field render at global scope (static-stub,
+      forward, hint, and any other non-view-scoped zones).
+  Supported zone `type` values: master, slave, static-stub, forward, hint.
+  Optional zone fields: file, masters, server_addresses, forwarders, forward,
+    allow_transfer, also_notify, dynamic_update_scope.
+  Key constraints (enforced by assert.yml):
+    * dynamic_update_scope is only valid on private-view master zones.
+    * allow-update must never appear; update-policy is the correct directive.
+    * bind9_dynamic_hosts list is exact: dynamic1, dynamic2, dynamic3, dynamic4.
+#}
 
+{% macro render_zone(zone, indent='') -%}
+{{ indent }}zone "{{ zone.name }}" IN {
+{{ indent }}    type {{ zone.type }};
+{% if zone.file is defined %}
+{{ indent }}    file "{{ zone.file }}";
+{% endif %}
+{% if zone.masters is defined %}
+{{ indent }}    masters { {{ zone.masters | join('; ') }}; };
+{% endif %}
+{% if zone.server_addresses is defined %}
+{{ indent }}    server-addresses { {{ zone.server_addresses | join('; ') }}; };
+{% endif %}
+{% if zone.forwarders is defined %}
+{{ indent }}    forwarders { {{ zone.forwarders | join('; ') }}; };
+{% endif %}
+{% if zone.forward is defined %}
+{{ indent }}    forward {{ zone.forward }};
+{% endif %}
+{% if zone.allow_transfer is defined %}
+{{ indent }}    allow-transfer { {{ zone.allow_transfer | join('; ') }}; };
+{% endif %}
+{% if zone.also_notify is defined %}
+{{ indent }}    also-notify { {{ zone.also_notify | join('; ') }}; };
+{% endif %}
+{% if zone.dynamic_update_scope is defined %}
+{% if zone.dynamic_update_scope == 'forward_a_hosts' %}
+{{ indent }}    update-policy {
+{% for _host in bind9_dynamic_hosts %}
+{{ indent }}        grant {{ bind9_tsig_key.name }} name {{ _host }}.{{ zone.name }}. A;
+{% endfor %}
+{{ indent }}    };
+{% elif zone.dynamic_update_scope == 'ptr_zonesub' %}
+{{ indent }}    update-policy {
+{{ indent }}        grant {{ bind9_tsig_key.name }} zonesub PTR;
+{{ indent }}    };
+{% endif %}
+{% endif %}
+{{ indent }}};
+{%- endmacro %}
+{# Global-scope zones: no `view` field. Rendered before views so named sees
+   them outside any view context. #}
+{% for _zone in bind9_zones | rejectattr('view', 'defined') %}
+
+{{ render_zone(_zone) }}
+{% endfor %}
+{# View-scoped zones: grouped under each declared view, ordered by `order`. #}
 {% set _views = bind9_views | sort(attribute='order') %}
 {% for _view in _views %}
+
 view "{{ _view.name }}" {
     match-clients { {{ _view.match_clients | join('; ') }}; };
-{% for _zone in bind9_zones | selectattr('view', 'equalto', _view.name) %}
+{% for _zone in bind9_zones | selectattr('view', 'defined') | selectattr('view', 'equalto', _view.name) %}
 
-    zone "{{ _zone.name }}" {
-        type {{ _zone.type }};
-        file "{{ _zone.file }}";
-    };
+{{ render_zone(_zone, indent='    ') }}
 {% endfor %}
 };
 {% endfor %}
