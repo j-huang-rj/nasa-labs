@@ -143,6 +143,128 @@
         index_var: idx
         label: "{{ item.ip }} → {{ item.fqdn }}"
 
+    # --- Dynamic update verification (signed success path) ---
+
+    - name: "PHASE [verify : Dynamic update - create dynamic1 A record]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server {{ _bind9_private_source }}
+          zone {{ bind9_forward_zone_name }}
+          update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.200
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_dyn_create
+
+    - name: "PHASE [verify : Dynamic update - modify dynamic1 A record]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server {{ _bind9_private_source }}
+          zone {{ bind9_forward_zone_name }}
+          update delete dynamic1.{{ bind9_forward_zone_name }}. A
+          update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.201
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_dyn_modify
+
+    - name: "PHASE [verify : Dynamic update - add PTR record]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server {{ _bind9_private_source }}
+          zone 1.16.172.in-addr.arpa
+          update add 200.1.16.172.in-addr.arpa. 300 PTR dynamic1.{{ bind9_forward_zone_name }}.
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_dyn_ptr_add
+
+    - name: "PHASE [verify : Dynamic update - delete dynamic1 and PTR records]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server {{ _bind9_private_source }}
+          zone {{ bind9_forward_zone_name }}
+          update delete dynamic1.{{ bind9_forward_zone_name }}. A
+          send
+          zone 1.16.172.in-addr.arpa
+          update delete 200.1.16.172.in-addr.arpa. PTR
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_dyn_delete
+
+    # --- Dynamic update rejection checks ---
+
+    - name: "PHASE [verify : Unsigned update must be rejected]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate <<'NSUPDATE'
+          server {{ _bind9_private_source }}
+          zone {{ bind9_forward_zone_name }}
+          update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 10.0.0.1
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_unsigned_reject
+      failed_when: false
+
+    - name: "PHASE [verify : Assert unsigned update was rejected]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_verify_unsigned_reject.rc != 0 or 'REFUSED' in _bind9_verify_unsigned_reject.stdout or 'NOTAUTH' in _bind9_verify_unsigned_reject.stdout
+        fail_msg: >-
+          Unsigned update was not rejected (expected REFUSED or NOTAUTH).
+          rc={{ _bind9_verify_unsigned_reject.rc }},
+          stdout={{ _bind9_verify_unsigned_reject.stdout | default('') }},
+          stderr={{ _bind9_verify_unsigned_reject.stderr | default('') }}
+
+    - name: "PHASE [verify : Out-of-policy signed update (router) must be rejected]"
+      ansible.builtin.command:
+        cmd: >-
+          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+          server {{ _bind9_private_source }}
+          zone {{ bind9_forward_zone_name }}
+          update add router.{{ bind9_forward_zone_name }}. 300 A 10.0.0.99
+          send
+          NSUPDATE
+      changed_when: false
+      register: _bind9_verify_oob_reject
+      failed_when: false
+
+    - name: "PHASE [verify : Assert out-of-policy signed update was rejected]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_verify_oob_reject.rc != 0 or 'REFUSED' in _bind9_verify_oob_reject.stdout or 'NOTAUTH' in _bind9_verify_oob_reject.stdout
+        fail_msg: >-
+          Signed update to router.{{ bind9_forward_zone_name }} was not rejected
+          (expected REFUSED or NOTAUTH).
+          rc={{ _bind9_verify_oob_reject.rc }},
+          stdout={{ _bind9_verify_oob_reject.stdout | default('') }},
+          stderr={{ _bind9_verify_oob_reject.stderr | default('') }}
+
+    - name: "PHASE [verify : AXFR from loopback must be refused]"
+      ansible.builtin.command:
+        cmd: "dig -b 127.0.0.1 @127.0.0.1 {{ bind9_forward_zone_name }} AXFR"
+      changed_when: false
+      register: _bind9_verify_axfr_reject
+      failed_when: false
+
+    - name: "PHASE [verify : Assert AXFR from loopback was refused]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'REFUSED' in _bind9_verify_axfr_reject.stdout or _bind9_verify_axfr_reject.rc != 0"
+        fail_msg: >-
+          AXFR from loopback was not refused (only 172.16.0.53 should be allowed).
+          rc={{ _bind9_verify_axfr_reject.rc }},
+          stdout={{ _bind9_verify_axfr_reject.stdout | default('') }}
+
     # --- Authoritative secondary: zone transfer verification ---
 
 - name: "PHASE [verify : Authoritative secondary verification]"

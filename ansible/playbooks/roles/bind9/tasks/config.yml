@@ -110,7 +110,7 @@
     owner: named
     group: named
     mode: "0640"
-    setype: "named_zone_t"
+    setype: "{{ 'named_cache_t' if (item.dynamic_update_scope is defined) else 'named_zone_t' }}"
   # Only master zones have zone-file content (records + SOA). Slave,
   # static-stub, forward, and hint zones are config-only and don't
   # render a db file.

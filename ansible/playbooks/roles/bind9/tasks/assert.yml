@@ -80,12 +80,61 @@
       ansible.builtin.assert:
         quiet: true
         that:
+          # Only view-scoped zones (those with a `view` field) are checked.
+          # Zones without `view` render at global scope and are intentionally
+          # not bound to any view.
           - >-
-            bind9_zones | default([]) | map(attribute='view') | list
+            bind9_zones | default([]) | selectattr('view', 'defined')
+            | map(attribute='view') | list
             | difference(bind9_views | map(attribute='name') | list)
             | length == 0
         fail_msg: >-
           Every bind9_zones[].view must reference a view name declared in bind9_views.
+
+    - name: "PHASE [assert : Check Every Declared View Has At Least One Zone]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            bind9_views | map(attribute='name') | list
+            | difference(bind9_zones | default([]) | selectattr('view', 'defined')
+              | map(attribute='view') | list)
+            | length == 0
+        fail_msg: >-
+          Every declared view must have at least one zone assigned.
+          Views without zones: {{ bind9_views | map(attribute='name') | list
+            | difference(bind9_zones | default([]) | selectattr('view', 'defined')
+              | map(attribute='view') | list) }}
+
+- name: "PHASE [assert : Validate bind9_dynamic_hosts Is Exact For Authoritative Primary]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_dynamic_hosts is defined
+      - bind9_dynamic_hosts | sort == ['dynamic1', 'dynamic2', 'dynamic3', 'dynamic4']
+    fail_msg: >-
+      bind9_dynamic_hosts must be exactly ['dynamic1', 'dynamic2', 'dynamic3', 'dynamic4'];
+      got {{ bind9_dynamic_hosts | default([]) | sort }}
+
+- name: "PHASE [assert : Block Dynamic Policy On Non-Private Zones]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bind9_zones | default([])
+        | selectattr('dynamic_update_scope', 'defined')
+        | rejectattr('view', 'equalto', 'private')
+        | list | length == 0
+    fail_msg: >-
+      dynamic_update_scope is only allowed on private-view zones;
+      the following non-private zones declare it:
+      {{ bind9_zones | default([])
+        | selectattr('dynamic_update_scope', 'defined')
+        | rejectattr('view', 'equalto', 'private')
+        | map(attribute='name') | list }}
 
 - name: "PHASE [assert : END]"
   become: false
