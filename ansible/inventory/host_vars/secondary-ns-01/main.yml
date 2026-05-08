@@ -79,6 +79,7 @@ bind9_zones:
     type: slave
     masters: ["172.16.1.53"]
     file: "slaves/private/db.{{ bind9_forward_zone_name }}"
+    allow_transfer: []
 
   # --- Public forward zone ---
   - name: "{{ bind9_forward_zone_name }}"
@@ -86,6 +87,7 @@ bind9_zones:
     type: slave
     masters: ["172.16.1.53"]
     file: "slaves/public/db.{{ bind9_forward_zone_name }}"
+    allow_transfer: []
 
   # --- Private reverse zone: 172.16.0/24 ---
   - name: "0.16.172.in-addr.arpa"
@@ -93,6 +95,7 @@ bind9_zones:
     type: slave
     masters: ["172.16.1.53"]
     file: "slaves/private/db.0.16.172.in-addr.arpa"
+    allow_transfer: []
 
   # --- Private reverse zone: 172.16.1/24 ---
   - name: "1.16.172.in-addr.arpa"
@@ -100,6 +103,7 @@ bind9_zones:
     type: slave
     masters: ["172.16.1.53"]
     file: "slaves/private/db.1.16.172.in-addr.arpa"
+    allow_transfer: []
 
   # --- Public RFC 2317 child zone (VPN reverse) ---
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
@@ -107,3 +111,4 @@ bind9_zones:
     type: slave
     masters: ["172.16.1.53"]
     file: "slaves/public/db.{{ bind9_vpn_child_reverse_zone_name }}"
+    allow_transfer: []
