@@ -102,6 +102,19 @@
     mode: "0750"
     setype: "named_cache_t"
 
+- name: "PHASE [config : Create slave per-view subdirectories]"
+  when: bind9_mode == 'authoritative_secondary'
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/slaves/{{ item }}"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_cache_t"
+  loop:
+    - private
+    - public
+
 - name: "PHASE [config : Render zone data files]"
   when: bind9_mode == 'authoritative_primary'
   ansible.builtin.template:
