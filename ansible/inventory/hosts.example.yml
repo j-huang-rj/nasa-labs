@@ -44,3 +44,9 @@ all:
           ansible_port: 22
           ansible_ssh_common_args: >-
             -o ProxyJump=student@127.0.0.1:2787
+
+    dns:
+      hosts:
+        primary-ns-01:
+        secondary-ns-01:
+        dns-01:
