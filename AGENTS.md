@@ -42,12 +42,19 @@ The system is evaluated against these criteria:
 5. Firewall rules for Router are correctly configured.
 6. Firewall rules for Private zone are correctly configured.
 
-## Linting
+## Linting & Syntax Checking
 - Run `ansible-lint` on playbooks and roles to ensure best practices and avoid common issues.
+- Run `ansible-playbook --syntax-check` with the inventory file to avoid false warnings about unresolved host groups:
+  ```
+  ansible-playbook --syntax-check -i ansible/inventory/hosts.yml ansible/playbooks/bootstrap.yml
+  ansible-playbook --syntax-check -i ansible/inventory/hosts.yml ansible/playbooks/dns.yml
+  ansible-playbook --syntax-check -i ansible/inventory/hosts.yml ansible/playbooks/site.yml
+  ```
 
 ## Ansible Architecture & Conventions
-- **Component Roles vs System Roles:** We strictly use Component Roles (`base`, `docker`, `routing`, `network`, `firewall`, `wireguard`). Do NOT create System Roles (like `agent` or `router`). `bootstrap.yml` acts as the Profile Role mapping components to host groups.
-- **Inventory Structure:** Hosts are grouped by network topology: `router`, `dmz`, and `private`. Do NOT use generic groups like `agents`.
+- **Component Roles vs System Roles:** We strictly use Component Roles (`base`, `docker`, `routing`, `network`, `firewall`, `wireguard`, `bind9`). Do NOT create System Roles (like `agent` or `router`).
+- **Playbook Architecture:** `bootstrap.yml` handles infrastructure substrate only (base, firewall, routing, network, wireguard, docker). Service roles (`bind9`, and future mail/ldap) have their own playbooks (`dns.yml`, etc.). `site.yml` is the full converge entry point that imports all playbooks in order.
+- **Inventory Structure:** Hosts are grouped by network topology: `router`, `dmz`, and `internal`. Functional overlay groups (e.g., `dns`) target service-specific playbooks and are NOT generic groups like `agents`. Overlay group hosts inherit connection vars from their topology groups.
 - **Variable Scoping:** Use generic variable names in `host_vars` (e.g., `network_interfaces` instead of `agent_interfaces` or `router_interfaces`) so component roles can be host-agnostic.
 - **Zone Ownership Split:** NetworkManager-managed interfaces must declare their firewalld zones in `network_interfaces[].zone` (manual equivalent: `nmcli connection.zone`). `firewall_bindings[].ifname` is reserved for interfaces outside the NetworkManager lifecycle (currently `wg0`; manual equivalent: permanent `firewall-cmd --zone=<zone> --change-interface=wg0`).
 - **Play Ordering (Router-First):** `bootstrap.yml` completes the router play before starting the `dmz` and `internal` play. Inside the router play, role order is `base -> firewall -> routing -> network -> wireguard`, so firewalld policy, NAT, DNAT, and IP forwarding are prepared before managed interfaces are brought up. The agent play starts only after the router is fully provisioned.
