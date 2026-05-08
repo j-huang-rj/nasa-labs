@@ -325,13 +325,21 @@
     # --- Propagation test: update on primary, poll secondary until
     #     convergence (SEC-03). Capped at 10 seconds via retries/delay. ---
 
+    - name: "PHASE [verify : Propagation - set test address]"
+      ansible.builtin.set_fact:
+        _bind9_prop_test_ip: "172.16.1.202"
+
+    - name: "PHASE [verify : Propagation - compute reverse test address]"
+      ansible.builtin.set_fact:
+        _bind9_prop_test_ip_rev: "{{ _bind9_prop_test_ip.split('.')[3] }}.{{ _bind9_prop_test_ip.split('.')[2] }}.{{ _bind9_prop_test_ip.split('.')[1] }}.{{ _bind9_prop_test_ip.split('.')[0] }}.in-addr.arpa"
+
     - name: "PHASE [verify : Propagation - create dynamic2 A record on primary]"
       ansible.builtin.command:
         cmd: >-
           nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
           server 172.16.1.53
           zone {{ bind9_forward_zone_name }}
-          update add dynamic2.{{ bind9_forward_zone_name }}. 300 A 172.16.1.202
+          update add dynamic2.{{ bind9_forward_zone_name }}. 300 A {{ _bind9_prop_test_ip }}
           send
           NSUPDATE
       changed_when: false
@@ -343,7 +351,7 @@
           nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
-          update add 202.1.16.172.in-addr.arpa. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
+          update add {{ _bind9_prop_test_ip_rev }}. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
           send
           NSUPDATE
       changed_when: false
@@ -356,7 +364,7 @@
           dynamic2.{{ bind9_forward_zone_name }} A +short
       changed_when: false
       register: _bind9_verify_prop_poll
-      until: "'172.16.1.202' in _bind9_verify_prop_poll.stdout"
+      until: "_bind9_prop_test_ip in _bind9_verify_prop_poll.stdout"
       retries: 10
       delay: 1
 
@@ -379,7 +387,7 @@
           nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
-          update delete 202.1.16.172.in-addr.arpa. PTR
+          update delete {{ _bind9_prop_test_ip_rev }}. PTR
           send
           NSUPDATE
       changed_when: false
