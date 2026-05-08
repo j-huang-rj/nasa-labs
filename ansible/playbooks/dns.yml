@@ -1,0 +1,65 @@
+---
+- name: DNS Service Bootstrap
+  hosts: dns
+  gather_facts: true
+  become: true
+  pre_tasks:
+    - name: "PRE [dns : Derive bind9 VPN identity facts]"
+      when:
+        - bind9_enabled | default(false) | bool
+        - bind9_mode | default('') != 'resolver'
+      block:
+        - name: "PRE [dns : Read source host wireguard_address]"
+          ansible.builtin.set_fact:
+            _bind9_source_wg_address: >-
+              {{ hostvars[bind9_identity_source_host].wireguard_address
+                 | default('') }}
+
+        - name: "PRE [dns : Fail if VPN address unavailable for authoritative mode]"
+          ansible.builtin.fail:
+            msg: >-
+              bind9 role requires WireGuard address from '{{ bind9_identity_source_host }}'
+              for authoritative mode, but wireguard_address is not defined.
+              Ensure WireGuard is configured on '{{ bind9_identity_source_host }}' and
+              the host is accessible in the play.
+          when: _bind9_source_wg_address | length == 0
+
+        - name: "PRE [dns : Derive VPN CIDR octets]"
+          ansible.builtin.set_fact:
+            _bind9_wg_octets: "{{ _bind9_source_wg_address.split('/')[0].split('.') }}"
+            _bind9_wg_prefix: "{{ _bind9_source_wg_address.split('/')[1] | default('28') }}"
+
+        - name: "PRE [dns : Compute bind9_vpn_network_base and CIDR]"
+          ansible.builtin.set_fact:
+            bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 }}"
+            bind9_vpn_network_cidr: >-
+              {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (_bind9_wg_octets[3] | int //
+              16) * 16 }}/{{ _bind9_wg_prefix }}
+            bind9_derived_lab_id: >-
+              {{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}
+
+        - name: "PRE [dns : Compute VPN host IPs and DNS identity facts]"
+          ansible.builtin.set_fact:
+            bind9_vpn_router_ip: >-
+              {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base |
+              int) + bind9_vpn_router_offset }}
+            bind9_vpn_client_ip: >-
+              {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base |
+              int) + bind9_vpn_client_offset }}
+            bind9_vpn_ns_ip: >-
+              {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base |
+              int) + bind9_vpn_ns_offset }}
+            bind9_forward_zone_name: "{{ bind9_derived_lab_id }}.nasa"
+            bind9_vpn_parent_reverse_zone_name: "{{ _bind9_wg_octets[2] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[0] }}.in-addr.arpa"
+            bind9_vpn_child_reverse_zone_name: >-
+              {{ bind9_derived_lab_id }}-sub{{ _bind9_wg_prefix }}.{{ _bind9_wg_octets[2] }}.{{ _bind9_wg_octets[1] }}.{{
+              _bind9_wg_octets[0] }}.in-addr.arpa
+            bind9_primary_mname: "private-ns.{{ bind9_derived_lab_id }}.nasa."
+            bind9_soa_serial: >-
+              {{ ansible_facts['date_time'].year
+              }}{{ ansible_facts['date_time'].month
+              }}{{ ansible_facts['date_time'].day
+              }}{{ ansible_facts['date_time'].hour }}
+  roles:
+    - role: bind9
+      when: bind9_enabled
