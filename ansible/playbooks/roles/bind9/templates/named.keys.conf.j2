@@ -1,6 +1,6 @@
 // Managed by Ansible, do not edit manually
-// TSIG key definition for dynamic updates and zone transfers.
+
 key "{{ bind9_tsig_key.name }}" {
-	algorithm {{ bind9_tsig_key.algorithm }};
-	secret "{{ bind9_tsig_key.secret }}";
+        algorithm {{ bind9_tsig_key.algorithm }};
+        secret "{{ bind9_tsig_key.secret }}";
 };

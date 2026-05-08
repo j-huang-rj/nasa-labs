@@ -1,13 +1,21 @@
 ---
+- name: "PHASE [service : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Start and validate bind9 service"
+
 - name: "PHASE [service : Validate named configuration]"
   ansible.builtin.command:
     cmd: named-checkconf {{ bind9_conf_path }}
   changed_when: false
 
 - name: "PHASE [service : Validate zone files]"
+  when: bind9_mode == 'authoritative_primary'
   ansible.builtin.command:
     cmd: named-checkzone {{ item.name }} {{ bind9_zone_dir }}/{{ item.file }}
-  loop: "{{ bind9_zones }}"
+  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.view | default('global') }})"
   changed_when: false
 
 - name: "PHASE [service : Enable and start named service]"
@@ -15,3 +23,8 @@
     name: "{{ bind9_service_name }}"
     enabled: true
     state: started
+
+- name: "PHASE [service : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed service phase"

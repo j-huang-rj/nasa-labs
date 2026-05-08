@@ -1,14 +1,20 @@
+; Managed by Ansible, do not edit manually.
+
 $TTL 86400
-@ IN SOA {{ bind9_primary_mname }} {{ item.soa.admin }} (
-    {{ item.soa.serial }}  ; serial
-    {{ item.soa.refresh }}  ; refresh
-    {{ item.soa.retry }}  ; retry
-    {{ item.soa.expire }}  ; expire
-    {{ item.soa.minimum }}  ; minimum
-)
+$ORIGIN {{ item.name }}.
+
+{{ "%-16s" | format("@") }} IN  {{ "%-6s" | format("SOA") }} {{ bind9_primary_mname }} {{ item.soa.admin }} (
+                                {{ "%-10s" | format(item.soa.serial) }} ; serial
+                                {{ "%-10s" | format(item.soa.refresh) }} ; refresh
+                                {{ "%-10s" | format(item.soa.retry) }} ; retry
+                                {{ "%-10s" | format(item.soa.expire) }} ; expire
+                                {{ "%-10s" | format(item.soa.minimum) }} ; minimum
+                                )
+
 {% for ns in item.ns %}
-@ IN NS {{ ns }}
+{{ "%-16s" | format("") }} IN  {{ "%-6s" | format("NS") }} {{ ns }}
 {% endfor %}
+
 {% for record in item.records %}
-{{ record.name }} IN {{ record.type }} {{ record.value }}
+{{ "%-16s" | format(record.name) }} IN  {{ "%-6s" | format(record.type) }} {{ record.value }}
 {% endfor %}
