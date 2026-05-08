@@ -77,13 +77,13 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Create the shared TSIG contract, rendered key include, and controller-local OJ artifact.
+- [x] 03-01-PLAN.md — Create the shared TSIG contract, rendered key include, and controller-local OJ artifact.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03-02-PLAN.md — Enforce exact primary-side update policy, transfer ACLs, NOTIFY targets, and writable private zone storage.
+- [x] 03-02-PLAN.md — Enforce exact primary-side update policy, transfer ACLs, NOTIFY targets, and writable private zone storage.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-03-PLAN.md — Mirror the live primary zone set onto the secondary and verify read-only propagation within 10 seconds.
+- [x] 03-03-PLAN.md — Mirror the live primary zone set onto the secondary and verify read-only propagation within 10 seconds.
 
 ### Phase 4: Authoritative DNSSEC Trust Chain
 **Goal**: The authoritative tier publishes signed data for the graded public zones and exposes DS material ready for submission.
