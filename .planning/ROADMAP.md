@@ -76,9 +76,14 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Generate and distribute TSIG material for update, transfer, and notify paths and export the OJ-uploadable secret artifact.
-- [ ] 03-02: Configure primary-side dynamic update policy, transfer ACLs, NOTIFY behavior, and writable SELinux-safe zone state.
-- [ ] 03-03: Deploy the secondary with mirrored views and slave zones, then verify propagation timing with `nsupdate` and `dig`.
+**Wave 1**
+- [ ] 03-01-PLAN.md — Create the shared TSIG contract, rendered key include, and controller-local OJ artifact.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-02-PLAN.md — Enforce exact primary-side update policy, transfer ACLs, NOTIFY targets, and writable private zone storage.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-03-PLAN.md — Mirror the live primary zone set onto the secondary and verify read-only propagation within 10 seconds.
 
 ### Phase 4: Authoritative DNSSEC Trust Chain
 **Goal**: The authoritative tier publishes signed data for the graded public zones and exposes DS material ready for submission.
