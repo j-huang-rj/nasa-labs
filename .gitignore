@@ -38,3 +38,10 @@ cloud-init/**/seed.iso
 cloud-init/**/user-data
 cloud-init/**/meta-data
 cloud-init/**/network-config
+
+# Agent artifacts
+.planning/
+graphify-out/
+.graphifyignore
+opencode.json
+AGENTS.md
