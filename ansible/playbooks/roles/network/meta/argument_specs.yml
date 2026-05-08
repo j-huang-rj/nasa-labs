@@ -2,31 +2,43 @@
 argument_specs:
   main:
     short_description: Validate network role variables
+
     options:
       network_interfaces:
         type: list
         elements: dict
         required: true
+        description: NetworkManager connection profiles to configure
         options:
           ifname:
             type: str
             required: true
+            description: Kernel interface name (e.g. eth0, enp0s3)
           conn_name:
             type: str
             required: true
+            description: NetworkManager connection profile name
           default_conn_name:
             type: str
             required: true
+            description: >-
+              Fallback connection name to rename if it exists on first configuration (e.g. "Wired connection 1").
           zone:
             type: str
             required: true
+            description: >-
+              Firewalld zone assigned via NetworkManager connection.zone. Removing this later does not automatically
+              clear an already-written zone assignment.
           ip4:
             type: str
             required: false
+            description: Static IPv4 address with prefix (e.g. 172.16.0.1/24)
           gw4:
             type: str
             required: false
+            description: Default IPv4 gateway
           dns4:
             type: list
             elements: str
             required: false
+            description: DNS resolver addresses for this connection

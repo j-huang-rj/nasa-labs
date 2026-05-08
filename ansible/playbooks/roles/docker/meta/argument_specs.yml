@@ -2,63 +2,83 @@
 argument_specs:
   main:
     short_description: Validate docker role variables
+
     options:
       docker_binfmt_enabled:
         type: bool
         required: false
         default: false
+        description: >-
+          Register QEMU emulators via binfmt for cross-architecture container execution (required when container images
+          target a different CPU architecture than the host).
 
       docker_binfmt_image:
         type: str
         required: false
         default: tonistiigi/binfmt:latest
+        description: Container image that installs binfmt handlers on the host
 
       docker_binfmt_test_image:
         type: str
         required: false
         default: alpine:3.22
+        description: Container image used to verify cross-architecture emulation works
 
       docker_image_archives:
         type: list
         elements: dict
         required: false
         default: []
+        description: Docker images to load from archive tarballs
         options:
           name:
             type: str
             required: true
+            description: Logical name for the image archive entry
           image:
             type: str
             required: true
+            description: Image reference expected after loading; must match a tag already present in the archive (e.g. myapp:latest)
           src:
             type: str
             required: true
+            description: Path to the archive tarball on the Ansible control node
           dest:
             type: str
             required: true
+            description: Path where the archive is stored on the target host
           enabled:
             type: bool
             required: false
             default: true
+            description: Whether to manage this archive entry; false skips copy/load and leaves any existing tarball and loaded
+              image in place
 
       docker_containers:
         type: list
         elements: dict
         required: false
         default: []
+        description: Docker containers to create and manage
         options:
           name:
             type: str
             required: true
+            description: Container name
           image:
             type: str
             required: true
+            description: Explicitly tagged image to run (e.g. myapp:latest)
           platform:
             type: str
             required: false
+            description: >-
+              Target platform for cross-architecture containers (e.g. linux/amd64).
           network_mode:
             type: str
             required: false
+            description: >-
+              Docker network mode (e.g. host, bridge). Overrides docker_container_network_mode for this container.
           restart_policy:
             type: str
             required: false
@@ -67,15 +87,19 @@ argument_specs:
               - always
               - on-failure
               - unless-stopped
+            description: >-
+              Restart behavior when the container exits. Overrides docker_container_restart_policy for this container.
           enabled:
             type: bool
             required: false
             default: true
+            description: Whether this container should exist and be running; false removes it
 
       docker_container_network_mode:
         type: str
         required: false
         default: bridge
+        description: Default network mode for containers not specifying their own
 
       docker_container_restart_policy:
         type: str
@@ -86,3 +110,4 @@ argument_specs:
           - always
           - on-failure
           - unless-stopped
+        description: Default restart policy for containers not specifying their own
