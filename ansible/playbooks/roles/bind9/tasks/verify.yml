@@ -404,7 +404,10 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - _bind9_verify_secondary_update_reject.rc != 0 or 'REFUSED' in _bind9_verify_secondary_update_reject.stdout or 'NOTAUTH' in _bind9_verify_secondary_update_reject.stdout
+          - >-
+            _bind9_verify_secondary_update_reject.rc != 0
+            or 'REFUSED' in _bind9_verify_secondary_update_reject.stdout
+            or 'NOTAUTH' in _bind9_verify_secondary_update_reject.stdout
         fail_msg: >-
           Direct update to secondary was not refused (expected REFUSED or NOTAUTH).
           rc={{ _bind9_verify_secondary_update_reject.rc }},
