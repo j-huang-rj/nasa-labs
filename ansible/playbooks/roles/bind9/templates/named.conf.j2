@@ -2,4 +2,13 @@
 
 include "{{ bind9_conf_dir }}/named.acl.conf";
 include "{{ bind9_conf_dir }}/named.options.conf";
+include "{{ bind9_conf_dir }}/named.keys.conf";
 include "{{ bind9_conf_dir }}/named.zones.conf";
+{% if bind9_mode == 'resolver' %}
+{#
+  Keep loopback and RFC 1912 zones local so they don't hit forwarders or roots.
+  Skipped in authoritative modes since view-based configs require all zones
+  inside a view; mixing top-level zones with views is rejected by named.
+#}
+include "/etc/named.rfc1912.zones";
+{% endif %}

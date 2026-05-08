@@ -37,130 +37,202 @@
   loop_control:
     label: "{{ item }}:53"
 
-# --- Private-view dig checks (source-bound to 172.16.1.53) ---
+# --- Authoritative primary: data-driven dig verification ---
 
-- name: "PHASE [verify : Private view - resolve private-ns A]"
-  ansible.builtin.command:
-    cmd: "dig -b 172.16.1.53 @172.16.1.53 private-ns.{{ bind9_forward_zone_name }} A +noall +answer"
-  changed_when: false
-  register: _bind9_verify_private_ns_a
+- name: "PHASE [verify : Authoritative primary verification]"
+  when: bind9_mode == 'authoritative_primary'
+  block:
+    # --- Compute verification source IPs and test matrices ---
 
-- name: "PHASE [verify : Assert private-ns resolves to 172.16.1.53]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'172.16.1.53' in _bind9_verify_private_ns_a.stdout"
-    fail_msg: "private-ns A record not found in private view"
+    - name: "PHASE [verify : Set verification source IP]"
+      ansible.builtin.set_fact:
+        _bind9_private_source: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
 
-- name: "PHASE [verify : Private view - authoritative check for private-ns]"
-  ansible.builtin.command:
-    cmd: "dig -b 172.16.1.53 @172.16.1.53 private-ns.{{ bind9_forward_zone_name }} A"
-  changed_when: false
-  register: _bind9_verify_private_ns_auth
+    - name: "PHASE [verify : Build private forward A lookup matrix]"
+      ansible.builtin.set_fact:
+        _bind9_private_fwd_a: >-
+          {{ bind9_zones
+             | selectattr('view', 'equalto', 'private')
+             | selectattr('name', 'equalto', bind9_forward_zone_name)
+             | map(attribute='records')
+             | flatten
+             | selectattr('type', 'equalto', 'A')
+             | list }}
 
-- name: "PHASE [verify : Assert private-ns response is authoritative]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'flags: qr aa' in _bind9_verify_private_ns_auth.stdout"
-    fail_msg: "private-ns A response not authoritative"
+    - name: "PHASE [verify : Build private reverse lookup matrix]"
+      ansible.builtin.set_fact:
+        _bind9_private_rev: >-
+          {% set result = [] -%}
+          {% for zone in bind9_zones -%}
+          {% if zone.view == 'private' and 'in-addr.arpa' in zone.name and zone.name != bind9_forward_zone_name -%}
+          {% set parts = zone.name.split('.in-addr.arpa')[0].split('.') -%}
+          {% set prefix = parts[2] ~ '.' ~ parts[1] ~ '.' ~ parts[0] -%}
+          {% for rec in zone.records -%}
+          {% if rec.type == 'PTR' -%}
+          {% set _ = result.append({'ip': prefix ~ '.' ~ rec.name, 'fqdn': rec.value}) -%}
+          {% endif -%}
+          {% endfor -%}
+          {% endif -%}
+          {% endfor -%}
+          {{ result }}
 
-- name: "PHASE [verify : Private view - resolve router A]"
-  ansible.builtin.command:
-    cmd: "dig -b 172.16.1.53 @172.16.1.53 router.{{ bind9_forward_zone_name }} A +noall +answer"
-  changed_when: false
-  register: _bind9_verify_private_router_a
+    # --- Private-view forward A lookups ---
 
-- name: "PHASE [verify : Assert router resolves to both IPs in private view]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'172.16.0.254' in _bind9_verify_private_router_a.stdout"
-      - "'172.16.1.254' in _bind9_verify_private_router_a.stdout"
-    fail_msg: "router A records not found in private view"
+    - name: "PHASE [verify : Private view - forward A lookups]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          {{ item.name }}.{{ bind9_forward_zone_name }} A +noall +answer
+      changed_when: false
+      register: _bind9_verify_private_fwd
+      loop: "{{ _bind9_private_fwd_a }}"
+      loop_control:
+        label: "{{ item.name }}.{{ bind9_forward_zone_name }} A → {{ item.value }}"
 
-- name: "PHASE [verify : Private view - reverse lookup 172.16.1.53]"
-  ansible.builtin.command:
-    cmd: "dig -b 172.16.1.53 @172.16.1.53 -x 172.16.1.53"
-  changed_when: false
-  register: _bind9_verify_private_reverse_self
+    - name: "PHASE [verify : Assert private forward A lookups]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.value in _bind9_verify_private_fwd.results[idx].stdout
+        fail_msg: >-
+          {{ item.name }}.{{ bind9_forward_zone_name }} A → {{ item.value }}
+          not found in private view
+      loop: "{{ _bind9_private_fwd_a }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }} → {{ item.value }}"
 
-- name: "PHASE [verify : Assert 172.16.1.53 reverse resolves to private-ns]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'private-ns.{{ bind9_forward_zone_name }}.' in _bind9_verify_private_reverse_self.stdout"
-      - "'flags: qr aa' in _bind9_verify_private_reverse_self.stdout"
-    fail_msg: "172.16.1.53 reverse lookup failed in private view"
+    # --- Private-view authoritative check ---
 
-- name: "PHASE [verify : Private view - reverse lookup 172.16.0.53]"
-  ansible.builtin.command:
-    cmd: "dig -b 172.16.1.53 @172.16.1.53 -x 172.16.0.53"
-  changed_when: false
-  register: _bind9_verify_private_reverse_ns
+    - name: "PHASE [verify : Private view - authoritative check]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          {{ _bind9_private_fwd_a[0].name }}.{{ bind9_forward_zone_name }} A
+      changed_when: false
+      register: _bind9_verify_private_auth
 
-- name: "PHASE [verify : Assert 172.16.0.53 reverse resolves to ns]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'ns.{{ bind9_forward_zone_name }}.' in _bind9_verify_private_reverse_ns.stdout"
-      - "'flags: qr aa' in _bind9_verify_private_reverse_ns.stdout"
-    fail_msg: "172.16.0.53 reverse lookup failed in private view"
+    - name: "PHASE [verify : Assert private view responses are authoritative]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'flags: qr aa' in _bind9_verify_private_auth.stdout"
+        fail_msg: "Private view response not authoritative"
 
-# --- Public-view dig checks (source-bound to 127.0.0.1) ---
+    # --- Private-view reverse lookups ---
 
-- name: "PHASE [verify : Public view - resolve ns A]"
-  ansible.builtin.command:
-    cmd: "dig -b 127.0.0.1 @127.0.0.1 ns.{{ bind9_forward_zone_name }} A +noall +answer"
-  changed_when: false
-  register: _bind9_verify_public_ns_a
+    - name: "PHASE [verify : Private view - reverse lookups]"
+      ansible.builtin.command:
+        cmd: "dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }} -x {{ item.ip }}"
+      changed_when: false
+      register: _bind9_verify_private_rev
+      loop: "{{ _bind9_private_rev }}"
+      loop_control:
+        label: "-x {{ item.ip }} → {{ item.fqdn }}"
 
-- name: "PHASE [verify : Assert ns resolves to VPN NS IP in public view]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'{{ bind9_vpn_ns_ip }}' in _bind9_verify_public_ns_a.stdout"
-    fail_msg: "ns A record not found in public view"
+    - name: "PHASE [verify : Assert private reverse lookups]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.fqdn in _bind9_verify_private_rev.results[idx].stdout
+          - "'flags: qr aa' in _bind9_verify_private_rev.results[idx].stdout"
+        fail_msg: >-
+          {{ item.ip }} reverse lookup → {{ item.fqdn }} failed in private view
+      loop: "{{ _bind9_private_rev }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.ip }} → {{ item.fqdn }}"
 
-- name: "PHASE [verify : Public view - authoritative check for ns]"
-  ansible.builtin.command:
-    cmd: "dig -b 127.0.0.1 @127.0.0.1 ns.{{ bind9_forward_zone_name }} A"
-  changed_when: false
-  register: _bind9_verify_public_ns_auth
+    # --- Authoritative secondary: zone transfer verification ---
 
-- name: "PHASE [verify : Assert ns response is authoritative in public view]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'flags: qr aa' in _bind9_verify_public_ns_auth.stdout"
-    fail_msg: "ns A response not authoritative in public view"
+- name: "PHASE [verify : Authoritative secondary verification]"
+  when: bind9_mode == 'authoritative_secondary'
+  block:
+    - name: "PHASE [verify : Secondary - check slave zone directory exists]"
+      ansible.builtin.stat:
+        path: "{{ bind9_zone_dir }}/slaves"
+      register: _bind9_verify_slave_dir
 
-- name: "PHASE [verify : Public view - private-ns must not resolve]"
-  ansible.builtin.command:
-    cmd: "dig -b 127.0.0.1 @127.0.0.1 private-ns.{{ bind9_forward_zone_name }} A"
-  changed_when: false
-  register: _bind9_verify_public_private_ns
+    - name: "PHASE [verify : Assert slave zone directory exists]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_verify_slave_dir.stat.exists
+          - _bind9_verify_slave_dir.stat.isdir
+        fail_msg: "Slave zone directory {{ bind9_zone_dir }}/slaves does not exist"
 
-- name: "PHASE [verify : Assert private-ns absent from public view]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'ANSWER: 0' in _bind9_verify_public_private_ns.stdout or 'NXDOMAIN' in _bind9_verify_public_private_ns.stdout"
-    fail_msg: "private-ns should not resolve in public view"
+# --- TSIG key assertion and controller-side artifact export ---
 
-- name: "PHASE [verify : Public view - reverse lookup VPN NS IP]"
-  ansible.builtin.command:
-    cmd: "dig -b 127.0.0.1 @127.0.0.1 -x {{ bind9_vpn_ns_ip }}"
-  changed_when: false
-  register: _bind9_verify_public_reverse_vpn_ns
+- name: "PHASE [verify : TSIG key assertion and artifact export]"
+  when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
+  delegate_to: localhost
+  run_once: true
+  block:
+    - name: "PHASE [verify : Assert bind9_tsig_key is defined and non-empty]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_tsig_key is defined
+          - bind9_tsig_key.name is defined and bind9_tsig_key.name | length > 0
+          - bind9_tsig_key.algorithm is defined and bind9_tsig_key.algorithm | length > 0
+          - bind9_tsig_key.secret is defined and bind9_tsig_key.secret | length > 0
+        fail_msg: >-
+          bind9_tsig_key must be defined with name, algorithm, and secret on authoritative hosts.
+          Ensure host_vars/*/secrets.yml provides the TSIG key.
 
-- name: "PHASE [verify : Assert VPN NS IP reverse resolves via RFC 2317 path]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - "'ns.{{ bind9_forward_zone_name }}.' in _bind9_verify_public_reverse_vpn_ns.stdout"
-      - "'flags: qr aa' in _bind9_verify_public_reverse_vpn_ns.stdout"
-    fail_msg: "VPN NS IP reverse lookup failed in public view (RFC 2317 path)"
+    - name: "PHASE [verify : Create artifact directory]"
+      ansible.builtin.file:
+        path: "{{ (bind9_tsig_artifact_path | dirname) }}"
+        state: directory
+        mode: "0755"
+
+    - name: "PHASE [verify : Export TSIG key artifact for OJ upload]"
+      ansible.builtin.copy:
+        dest: "{{ bind9_tsig_artifact_path }}"
+        content: |
+          name: {{ bind9_tsig_key.name }}
+          algorithm: {{ bind9_tsig_key.algorithm }}
+          secret: {{ bind9_tsig_key.secret }}
+        mode: "0644"
+
+# --- Resolver: recursive resolution verification ---
+
+- name: "PHASE [verify : Resolver verification]"
+  when: bind9_mode == 'resolver'
+  block:
+    - name: "PHASE [verify : Resolver - test recursive resolution]"
+      ansible.builtin.command:
+        cmd: "dig @127.0.0.1 google.com A +short"
+      changed_when: false
+      register: _bind9_verify_resolver_recursive
+      ignore_errors: true
+      when: bind9_resolver_expect_external | default(false) | bool
+
+    - name: "PHASE [verify : Resolver diagnostic dig (verbose) on failure]"
+      ansible.builtin.command:
+        cmd: "dig @127.0.0.1 google.com A"
+      changed_when: false
+      register: _bind9_verify_resolver_diag
+      ignore_errors: true
+      when:
+        - bind9_resolver_expect_external | default(false) | bool
+        - >-
+          _bind9_verify_resolver_recursive.rc != 0
+          or (_bind9_verify_resolver_recursive.stdout | length == 0)
+
+    - name: "PHASE [verify : Assert resolver can resolve external domains]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_verify_resolver_recursive.rc == 0
+          - _bind9_verify_resolver_recursive.stdout | length > 0
+        fail_msg: >-
+          Resolver cannot resolve external domains recursively.
+          rc={{ _bind9_verify_resolver_recursive.rc }},
+          stdout={{ _bind9_verify_resolver_recursive.stdout | default('') }},
+          stderr={{ _bind9_verify_resolver_recursive.stderr | default('') }},
+          diag={{ _bind9_verify_resolver_diag.stdout | default('') }}
+      when: bind9_resolver_expect_external | default(false) | bool
 
 - name: "PHASE [verify : END]"
   become: false

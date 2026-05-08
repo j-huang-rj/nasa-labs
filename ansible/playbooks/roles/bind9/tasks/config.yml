@@ -4,54 +4,6 @@
   ansible.builtin.debug:
     msg: "Generate bind9 configuration"
 
-- name: "PHASE [config : Derive VPN identity from inventory]"
-  when: bind9_mode != 'resolver'
-  block:
-    - name: "PHASE [config : Read source host wireguard_address]"
-      ansible.builtin.set_fact:
-        _bind9_source_wg_address: >-
-          {{ hostvars[bind9_identity_source_host].wireguard_address
-             | default('') }}
-
-    - name: "PHASE [config : Derive VPN CIDR from wireguard_address]"
-      ansible.builtin.set_fact:
-        _bind9_wg_octets: "{{ _bind9_source_wg_address.split('/')[0].split('.') }}"
-        _bind9_wg_prefix: "{{ _bind9_source_wg_address.split('/')[1] | default('28') }}"
-      when: _bind9_source_wg_address | length > 0
-
-    - name: "PHASE [config : Compute bind9_vpn_network_base and CIDR]"
-      ansible.builtin.set_fact:
-        bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 }}"
-        bind9_vpn_network_cidr: >-
-          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (_bind9_wg_octets[3] | int // 16) * 16 }}/{{ _bind9_wg_prefix }}
-        bind9_derived_lab_id: >-
-          {{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}
-      when: _bind9_source_wg_address | length > 0
-
-    - name: "PHASE [config : Compute VPN host IPs and DNS identity facts]"
-      ansible.builtin.set_fact:
-        bind9_vpn_router_ip: >-
-          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base | int) + 1 }}
-        bind9_vpn_client_ip: >-
-          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base | int) + 2 }}
-        bind9_vpn_ns_ip: >-
-          {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base | int) + 3 }}
-        bind9_forward_zone_name: "{{ bind9_derived_lab_id }}.nasa"
-        bind9_vpn_parent_reverse_zone_name: "{{ _bind9_wg_octets[2] }}.168.192.in-addr.arpa"
-        bind9_vpn_child_reverse_zone_name: "{{ bind9_derived_lab_id }}-sub28.{{ _bind9_wg_octets[2] }}.168.192.in-addr.arpa"
-        bind9_primary_mname: "private-ns.{{ bind9_derived_lab_id }}.nasa."
-        bind9_soa_serial: "{{ ansible_date_time.year }}{{ ansible_date_time.month }}{{ ansible_date_time.day }}01"
-      when: _bind9_source_wg_address | length > 0
-
-- name: "PHASE [config : Warn if VPN address unavailable for authoritative mode]"
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: bind9_identity_source_host '{{ bind9_identity_source_host }}'
-      has no wireguard_address; VPN ACL will be omitted
-  when:
-    - bind9_mode != 'resolver'
-    - _bind9_source_wg_address | default('') | length == 0
-
 - name: "PHASE [config : Create bind9 configuration directory]"
   ansible.builtin.file:
     path: "{{ bind9_conf_dir }}"
@@ -100,6 +52,16 @@
     setype: "named_conf_t"
   notify: "PHASE [handler : Restart named]"
 
+- name: "PHASE [config : Render TSIG keys conf]"
+  ansible.builtin.template:
+    src: named.keys.conf.j2
+    dest: "{{ bind9_keys_conf_path }}"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
 - name: "PHASE [config : Render zones conf]"
   ansible.builtin.template:
     src: named.zones.conf.j2
@@ -111,17 +73,29 @@
   notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Create private zone directory]"
+  when: bind9_mode == 'authoritative_primary'
   ansible.builtin.file:
     path: "{{ bind9_zone_dir }}/private"
     state: directory
     owner: named
     group: named
     mode: "0750"
-    setype: "named_cache_t"
+    setype: "named_zone_t"
 
 - name: "PHASE [config : Create public zone directory]"
+  when: bind9_mode == 'authoritative_primary'
   ansible.builtin.file:
     path: "{{ bind9_zone_dir }}/public"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_zone_t"
+
+- name: "PHASE [config : Create slave zone directory]"
+  when: bind9_mode == 'authoritative_secondary'
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/slaves"
     state: directory
     owner: named
     group: named
@@ -129,14 +103,20 @@
     setype: "named_cache_t"
 
 - name: "PHASE [config : Render zone data files]"
+  when: bind9_mode == 'authoritative_primary'
   ansible.builtin.template:
     src: db.zone.j2
     dest: "{{ bind9_zone_dir }}/{{ item.file }}"
     owner: named
     group: named
     mode: "0640"
-    setype: "named_cache_t"
-  loop: "{{ bind9_zones }}"
+    setype: "named_zone_t"
+  # Only master zones have zone-file content (records + SOA). Slave,
+  # static-stub, forward, and hint zones are config-only and don't
+  # render a db file.
+  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
   notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Flush handlers]"
