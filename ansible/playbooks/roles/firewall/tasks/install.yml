@@ -3,6 +3,7 @@
   become: false
   ansible.builtin.debug:
     msg: "Install and start firewall services"
+
 - name: "PHASE [install : Install Firewall Services]"
   ansible.builtin.dnf:
     name:

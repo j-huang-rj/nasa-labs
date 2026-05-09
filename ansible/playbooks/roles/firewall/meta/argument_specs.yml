@@ -24,6 +24,23 @@ argument_specs:
         default: []
         description: Zones where masquerading (SNAT) is enabled
 
+      firewall_masquerade_exempt_destinations:
+        type: list
+        elements: str
+        required: false
+        default: []
+        description: >-
+          Destination CIDRs that must NOT be masqueraded even when egressing a
+          masquerade-enabled zone. When set, the role replaces zone-level
+          masquerade with a rich rule per zone of the form
+          `rule family=ipv4 destination not address=<cidr> masquerade`,
+          preserving source IPs for matching destinations (typical use:
+          inter-LAN traffic so BIND NOTIFY/AXFR and similar IP-based ACLs
+          continue to work) while Internet/VPN egress remains masqueraded.
+          firewalld rich-rule grammar permits only one destination match per
+          rule, so the role supports a single exempt CIDR. Use a supernet
+          covering every LAN you need to exempt rather than listing each.
+
       firewall_bindings:
         type: list
         elements: dict

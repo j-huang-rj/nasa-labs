@@ -3,6 +3,7 @@
   become: false
   ansible.builtin.debug:
     msg: "Set up firewalld configuration workflow"
+
 - name: "PHASE [setup : Install and Start Firewall Services]"
   ansible.builtin.import_tasks: install.yml
 
