@@ -110,6 +110,12 @@ firewall_masquerade_zones:
   - internal
   - vpn
 
+# Preserve source IPs for inter-LAN traffic between the dmz and internal
+# zones so peer-to-peer services see real host IPs rather than the router's
+# egress IP. Internet and VPN egress remain masqueraded as normal.
+firewall_masquerade_exempt_destinations:
+  - 172.16.0.0/16
+
 firewall_forward_ports:
   - zone: vpn
     port: 10001
