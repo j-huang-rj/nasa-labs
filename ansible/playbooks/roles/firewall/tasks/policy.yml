@@ -3,6 +3,7 @@
   become: false
   ansible.builtin.debug:
     msg: "Apply firewalld policies"
+
 - name: "PHASE [policy : Manage Custom Zones]"
   ansible.posix.firewalld:
     zone: "{{ item }}"
@@ -426,15 +427,35 @@
       }}
   notify: "PHASE [handler : Reload firewalld]"
 
-- name: "PHASE [policy : Enable Masquerade For Zones]"
-  ansible.posix.firewalld:
-    zone: "{{ item }}"
-    masquerade: true
-    state: enabled
-    permanent: true
-    immediate: false
-  loop: "{{ firewall_masquerade_zones | default([]) }}"
-  notify: "PHASE [handler : Reload firewalld]"
+- name: "PHASE [policy : Configure Masquerade For Zones]"
+  when: firewall_masquerade_zones | default([]) | length > 0
+  vars:
+    _exempt_cidrs: "{{ firewall_masquerade_exempt_destinations | default([]) }}"
+    _exempt_active: "{{ _exempt_cidrs | length > 0 }}"
+  block:
+    - name: "PHASE [policy : Enable Masquerade For Zones]"
+      ansible.posix.firewalld:
+        zone: "{{ item }}"
+        masquerade: true
+        state: "{{ 'disabled' if _exempt_active else 'enabled' }}"
+        permanent: true
+        immediate: false
+      loop: "{{ firewall_masquerade_zones }}"
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Configure Conditional Masquerade Rich Rules]"
+      ansible.posix.firewalld:
+        zone: "{{ item.0 }}"
+        rich_rule: >-
+          rule family="ipv4" destination not address="{{ item.1 }}" masquerade
+        state: enabled
+        permanent: true
+        immediate: false
+      when: _exempt_active
+      loop: "{{ firewall_masquerade_zones | product(_exempt_cidrs) | list }}"
+      loop_control:
+        label: "{{ item.0 }} (exempt {{ item.1 }})"
+      notify: "PHASE [handler : Reload firewalld]"
 
 - name: "PHASE [policy : Configure Port Forwarding]"
   ansible.posix.firewalld:

@@ -134,6 +134,18 @@
       loop_control:
         label: "{{ item | default('undefined') }}"
 
+    - name: "PHASE [assert : Check Masquerade Exemption Destinations]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - firewall_masquerade_exempt_destinations | default([]) | length <= 1
+        fail_msg: >-
+          firewall_masquerade_exempt_destinations supports at most one CIDR
+          (firewalld rich-rule grammar permits a single destination match
+          per rule). Use a supernet covering all LAN ranges instead of
+          multiple entries.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:
