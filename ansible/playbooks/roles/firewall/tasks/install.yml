@@ -11,7 +11,7 @@
       - python3-firewall
     state: present
 
-- name: "PHASE [install : Enable and Start Firewall Services]"
+- name: "PHASE [install : Enable And Start Firewall Services]"
   ansible.builtin.systemd:
     name: firewalld
     enabled: true

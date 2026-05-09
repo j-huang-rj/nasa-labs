@@ -9,7 +9,7 @@
     name: epel-release
     state: present
 
-- name: "PHASE [install : Install General Tools and Network Utilities]"
+- name: "PHASE [install : Install General Tools And Network Utilities]"
   ansible.builtin.dnf:
     name:
       # DNF Repo Management
@@ -45,7 +45,7 @@
     state: present
   register: base_kernel_modules_extra_result
 
-- name: "PHASE [install : Enable and Start Required Services]"
+- name: "PHASE [install : Enable And Start Required Services]"
   ansible.builtin.systemd:
     name: "{{ item }}"
     enabled: true

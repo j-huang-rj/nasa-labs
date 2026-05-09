@@ -4,16 +4,16 @@
   ansible.builtin.debug:
     msg: "Set up bind9 configuration workflow"
 
-- name: "PHASE [setup : Install bind9 packages]"
+- name: "PHASE [setup : Install bind9 Packages]"
   ansible.builtin.import_tasks: install.yml
 
-- name: "PHASE [setup : Generate bind9 configuration]"
+- name: "PHASE [setup : Generate bind9 Configuration]"
   ansible.builtin.import_tasks: config.yml
 
-- name: "PHASE [setup : Start and enable bind9 service]"
+- name: "PHASE [setup : Start And Enable bind9 Service]"
   ansible.builtin.import_tasks: service.yml
 
-- name: "PHASE [setup : Verify bind9 configuration and service]"
+- name: "PHASE [setup : Verify bind9 Configuration And Service]"
   ansible.builtin.import_tasks: verify.yml
 
 - name: "PHASE [setup : END]"
