@@ -80,9 +80,6 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          # Only view-scoped zones (those with a `view` field) are checked.
-          # Zones without `view` render at global scope and are intentionally
-          # not bound to any view.
           - >-
             bind9_zones | default([]) | selectattr('view', 'defined')
             | map(attribute='view') | list
