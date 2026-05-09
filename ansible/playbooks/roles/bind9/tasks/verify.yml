@@ -38,12 +38,10 @@
     label: "{{ item }}:53"
 
 # --- Authoritative primary: data-driven dig verification ---
-
 - name: "PHASE [verify : Authoritative primary verification]"
   when: bind9_mode == 'authoritative_primary'
   block:
     # --- Compute verification source IPs and test matrices ---
-
     - name: "PHASE [verify : Set verification source IP]"
       ansible.builtin.set_fact:
         _bind9_private_source: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
@@ -77,7 +75,6 @@
           {{ result }}
 
     # --- Private-view forward A lookups ---
-
     - name: "PHASE [verify : Private view - forward A lookups]"
       ansible.builtin.command:
         cmd: >-
@@ -103,7 +100,6 @@
         label: "{{ item.name }} → {{ item.value }}"
 
     # --- Private-view authoritative check ---
-
     - name: "PHASE [verify : Private view - authoritative check]"
       ansible.builtin.command:
         cmd: >-
@@ -120,7 +116,6 @@
         fail_msg: "Private view response not authoritative"
 
     # --- Private-view reverse lookups ---
-
     - name: "PHASE [verify : Private view - reverse lookups]"
       ansible.builtin.command:
         cmd: "dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }} -x {{ item.ip }}"
@@ -143,49 +138,45 @@
         index_var: idx
         label: "{{ item.ip }} → {{ item.fqdn }}"
 
-    # --- Dynamic update verification (signed success path) ---
-
+    # --- Dynamic update success checks ---
     - name: "PHASE [verify : Dynamic update - create dynamic1 A record]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
           update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.200
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_dyn_create
 
     - name: "PHASE [verify : Dynamic update - modify dynamic1 A record]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
           update delete dynamic1.{{ bind9_forward_zone_name }}. A
           update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.201
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_dyn_modify
 
     - name: "PHASE [verify : Dynamic update - add PTR record]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server {{ _bind9_private_source }}
           zone 1.16.172.in-addr.arpa
           update add 200.1.16.172.in-addr.arpa. 300 PTR dynamic1.{{ bind9_forward_zone_name }}.
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_dyn_ptr_add
 
     - name: "PHASE [verify : Dynamic update - delete dynamic1 and PTR records]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
           update delete dynamic1.{{ bind9_forward_zone_name }}. A
@@ -193,21 +184,18 @@
           zone 1.16.172.in-addr.arpa
           update delete 200.1.16.172.in-addr.arpa. PTR
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_dyn_delete
 
     # --- Dynamic update rejection checks ---
-
     - name: "PHASE [verify : Unsigned update must be rejected]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate <<'NSUPDATE'
+        cmd: nsupdate
+        stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
           update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 10.0.0.1
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_unsigned_reject
       failed_when: false
@@ -223,15 +211,14 @@
           stdout={{ _bind9_verify_unsigned_reject.stdout | default('') }},
           stderr={{ _bind9_verify_unsigned_reject.stderr | default('') }}
 
-    - name: "PHASE [verify : Out-of-policy signed update (router) must be rejected]"
+    - name: "PHASE [verify : Out-of-policy signed update must be rejected]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
           update add router.{{ bind9_forward_zone_name }}. 300 A 10.0.0.99
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_oob_reject
       failed_when: false
@@ -259,14 +246,16 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'REFUSED' in _bind9_verify_axfr_reject.stdout or _bind9_verify_axfr_reject.rc != 0"
+          - >-
+            'REFUSED' in _bind9_verify_axfr_reject.stdout
+            or 'Transfer failed' in _bind9_verify_axfr_reject.stdout
+            or _bind9_verify_axfr_reject.rc != 0
         fail_msg: >-
           AXFR from loopback was not refused (only 172.16.0.53 should be allowed).
           rc={{ _bind9_verify_axfr_reject.rc }},
           stdout={{ _bind9_verify_axfr_reject.stdout | default('') }}
 
-    # --- Authoritative secondary: zone transfer verification ---
-
+  # --- Authoritative secondary: zone transfer verification ---
 - name: "PHASE [verify : Authoritative secondary verification]"
   when: bind9_mode == 'authoritative_secondary'
   block:
@@ -284,8 +273,8 @@
         fail_msg: "Slave zone directory {{ bind9_zone_dir }}/slaves does not exist"
 
     # --- Secondary answer checks: verify the secondary serves the same
-    #     answers the primary would, for both private and public views. ---
-
+    #     answers the primary would, for both private and public views.
+    #     Retry to allow zone transfer convergence after primary provisioning. ---
     - name: "PHASE [verify : Secondary - private view forward A lookup]"
       ansible.builtin.command:
         cmd: >-
@@ -293,6 +282,9 @@
           ns.{{ bind9_forward_zone_name }} A +noall +answer
       changed_when: false
       register: _bind9_verify_secondary_private_fwd
+      until: "'172.16.0.53' in _bind9_verify_secondary_private_fwd.stdout"
+      retries: 10
+      delay: 1
 
     - name: "PHASE [verify : Assert secondary private forward A lookup]"
       ansible.builtin.assert:
@@ -311,6 +303,9 @@
           ns.{{ bind9_forward_zone_name }} A +noall +answer
       changed_when: false
       register: _bind9_verify_secondary_public_fwd
+      until: "'172.16' in _bind9_verify_secondary_public_fwd.stdout"
+      retries: 10
+      delay: 1
 
     - name: "PHASE [verify : Assert secondary public forward A lookup]"
       ansible.builtin.assert:
@@ -323,37 +318,37 @@
           stdout={{ _bind9_verify_secondary_public_fwd.stdout | default('') }}
 
     # --- Propagation test: update on primary, poll secondary until
-    #     convergence (SEC-03). Capped at 10 seconds via retries/delay. ---
-
+    #     convergence. Capped at 10 seconds via retries/delay. ---
     - name: "PHASE [verify : Propagation - set test address]"
       ansible.builtin.set_fact:
         _bind9_prop_test_ip: "172.16.1.202"
 
     - name: "PHASE [verify : Propagation - compute reverse test address]"
+      vars:
+        _octets: "{{ _bind9_prop_test_ip.split('.') }}"
       ansible.builtin.set_fact:
-        _bind9_prop_test_ip_rev: "{{ _bind9_prop_test_ip.split('.')[3] }}.{{ _bind9_prop_test_ip.split('.')[2] }}.{{ _bind9_prop_test_ip.split('.')[1] }}.{{ _bind9_prop_test_ip.split('.')[0] }}.in-addr.arpa"
+        _bind9_prop_test_ip_rev: >-
+          {{ _octets[3] }}.{{ _octets[2] }}.{{ _octets[1] }}.{{ _octets[0] }}.in-addr.arpa
 
     - name: "PHASE [verify : Propagation - create dynamic2 A record on primary]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server 172.16.1.53
           zone {{ bind9_forward_zone_name }}
           update add dynamic2.{{ bind9_forward_zone_name }}. 300 A {{ _bind9_prop_test_ip }}
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_prop_create
 
     - name: "PHASE [verify : Propagation - add matching PTR record on primary]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
           update add {{ _bind9_prop_test_ip_rev }}. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_prop_ptr_create
 
@@ -369,41 +364,36 @@
       delay: 1
 
     # --- Cleanup: remove the dynamic2 test records from the primary ---
-
     - name: "PHASE [verify : Propagation - delete dynamic2 A record from primary]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server 172.16.1.53
           zone {{ bind9_forward_zone_name }}
           update delete dynamic2.{{ bind9_forward_zone_name }}. A
           send
-          NSUPDATE
       changed_when: false
 
     - name: "PHASE [verify : Propagation - delete dynamic2 PTR record from primary]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
           update delete {{ _bind9_prop_test_ip_rev }}. PTR
           send
-          NSUPDATE
       changed_when: false
 
-    # --- Refusal checks: direct updates and onward transfers against
-    #     the secondary must be refused (SEC-04, SEC-05). ---
-
+    # --- Refusal checks: direct updates and onward transfers
+    #     against the secondary must be refused. ---
     - name: "PHASE [verify : Secondary - direct signed update must be refused]"
       ansible.builtin.command:
-        cmd: >-
-          nsupdate -k /etc/named/named.keys.conf <<'NSUPDATE'
+        cmd: nsupdate -k /etc/named/named.keys.conf
+        stdin: |
           server 172.16.0.53
           zone {{ bind9_forward_zone_name }}
           update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 10.0.0.1
           send
-          NSUPDATE
       changed_when: false
       register: _bind9_verify_secondary_update_reject
       failed_when: false
@@ -433,14 +423,16 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'REFUSED' in _bind9_verify_secondary_axfr_reject.stdout or _bind9_verify_secondary_axfr_reject.rc != 0"
+          - >-
+            'REFUSED' in _bind9_verify_secondary_axfr_reject.stdout
+            or 'Transfer failed' in _bind9_verify_secondary_axfr_reject.stdout
+            or _bind9_verify_secondary_axfr_reject.rc != 0
         fail_msg: >-
           AXFR from secondary (non-primary source) was not refused.
           rc={{ _bind9_verify_secondary_axfr_reject.rc }},
           stdout={{ _bind9_verify_secondary_axfr_reject.stdout | default('') }}
 
 # --- TSIG key assertion ---
-
 - name: "PHASE [verify : TSIG key assertion]"
   when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
   delegate_to: localhost
@@ -459,7 +451,6 @@
           Ensure host_vars/*/secrets.yml provides the TSIG key.
 
 # --- Resolver: recursive resolution verification ---
-
 - name: "PHASE [verify : Resolver verification]"
   when: bind9_mode == 'resolver'
   block:
@@ -468,17 +459,17 @@
         cmd: "dig @127.0.0.1 google.com A +short"
       changed_when: false
       register: _bind9_verify_resolver_recursive
-      ignore_errors: true
-      when: bind9_resolver_expect_external | default(false) | bool
+      until: "_bind9_verify_resolver_recursive.rc == 0 and _bind9_verify_resolver_recursive.stdout | length > 0"
+      retries: 5
+      delay: 2
 
-    - name: "PHASE [verify : Resolver diagnostic dig (verbose) on failure]"
+    - name: "PHASE [verify : Resolver diagnostic dig on failure]"
       ansible.builtin.command:
         cmd: "dig @127.0.0.1 google.com A"
       changed_when: false
       register: _bind9_verify_resolver_diag
       ignore_errors: true
       when:
-        - bind9_resolver_expect_external | default(false) | bool
         - >-
           _bind9_verify_resolver_recursive.rc != 0
           or (_bind9_verify_resolver_recursive.stdout | length == 0)
@@ -495,7 +486,6 @@
           stdout={{ _bind9_verify_resolver_recursive.stdout | default('') }},
           stderr={{ _bind9_verify_resolver_recursive.stderr | default('') }},
           diag={{ _bind9_verify_resolver_diag.stdout | default('') }}
-      when: bind9_resolver_expect_external | default(false) | bool
 
 - name: "PHASE [verify : END]"
   become: false
