@@ -50,11 +50,7 @@ bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.0.53
 
-# View policy: mirror the primary's split-view structure (D-13, D-15)
-# Same names, same order — private view first, public view second.
-# The secondary uses the same ACL names (dmz_clients, internal_clients,
-# vpn_clients) which are rendered by named.acl.conf.j2 for all
-# authoritative modes.
+# View policy: mirror the primary's split-view structure
 bind9_views:
   - name: private
     order: 10
@@ -68,10 +64,7 @@ bind9_views:
     match_clients:
       - "any"
 
-# Zone data: mirror every zone the primary currently serves, but as
-# type: slave with masters: [172.16.1.53].  No records, SOA, NS,
-# allow-transfer, allow-update, or dynamic_update_scope — the secondary
-# is read-only.
+# Read-only zone data: mirror every zone the primary serves
 bind9_zones:
   # --- Private forward zone ---
   - name: "{{ bind9_forward_zone_name }}"
@@ -79,8 +72,9 @@ bind9_zones:
     type: slave
     masters:
       - "172.16.1.53"
+    allow_transfer:
+      - "none"
     file: "slaves/private/db.{{ bind9_forward_zone_name }}"
-    allow_transfer: []
 
   # --- Public forward zone ---
   - name: "{{ bind9_forward_zone_name }}"
@@ -88,8 +82,9 @@ bind9_zones:
     type: slave
     masters:
       - "172.16.1.53"
+    allow_transfer:
+      - "none"
     file: "slaves/public/db.{{ bind9_forward_zone_name }}"
-    allow_transfer: []
 
   # --- Private reverse zone: 172.16.0/24 ---
   - name: "0.16.172.in-addr.arpa"
@@ -97,8 +92,9 @@ bind9_zones:
     type: slave
     masters:
       - "172.16.1.53"
+    allow_transfer:
+      - "none"
     file: "slaves/private/db.0.16.172.in-addr.arpa"
-    allow_transfer: []
 
   # --- Private reverse zone: 172.16.1/24 ---
   - name: "1.16.172.in-addr.arpa"
@@ -106,14 +102,16 @@ bind9_zones:
     type: slave
     masters:
       - "172.16.1.53"
+    allow_transfer:
+      - "none"
     file: "slaves/private/db.1.16.172.in-addr.arpa"
-    allow_transfer: []
 
-  # --- Public RFC 2317 child zone (VPN reverse) ---
+  # --- Public RFC 2317 child zone (delegated /28 reverse) ---
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     view: public
     type: slave
     masters:
       - "172.16.1.53"
+    allow_transfer:
+      - "none"
     file: "slaves/public/db.{{ bind9_vpn_child_reverse_zone_name }}"
-    allow_transfer: []
