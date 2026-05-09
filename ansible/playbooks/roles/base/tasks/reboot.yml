@@ -4,20 +4,20 @@
   ansible.builtin.debug:
     msg: "Evaluate reboot checkpoint after base upgrade/install"
 
-- name: "PHASE [reboot : Query latest installed kernel package]" # noqa: command-instead-of-module
+- name: "PHASE [reboot : Query Latest Installed Kernel Package]" # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: rpm -q --last kernel-core
   register: base_reboot_kernel_query
   changed_when: false
 
-- name: "PHASE [reboot : Assert latest installed kernel package query returned data]"
+- name: "PHASE [reboot : Assert Latest Installed Kernel Package Query Returned Data]"
   ansible.builtin.assert:
     quiet: true
     that:
       - (base_reboot_kernel_query.stdout_lines | default([]) | length) > 0
     fail_msg: "Unable to determine the latest installed kernel-core package for reboot checkpoint"
 
-- name: "PHASE [reboot : Derive reboot checkpoint facts]"
+- name: "PHASE [reboot : Derive Reboot Checkpoint Facts]"
   ansible.builtin.set_fact:
     base_reboot_latest_kernel: >-
       {{
@@ -36,7 +36,7 @@
         (base_kernel_modules_extra_result is defined and (base_kernel_modules_extra_result.changed | default(false)))
       }}
 
-- name: "PHASE [reboot : Determine reboot requirement]"
+- name: "PHASE [reboot : Determine Reboot Requirement]"
   ansible.builtin.set_fact:
     base_reboot_required: >-
       {{
@@ -47,7 +47,7 @@
         (ansible_facts['kernel'] != base_reboot_latest_kernel)
       }}
 
-- name: "PHASE [reboot : Report reboot checkpoint state]"
+- name: "PHASE [reboot : Report Reboot Checkpoint State]"
   become: false
   ansible.builtin.debug:
     msg:
@@ -57,17 +57,17 @@
       - "kernel_mismatch={{ ansible_facts['kernel'] != base_reboot_latest_kernel }}"
       - "reboot_required={{ base_reboot_required }}"
 
-- name: "PHASE [reboot : Reboot host when required]"
+- name: "PHASE [reboot : Reboot Host When Required]"
   ansible.builtin.reboot:
     msg: "Reboot initiated by base role to boot into latest installed kernel"
     reboot_timeout: 900
   when: base_reboot_required
 
-- name: "PHASE [reboot : Refresh host facts after reboot]"
+- name: "PHASE [reboot : Refresh Host Facts After Reboot]"
   ansible.builtin.setup:
   when: base_reboot_required
 
-- name: "PHASE [reboot : No reboot required]"
+- name: "PHASE [reboot : No Reboot Required]"
   become: false
   ansible.builtin.debug:
     msg: "Skipping reboot checkpoint because conditions were not met"

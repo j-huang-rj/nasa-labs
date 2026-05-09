@@ -7,18 +7,18 @@
   gather_facts: true
   become: true
   pre_tasks:
-    - name: "PRE [dns : Derive bind9 VPN identity facts]"
+    - name: "PRE [dns : Derive bind9 VPN Identity Facts]"
       when:
         - bind9_enabled | default(false) | bool
         - bind9_mode | default('') != 'resolver'
       block:
-        - name: "PRE [dns : Read source host wireguard_address]"
+        - name: "PRE [dns : Read Source Host wireguard_address]"
           ansible.builtin.set_fact:
             _bind9_source_wg_address: >-
               {{ hostvars[bind9_identity_source_host].wireguard_address
                  | default('') }}
 
-        - name: "PRE [dns : Fail if VPN address unavailable for authoritative mode]"
+        - name: "PRE [dns : Fail If VPN Address Unavailable For Authoritative Mode]"
           ansible.builtin.fail:
             msg: >-
               bind9 role requires WireGuard address from '{{ bind9_identity_source_host }}'
@@ -27,12 +27,12 @@
               the host is accessible in the play.
           when: _bind9_source_wg_address | length == 0
 
-        - name: "PRE [dns : Derive VPN CIDR octets]"
+        - name: "PRE [dns : Derive VPN CIDR Octets]"
           ansible.builtin.set_fact:
             _bind9_wg_octets: "{{ _bind9_source_wg_address.split('/')[0].split('.') }}"
             _bind9_wg_prefix: "{{ _bind9_source_wg_address.split('/')[1] | default('28') }}"
 
-        - name: "PRE [dns : Compute bind9_vpn_network_base and CIDR]"
+        - name: "PRE [dns : Compute bind9_vpn_network_base And CIDR]"
           ansible.builtin.set_fact:
             bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 }}"
             bind9_vpn_network_cidr: >-
@@ -41,7 +41,7 @@
             bind9_derived_lab_id: >-
               {{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}
 
-        - name: "PRE [dns : Compute VPN host IPs and DNS identity facts]"
+        - name: "PRE [dns : Compute VPN Host IPs And DNS Identity Facts]"
           ansible.builtin.set_fact:
             bind9_vpn_router_ip: >-
               {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base |

@@ -4,7 +4,7 @@
   ansible.builtin.debug:
     msg: "Upgrade all system packages to current versions"
 
-- name: "PHASE [upgrade : Upgrade all system packages]"
+- name: "PHASE [upgrade : Upgrade All System Packages]"
   ansible.builtin.dnf:
     name: "*"
     state: latest # noqa: package-latest

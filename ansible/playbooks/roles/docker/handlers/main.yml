@@ -1,5 +1,5 @@
 ---
-- name: "HANDLER [docker : Restart docker-binfmt-register service]"
+- name: "HANDLER [docker : Restart docker-binfmt-register Service]"
   ansible.builtin.systemd:
     daemon_reload: true
     name: docker-binfmt-register.service

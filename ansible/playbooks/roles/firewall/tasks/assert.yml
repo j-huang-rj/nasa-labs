@@ -65,7 +65,7 @@
       loop_control:
         label: "{{ item.name | default('undefined') }}"
 
-    - name: "PHASE [assert : Check Firewall Policy Names Do Not Collide with Zones]"
+    - name: "PHASE [assert : Check Firewall Policy Names Do Not Collide With Zones]"
       become: false
       ansible.builtin.assert:
         quiet: true
@@ -102,7 +102,7 @@
   vars:
     firewall_known_zones: "{{ firewall_builtin_zones + (firewall_custom_zones | default([])) }}"
   block:
-    - name: "PHASE [assert : Check Referenced Zones Exist for Interfaces, Forward Ports, and Rich Rules]"
+    - name: "PHASE [assert : Check Referenced Zones Exist For Interfaces, Forward Ports, And Rich Rules]"
       become: false
       ansible.builtin.assert:
         quiet: true

@@ -14,7 +14,7 @@
     group: root
     mode: "0600"
 
-- name: "PHASE [setup : Enable and Start WireGuard Tunnels]"
+- name: "PHASE [setup : Enable And Start WireGuard Tunnels]"
   ansible.builtin.systemd:
     name: wg-quick@wg0
     enabled: true
