@@ -69,8 +69,7 @@ argument_specs:
         type: str
         required: false
         description: >-
-          Local part of the SOA RNAME; composed with the zone name at render time (e.g. "admin" becomes
-          admin.42.nasa.).
+          Local part of the SOA RNAME; composed with the zone name at render time.
 
       bind9_vpn_router_offset:
         type: int
@@ -127,8 +126,8 @@ argument_specs:
         required: false
         description: >-
           Absolute path where the rendered named.keys.conf file is placed on the target host.
-          Included from named.conf before the zones stanza so key definitions are available to
-          update-policy and allow-transfer directives.
+          Included from named.conf before the zone definitions section so key definitions are
+          available to update-policy and allow-transfer directives.
 
       bind9_forwarders:
         type: list
@@ -137,4 +136,3 @@ argument_specs:
         description: >-
           Upstream IPv4 addresses used as forwarders in resolver mode. When non-empty, the resolver emits a
           forwarders clause with forward only and does not attempt root-based recursion.
-          

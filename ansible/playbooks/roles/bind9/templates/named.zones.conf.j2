@@ -1,20 +1,22 @@
-// Managed by Ansible, do not edit manually
+// Managed by Ansible -- do not edit manually.
 {#
   Zone layout:
     * Entries in `bind9_zones` with a `view` field render inside that view.
     * Entries without a `view` field render at global scope (static-stub,
       forward, hint, and any other non-view-scoped zones).
+
   Supported zone `type` values: master, slave, static-stub, forward, hint.
+
   Optional zone fields: file, masters, server_addresses, forwarders, forward,
-    allow_transfer, also_notify, dynamic_update_scope.
-  Key constraints (enforced by assert.yml):
+  allow_transfer, also_notify, dynamic_update_scope.
+
+  Key constraints:
     * dynamic_update_scope is only valid on private-view master zones.
     * allow-update must never appear; update-policy is the correct directive.
     * bind9_dynamic_hosts list is exact: dynamic1, dynamic2, dynamic3, dynamic4.
 #}
-
 {% macro render_zone(zone, indent='') -%}
-{{ indent }}zone "{{ zone.name }}" IN {
+{{ indent }}zone "{{ zone.name }}" {
 {{ indent }}    type {{ zone.type }};
 {% if zone.file is defined %}
 {{ indent }}    file "{{ zone.file }}";
@@ -52,14 +54,19 @@
 {% endif %}
 {{ indent }}};
 {%- endmacro %}
-{# Global-scope zones: no `view` field. Rendered before views so named sees
-   them outside any view context. #}
-{% for _zone in bind9_zones | rejectattr('view', 'defined') %}
+{% set _global_zones = bind9_zones | rejectattr('view', 'defined') | list %}
+{% if _global_zones | length > 0 %}
+
+// Global-scope zones
+{% for _zone in _global_zones %}
 
 {{ render_zone(_zone) }}
 {% endfor %}
-{# View-scoped zones: grouped under each declared view, ordered by `order`. #}
+{% endif %}
 {% set _views = bind9_views | sort(attribute='order') %}
+{% if _views | length > 0 %}
+
+// View-scoped zones, ordered by `order`
 {% for _view in _views %}
 
 view "{{ _view.name }}" {
@@ -70,3 +77,4 @@ view "{{ _view.name }}" {
 {% endfor %}
 };
 {% endfor %}
+{% endif %}
