@@ -115,8 +115,64 @@
     - private
     - public
 
-- name: "PHASE [config : Render zone data files]"
+- name: "PHASE [config : Read current zone state]"
   when: bind9_mode == 'authoritative_primary'
+  bind9_zone_state:
+    zone_dir: "{{ bind9_zone_dir }}"
+    zone_files: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | map(attribute='file') | list }}"
+  register: bind9_zone_state_raw
+
+- name: "PHASE [config : Set zone current state fact]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.set_fact:
+    bind9_zone_current_state: "{{ bind9_zone_state_raw.zone_state }}"
+
+# Compute the desired serial + hash for every primary zone once.
+# Pre-computing means the template render and the sidecar write share a
+# single source of truth, and downstream tasks can gate on a stable
+# hash-equality check (`render_state.hash != current_state.hash`) instead
+# of relying on file-content diffing — which is unreliable for DDNS zones
+# because BIND rewrites those files in canonical format.
+- name: "PHASE [config : Compute zone render state]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.set_fact:
+    bind9_zone_render_state: >-
+      {{ bind9_zone_render_state | default({}) | combine({
+        item.file: item | bind9_zone_serial(
+          primary_mname=bind9_primary_mname,
+          date_prefix=bind9_soa_serial_date,
+          current_serial=bind9_zone_current_state[item.file].serial,
+          current_hash=bind9_zone_current_state[item.file].hash
+        )
+      }) }}
+  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# DDNS journals are only stale relative to the static template if we are
+# actually about to re-render the zone. Gate on hash-equality so an
+# idempotent run leaves both the static file and the live journal alone.
+- name: "PHASE [config : Remove stale DDNS journal files before re-render]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - item.dynamic_update_scope is defined
+    - bind9_zone_render_state[item.file].hash != bind9_zone_current_state[item.file].hash
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/{{ item.file }}.jnl"
+    state: absent
+  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.view }})"
+  notify: "PHASE [handler : Restart named]"
+
+# Skip the render entirely when the inventory hash already matches the
+# on-disk hash. This keeps DDNS zones idempotent: BIND is free to rewrite
+# the file in canonical format and merge journal entries, but as long as
+# the static inventory model hasn't changed, we leave the file alone.
+- name: "PHASE [config : Render zone data files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_zone_render_state[item.file].hash != bind9_zone_current_state[item.file].hash
   ansible.builtin.template:
     src: db.zone.j2
     dest: "{{ bind9_zone_dir }}/{{ item.file }}"
@@ -124,13 +180,29 @@
     group: named
     mode: "0640"
     setype: "{{ 'named_cache_t' if (item.dynamic_update_scope is defined) else 'named_zone_t' }}"
-  # Only master zones have zone-file content (records + SOA). Slave,
-  # static-stub, forward, and hint zones are config-only and don't
-  # render a db file.
   loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
   loop_control:
     label: "{{ item.name }}"
   notify: "PHASE [handler : Restart named]"
+
+# Persist the content hash in a sidecar file alongside each zone. BIND
+# never touches `<zone_file>.hash`, so it survives the canonical rewrite
+# that would otherwise strip an in-zone `; zone-hash:` comment. This is
+# the durable change-detection marker that the next run reads back via
+# the bind9_zone_state module.
+- name: "PHASE [config : Write zone hash sidecar files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_zone_render_state[item.file].hash != bind9_zone_current_state[item.file].hash
+  ansible.builtin.copy:
+    content: "{{ bind9_zone_render_state[item.file].hash }}\n"
+    dest: "{{ bind9_zone_dir }}/{{ item.file }}.hash"
+    owner: root
+    group: named
+    mode: "0640"
+  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: "PHASE [config : Flush handlers]"
   ansible.builtin.meta: flush_handlers

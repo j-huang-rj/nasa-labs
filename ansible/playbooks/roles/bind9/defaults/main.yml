@@ -26,12 +26,6 @@ bind9_vpn_router_offset: 1
 bind9_vpn_client_offset: 2
 bind9_vpn_ns_offset: 3
 
-# SOA serial format: YYYYMMDDHH (10 digits, fits uint32).
-# Idempotent within an hour; auto-bumps each hour so same-day re-edits during
-# lab testing produce a higher serial without manual intervention.
-# If you need sub-hour bumping, manually increment zone data or wait for the
-# hour to roll over. For production, consider a content-hash or read-and-bump serial.
-
 # View and zone data for authoritative_primary mode
 bind9_views: []
 bind9_zones: []
@@ -40,18 +34,34 @@ bind9_zones: []
 # emits `forwarders { ... }; forward only;` and skips root-based recursion.
 bind9_forwarders: []
 
-# Whether the resolver verify task should assert external recursion works.
-# Leave false until forwarders (and any static-stub zones) are configured;
-# otherwise the verify step fails by design.
-bind9_resolver_expect_external: false
-
-# TSIG key configuration — loaded from gitignored host_vars/*/secrets.yml
-# on authoritative hosts. The secret itself is never committed; only the
-# schema and default name/algorithm are tracked here.
+# TSIG key configuration
 bind9_tsig_key:
   name: lab_ddns_shared
   algorithm: hmac-sha256
   secret: ""
 
-# Path for the rendered TSIG key include file.
+# Path for the rendered TSIG key
 bind9_keys_conf_path: /etc/named/named.keys.conf
+
+# SOA serial: computed per-zone via the bind9_zone_serial filter plugin
+# using a read-and-bump strategy.
+#
+# On each playbook run, the bind9_zone_state module reads the current serial
+# and content hash from each existing zone file. The filter then:
+#   1. Computes a content hash from zone data (name, MNAME, SOA minus serial,
+#      NS records, resource records).
+#   2. If the hash matches the stored hash, the serial is unchanged (idempotent).
+#   3. If the hash differs, the serial is bumped: max(current + 1, YYYYMMDD00).
+#   4. For first deployment, the serial starts at YYYYMMDD00.
+#
+# The content hash is stored in a `<zone_file>.hash` sidecar file alongside
+# each zone so it can be read back on the next playbook run. The sidecar
+# is used because BIND rewrites zones with update-policy in canonical format
+# whenever the journal is merged, which strips embedded comments.
+# The role gates re-render on hash equality, so an idempotent run leaves DDNS
+# zones and their journals untouched.
+#
+# Known limitation: any inventory change to a DDNS-managed zone WILL
+# discard the live journal and overwrite live dynamic records with the
+# static model. DDNS zones should be seeded once and then excluded from
+# ongoing templating, or managed separately.
