@@ -209,6 +209,26 @@
 - name: "PHASE [config : Flush Handlers]"
   ansible.builtin.meta: flush_handlers
 
+- name: "PHASE [config : Find Legacy managed-keys Files Outside managed-keys-directory]"
+  ansible.builtin.find:
+    paths: "{{ bind9_zone_dir }}"
+    recurse: false
+    patterns:
+      - "managed-keys.bind"
+      - "managed-keys.bind.jnl"
+      - "*.mkeys"
+      - "*.mkeys.jnl"
+    file_type: file
+  register: bind9_legacy_mkeys
+
+- name: "PHASE [config : Remove Legacy managed-keys Files Outside managed-keys-directory]"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ bind9_legacy_mkeys.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
 - name: "PHASE [config : END]"
   become: false
   ansible.builtin.debug:
