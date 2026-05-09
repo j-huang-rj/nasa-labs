@@ -331,10 +331,6 @@
     #     public view. Reaching it on the secondary proves keyed AXFR view
     #     selection is working (without it the AXFR would land in primary's
     #     private view, which has no such zone, and return REFUSED). ---
-    # Sign the query with bind9_axfr_key so it matches primary's public view's
-    # `key` predicate before IP-based negation rejects 172.16.0.53. Without
-    # the TSIG, the local source IP lands in private view (no such zone) and
-    # the test would always REFUSE despite the AXFR being correctly transferred.
     - name: "PHASE [verify : Secondary - Public-Only Reverse Zone SOA Lookup]"
       ansible.builtin.command:
         cmd: >-
