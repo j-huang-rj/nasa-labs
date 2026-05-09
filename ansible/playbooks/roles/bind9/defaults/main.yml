@@ -40,6 +40,15 @@ bind9_tsig_key:
   algorithm: hmac-sha256
   secret: ""
 
+# Optional second TSIG key, used to discriminate public-view AXFR
+# connections from IP-based view selection on the primary. When the
+# secret is empty (default) the key block is not rendered into
+# named.keys.conf and is treated as absent.
+bind9_axfr_key:
+  name: lab_axfr_public
+  algorithm: hmac-sha256
+  secret: ""
+
 # Path for the rendered TSIG key
 bind9_keys_conf_path: /etc/named/named.keys.conf
 

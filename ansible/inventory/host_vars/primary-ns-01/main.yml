@@ -35,19 +35,23 @@ bind9_dynamic_hosts:
   - "dynamic3"
   - "dynamic4"
 
-# View policy: private view precede public view
+# View policy: public view evaluated first to capture keyed AXFR before
+# IP-based negation; private view catches everything that falls through.
 bind9_views:
-  - name: private
+  - name: public
     order: 10
+    match_clients:
+      - "key {{ bind9_axfr_key.name }}"
+      - "!internal_clients"
+      - "!dmz_clients"
+      - "any"
+
+  - name: private
+    order: 99
     match_clients:
       - "localhost"
       - "dmz_clients"
       - "internal_clients"
-
-  - name: public
-    order: 99
-    match_clients:
-      - "any"
 
 # Zone data — forward zones for private and public views
 bind9_zones:

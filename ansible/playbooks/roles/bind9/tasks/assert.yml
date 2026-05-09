@@ -62,18 +62,19 @@
       loop_control:
         label: "{{ item.name | default('(unnamed)') }}"
 
-    - name: "PHASE [assert : Check Private View Precedes Public View]"
+    - name: "PHASE [assert : Check Public View Precedes Private View]"
       become: false
       ansible.builtin.assert:
         quiet: true
         that:
           - >-
-            (bind9_views | selectattr('name', 'equalto', 'private') | map(attribute='order') | first)
-            <
             (bind9_views | selectattr('name', 'equalto', 'public') | map(attribute='order') | first)
+            <
+            (bind9_views | selectattr('name', 'equalto', 'private') | map(attribute='order') | first)
         fail_msg: >-
-          Private view must have a lower order than public view to prevent the
-          'any' match-clients clause from shadowing internal clients.
+          Public view must have a lower order than private view so that
+          keyed AXFR connections are matched before the IP-based negation
+          clauses fall through to the private view.
 
     - name: "PHASE [assert : Check bind9_zones Reference Only Declared Views]"
       become: false

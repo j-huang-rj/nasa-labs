@@ -52,17 +52,20 @@ bind9_listen_ipv4:
 
 # View policy: mirror the primary's split-view structure
 bind9_views:
-  - name: private
+  - name: public
     order: 10
+    match_clients:
+      - "key {{ bind9_axfr_key.name }}"
+      - "!internal_clients"
+      - "!dmz_clients"
+      - "any"
+
+  - name: private
+    order: 99
     match_clients:
       - "localhost"
       - "dmz_clients"
       - "internal_clients"
-
-  - name: public
-    order: 99
-    match_clients:
-      - "any"
 
 # Read-only zone data: mirror every zone the primary serves
 bind9_zones:
@@ -81,7 +84,8 @@ bind9_zones:
     view: public
     type: slave
     masters:
-      - "172.16.1.53"
+      - address: "172.16.1.53"
+        key: "{{ bind9_axfr_key.name }}"
     allow_transfer:
       - "none"
     file: "slaves/public/db.{{ bind9_forward_zone_name }}"
@@ -111,7 +115,8 @@ bind9_zones:
     view: public
     type: slave
     masters:
-      - "172.16.1.53"
+      - address: "172.16.1.53"
+        key: "{{ bind9_axfr_key.name }}"
     allow_transfer:
       - "none"
     file: "slaves/public/db.{{ bind9_vpn_child_reverse_zone_name }}"
