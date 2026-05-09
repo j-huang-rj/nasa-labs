@@ -6,6 +6,11 @@
   hosts: dns
   gather_facts: true
   become: true
+  vars:
+    # Inventory-driven default: the WireGuard router host supplies the VPN
+    # CIDR seed. Lazy-evaluated, so resolver-only hosts that skip the
+    # pre_tasks below never reference groups['router'].
+    bind9_identity_source_host: "{{ groups['router'] | first }}"
   pre_tasks:
     - name: "PRE [dns : Derive bind9 VPN Identity Facts]"
       when:

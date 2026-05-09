@@ -11,21 +11,21 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - ansible_facts.services["named.service"] is defined
-      - ansible_facts.services["named.service"].status == "enabled"
+      - ansible_facts.services[bind9_service_name ~ '.service'] is defined
+      - ansible_facts.services[bind9_service_name ~ '.service'].status == "enabled"
     fail_msg: >-
-      named service is not enabled.
-      Current status: {{ ansible_facts.services["named.service"].status | default("not found") }}
+      {{ bind9_service_name }} service is not enabled.
+      Current status: {{ ansible_facts.services[bind9_service_name ~ '.service'].status | default("not found") }}
 
 - name: "PHASE [verify : Assert named Service Is Running]"
   ansible.builtin.assert:
     quiet: true
     that:
-      - ansible_facts.services["named.service"] is defined
-      - ansible_facts.services["named.service"].state == "running"
+      - ansible_facts.services[bind9_service_name ~ '.service'] is defined
+      - ansible_facts.services[bind9_service_name ~ '.service'].state == "running"
     fail_msg: >-
-      named service is not running.
-      Current state: {{ ansible_facts.services["named.service"].state | default("not found") }}
+      {{ bind9_service_name }} service is not running.
+      Current state: {{ ansible_facts.services[bind9_service_name ~ '.service'].state | default("not found") }}
 
 - name: "PHASE [verify : Check named Is Listening On Each Configured Address]"
   ansible.builtin.wait_for:
@@ -62,7 +62,7 @@
         _bind9_private_rev: >-
           {% set result = [] -%}
           {% for zone in bind9_zones -%}
-          {% if zone.view == 'private' and 'in-addr.arpa' in zone.name and zone.name != bind9_forward_zone_name -%}
+          {% if zone.view == 'private' and 'in-addr.arpa' in zone.name -%}
           {% set parts = zone.name.split('.in-addr.arpa')[0].split('.') -%}
           {% set prefix = parts[2] ~ '.' ~ parts[1] ~ '.' ~ parts[0] -%}
           {% for rec in zone.records -%}
@@ -100,6 +100,15 @@
         label: "{{ item.name }} → {{ item.value }}"
 
     # --- Private-view authoritative check ---
+    - name: "PHASE [verify : Assert Private Forward A Matrix Is Non-Empty]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_private_fwd_a | length > 0
+        fail_msg: >-
+          No private-view A records found for {{ bind9_forward_zone_name }};
+          cannot run authoritative-flag check.
+
     - name: "PHASE [verify : Private View - Authoritative Check]"
       ansible.builtin.command:
         cmd: >-
@@ -484,8 +493,6 @@
 # --- TSIG key assertion ---
 - name: "PHASE [verify : TSIG Key Assertion]"
   when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
-  delegate_to: localhost
-  run_once: true
   block:
     - name: "PHASE [verify : Assert bind9_tsig_key Is Defined And Non-Empty]"
       ansible.builtin.assert:

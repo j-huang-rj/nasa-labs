@@ -28,13 +28,6 @@ bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.1.53
 
-# Dynamic update hosts
-bind9_dynamic_hosts:
-  - "dynamic1"
-  - "dynamic2"
-  - "dynamic3"
-  - "dynamic4"
-
 # View policy: public view evaluated first to capture keyed AXFR before
 # IP-based negation; private view catches everything that falls through.
 bind9_views:

@@ -32,8 +32,8 @@
       - bind9_listen_ipv4 | length > 0
     fail_msg: "bind9_listen_ipv4 must be defined as a non-empty list of IPv4 addresses"
 
-- name: "PHASE [assert : Validate bind9_views For Authoritative Primary Mode]"
-  when: bind9_mode == 'authoritative_primary'
+- name: "PHASE [assert : Validate bind9_views For Authoritative Modes]"
+  when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
   block:
     - name: "PHASE [assert : Check bind9_views Has Exactly Private And Public]"
       become: false
