@@ -53,6 +53,7 @@
   notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Render TSIG Keys Conf]"
+  when: bind9_mode != 'resolver'
   ansible.builtin.template:
     src: named.keys.conf.j2
     dest: "{{ bind9_keys_conf_path }}"
@@ -63,6 +64,7 @@
   notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Render Zones Conf]"
+  when: bind9_mode != 'resolver'
   ansible.builtin.template:
     src: named.zones.conf.j2
     dest: "{{ bind9_conf_dir }}/named.zones.conf"
