@@ -10,6 +10,9 @@
   Optional zone fields: file, masters, server_addresses, forwarders, forward,
   allow_transfer, also_notify, dynamic_update_scope.
 
+  `masters` items may be either a plain IP string or a dict
+  `{address: <ip>, key: <tsig-key-name>}` to sign the AXFR with a TSIG key.
+
   Key constraints:
     * dynamic_update_scope is only valid on private-view master zones.
     * allow-update must never appear; update-policy is the correct directive.
@@ -22,7 +25,15 @@
 {{ indent }}    file "{{ zone.file }}";
 {% endif %}
 {% if zone.masters is defined %}
-{{ indent }}    masters { {{ zone.masters | join('; ') }}; };
+{{ indent }}    masters {
+{% for _m in zone.masters %}
+{% if _m is mapping %}
+{{ indent }}        {{ _m.address }} key {{ _m.key }};
+{% else %}
+{{ indent }}        {{ _m }};
+{% endif %}
+{% endfor %}
+{{ indent }}    };
 {% endif %}
 {% if zone.server_addresses is defined %}
 {{ indent }}    server-addresses { {{ zone.server_addresses | join('; ') }}; };

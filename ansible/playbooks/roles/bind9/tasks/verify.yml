@@ -141,7 +141,9 @@
     # --- Dynamic update success checks ---
     - name: "PHASE [verify : Dynamic Update - Create dynamic1 A Record]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -152,7 +154,9 @@
 
     - name: "PHASE [verify : Dynamic Update - Modify dynamic1 A Record]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -164,7 +168,9 @@
 
     - name: "PHASE [verify : Dynamic Update - Add PTR Record]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server {{ _bind9_private_source }}
           zone 1.16.172.in-addr.arpa
@@ -175,7 +181,9 @@
 
     - name: "PHASE [verify : Dynamic Update - Delete dynamic1 And PTR Records]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -213,7 +221,9 @@
 
     - name: "PHASE [verify : Out-Of-Policy Signed Update Must Be Rejected]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -317,6 +327,39 @@
           ns.{{ bind9_forward_zone_name }}.
           stdout={{ _bind9_verify_secondary_public_fwd.stdout | default('') }}
 
+    # --- Public-only zone propagation: this zone exists ONLY in primary's
+    #     public view. Reaching it on the secondary proves keyed AXFR view
+    #     selection is working (without it the AXFR would land in primary's
+    #     private view, which has no such zone, and return REFUSED). ---
+    # Sign the query with bind9_axfr_key so it matches primary's public view's
+    # `key` predicate before IP-based negation rejects 172.16.0.53. Without
+    # the TSIG, the local source IP lands in private view (no such zone) and
+    # the test would always REFUSE despite the AXFR being correctly transferred.
+    - name: "PHASE [verify : Secondary - Public-Only Reverse Zone SOA Lookup]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @172.16.0.53 -y
+          "{{ bind9_axfr_key.algorithm }}:{{ bind9_axfr_key.name }}:{{ bind9_axfr_key.secret }}"
+          {{ bind9_vpn_child_reverse_zone_name }} SOA +noall +answer
+      changed_when: false
+      register: _bind9_verify_secondary_public_only_soa
+      until: "bind9_vpn_child_reverse_zone_name in _bind9_verify_secondary_public_only_soa.stdout"
+      retries: 10
+      delay: 1
+
+    - name: "PHASE [verify : Assert Secondary Public-Only Reverse Zone SOA Lookup]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "bind9_vpn_child_reverse_zone_name in _bind9_verify_secondary_public_only_soa.stdout"
+          - "'SOA' in _bind9_verify_secondary_public_only_soa.stdout"
+        fail_msg: >-
+          Secondary did not return a SOA for the public-only reverse zone
+          {{ bind9_vpn_child_reverse_zone_name }}. This usually means the
+          AXFR landed in primary's private view (which lacks this zone) due
+          to broken keyed view-selection.
+          stdout={{ _bind9_verify_secondary_public_only_soa.stdout | default('') }}
+
     # --- Propagation test: update on primary, poll secondary until
     #     convergence. Capped at 10 seconds via retries/delay. ---
     - name: "PHASE [verify : Propagation - Set Test Address]"
@@ -332,7 +375,9 @@
 
     - name: "PHASE [verify : Propagation - Create dynamic2 A Record On Primary]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server 172.16.1.53
           zone {{ bind9_forward_zone_name }}
@@ -343,7 +388,9 @@
 
     - name: "PHASE [verify : Propagation - Add Matching PTR Record On Primary]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
@@ -366,7 +413,9 @@
     # --- Cleanup: remove the dynamic2 test records from the primary ---
     - name: "PHASE [verify : Propagation - Delete dynamic2 A Record From Primary]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server 172.16.1.53
           zone {{ bind9_forward_zone_name }}
@@ -376,7 +425,9 @@
 
     - name: "PHASE [verify : Propagation - Delete dynamic2 PTR Record From Primary]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
@@ -388,7 +439,9 @@
     #     against the secondary must be refused. ---
     - name: "PHASE [verify : Secondary - Direct Signed Update Must Be Refused]"
       ansible.builtin.command:
-        cmd: nsupdate -k /etc/named/named.keys.conf
+        cmd: >-
+          nsupdate -y
+          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
         stdin: |
           server 172.16.0.53
           zone {{ bind9_forward_zone_name }}
@@ -449,6 +502,19 @@
         fail_msg: >-
           bind9_tsig_key must be defined with name, algorithm, and secret on authoritative hosts.
           Ensure host_vars/*/secrets.yml provides the TSIG key.
+
+    - name: "PHASE [verify : Assert bind9_axfr_key Is Defined And Non-Empty]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_axfr_key is defined
+          - bind9_axfr_key.name is defined and bind9_axfr_key.name | length > 0
+          - bind9_axfr_key.algorithm is defined and bind9_axfr_key.algorithm | length > 0
+          - bind9_axfr_key.secret is defined and bind9_axfr_key.secret | length > 0
+        fail_msg: >-
+          bind9_axfr_key must be defined with name, algorithm, and secret on authoritative hosts.
+          Used to discriminate public-view AXFR connections from IP-based view selection.
+          Ensure host_vars/*/secrets.yml provides the key.
 
 # --- Resolver: recursive resolution verification ---
 - name: "PHASE [verify : Resolver Verification]"

@@ -4,3 +4,10 @@ key "{{ bind9_tsig_key.name }}" {
         algorithm {{ bind9_tsig_key.algorithm }};
         secret "{{ bind9_tsig_key.secret }}";
 };
+{% if bind9_axfr_key.secret | length > 0 %}
+
+key "{{ bind9_axfr_key.name }}" {
+        algorithm {{ bind9_axfr_key.algorithm }};
+        secret "{{ bind9_axfr_key.secret }}";
+};
+{% endif %}

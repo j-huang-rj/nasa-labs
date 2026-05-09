@@ -121,6 +121,15 @@ argument_specs:
           The default provides the name and algorithm with an empty secret; the real secret must come
           from secrets.yml.
 
+      bind9_axfr_key:
+        type: dict
+        required: false
+        description: >-
+          Optional second TSIG key used to discriminate public-view AXFR connections from
+          IP-based view selection. Referenced by the primary's public-view match-clients
+          and by the secondary's public-zone slave masters. When the secret is empty the
+          key block is not rendered into named.keys.conf and the key is treated as absent.
+
       bind9_keys_conf_path:
         type: str
         required: false
