@@ -28,8 +28,7 @@ bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.1.53
 
-# Dynamic update hosts — only these names may be created/modified/deleted
-# via signed nsupdate in the private forward zone.
+# Dynamic update hosts
 bind9_dynamic_hosts:
   - "dynamic1"
   - "dynamic2"
@@ -52,6 +51,7 @@ bind9_views:
 
 # Zone data — forward zones for private and public views
 bind9_zones:
+  # --- Private forward zone ---
   - name: "{{ bind9_forward_zone_name }}"
     view: private
     type: master
@@ -63,7 +63,6 @@ bind9_zones:
       - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800
@@ -94,6 +93,7 @@ bind9_zones:
         type: "A"
         value: "172.16.1.123"
 
+  # --- Public forward zone ---
   - name: "{{ bind9_forward_zone_name }}"
     view: public
     type: master
@@ -104,7 +104,6 @@ bind9_zones:
       - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800
@@ -128,8 +127,7 @@ bind9_zones:
         type: "A"
         value: "{{ bind9_vpn_client_ip }}"
 
-  # --- Reverse zones: 172.16.0/24 ---
-
+  # --- Private reverse zone: 172.16.0/24 ---
   - name: "0.16.172.in-addr.arpa"
     view: private
     type: master
@@ -141,7 +139,6 @@ bind9_zones:
       - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800
@@ -160,8 +157,7 @@ bind9_zones:
         type: "PTR"
         value: "agent.{{ bind9_forward_zone_name }}."
 
-  # --- Reverse zones: 172.16.1/24 ---
-
+  # --- Private reverse zone: 172.16.1/24 ---
   - name: "1.16.172.in-addr.arpa"
     view: private
     type: master
@@ -173,7 +169,6 @@ bind9_zones:
       - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800
@@ -195,15 +190,7 @@ bind9_zones:
         type: "PTR"
         value: "internal-agent.{{ bind9_forward_zone_name }}."
 
-  # --- RFC 2317 child zone (delegated /28 reverse) ---
-  #
-  # Parent zone `{x}.168.192.in-addr.arpa` is intentionally NOT hosted here.
-  # The TA's `nasa.` root at 192.168.255.1 is the authoritative parent for the
-  # 192.168 reverse tree and delegates this /28 child directly to us. Hosting
-  # the parent locally would only falsely claim authority on a zone we don't
-  # own; real reverse-lookup flow is: 192.168 root (TA) → delegation → this
-  # child zone.
-
+  # --- Public RFC 2317 child zone (delegated /28 reverse) ---
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     view: public
     type: master
@@ -214,7 +201,6 @@ bind9_zones:
       - "172.16.0.53"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
-      serial: "{{ bind9_soa_serial }}"
       refresh: 3600
       retry: 1800
       expire: 604800

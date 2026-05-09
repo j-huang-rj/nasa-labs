@@ -1,4 +1,7 @@
 ---
+# Prerequisites in order:
+#   - bootstrap.yml
+
 - name: DNS Service Bootstrap
   hosts: dns
   gather_facts: true
@@ -55,11 +58,7 @@
               {{ bind9_derived_lab_id }}-sub{{ _bind9_wg_prefix }}.{{ _bind9_wg_octets[2] }}.{{ _bind9_wg_octets[1] }}.{{
               _bind9_wg_octets[0] }}.in-addr.arpa
             bind9_primary_mname: "private-ns.{{ bind9_derived_lab_id }}.nasa."
-            bind9_soa_serial: >-
-              {{ ansible_facts['date_time'].year
-              }}{{ ansible_facts['date_time'].month
-              }}{{ ansible_facts['date_time'].day
-              }}{{ ansible_facts['date_time'].hour }}
+            bind9_soa_serial_date: "{{ ansible_facts['date_time'].date | replace('-', '') }}"
   roles:
     - role: bind9
       when: bind9_enabled
