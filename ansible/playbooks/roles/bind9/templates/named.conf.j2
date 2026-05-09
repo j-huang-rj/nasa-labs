@@ -7,7 +7,7 @@ include "{{ bind9_conf_dir }}/named.options.conf";
   TSIG keys and authoritative zones are only meaningful in authoritative
   modes; resolver mode has no DDNS scope and no zones to declare.
 #}
-include "{{ bind9_conf_dir }}/named.keys.conf";
+include "{{ bind9_keys_conf_path }}";
 include "{{ bind9_conf_dir }}/named.zones.conf";
 {% else %}
 {#

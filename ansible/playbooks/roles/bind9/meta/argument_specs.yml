@@ -59,12 +59,6 @@ argument_specs:
         required: false
         description: Directory for dynamic DNS updates and journal files
 
-      bind9_identity_source_host:
-        type: str
-        required: false
-        description: >-
-          Inventory hostname whose wireguard_address is used to derive the VPN network CIDR for ACL and zone computation.
-
       bind9_soa_admin:
         type: str
         required: false
@@ -111,6 +105,45 @@ argument_specs:
         description: >-
           Zone definitions for authoritative modes. Each entry must define name, view, type, and file; primary zones
           also need soa, ns, and records data for zone-file rendering, while secondary/slave zones must define masters.
+          The masters list accepts either a plain IPv4 string for unkeyed transfers or a {address, key} dict to sign
+          the AXFR/IXFR with a TSIG key (used for public-view zones on the secondary).
+
+      bind9_dynamic_hosts:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Fixed set of dynamic hostnames bound to bind9_tsig_key by the update-policy template
+          on the private forward zone. Lab requirement pins this to ['dynamic1', 'dynamic2',
+          'dynamic3', 'dynamic4']; the assert phase enforces that.
+
+      bind9_forward_zone_name:
+        type: str
+        required: false
+        description: >-
+          Authoritative forward zone name (e.g. "<lab_id>.nasa"). Required for both authoritative modes.
+          Computed by the dns.yml play's pre_tasks from the WireGuard subnet of bind9_identity_source_host.
+
+      bind9_vpn_child_reverse_zone_name:
+        type: str
+        required: false
+        description: >-
+          RFC 2317 child reverse zone name covering the VPN /28 (e.g. "<lab_id>-sub28.x.y.z.in-addr.arpa").
+          Required for both authoritative modes. Computed by the dns.yml play's pre_tasks.
+
+      bind9_primary_mname:
+        type: str
+        required: false
+        description: >-
+          SOA MNAME (primary master FQDN with trailing dot) used in rendered zone files.
+          Required for authoritative_primary. Computed by the dns.yml play's pre_tasks.
+
+      bind9_soa_serial_date:
+        type: str
+        required: false
+        description: >-
+          YYYYMMDD floor used by the bind9_zone_serial filter for first-deploy and date-rollover bumps.
+          Required for authoritative_primary. Computed by the dns.yml play's pre_tasks from the controller's date.
 
       bind9_tsig_key:
         type: dict

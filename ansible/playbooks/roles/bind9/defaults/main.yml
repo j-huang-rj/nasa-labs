@@ -11,9 +11,6 @@ bind9_conf_dir: /etc/named
 bind9_zone_dir: /var/named
 bind9_dynamic_zone_dir: /var/named/dynamic
 
-# Runtime identity to derive VPN subnet info from
-bind9_identity_source_host: router-01
-
 # SOA admin contact
 bind9_soa_admin: "admin"
 
@@ -29,6 +26,15 @@ bind9_vpn_ns_offset: 3
 # View and zone data for authoritative_primary mode
 bind9_views: []
 bind9_zones: []
+
+# Dynamic update hosts. The role's update-policy template binds these names
+# (e.g. "dynamic1.<zone>") to the bind9_tsig_key. The list is fixed by lab
+# requirements; the assert phase validates that callers don't tamper with it.
+bind9_dynamic_hosts:
+  - "dynamic1"
+  - "dynamic2"
+  - "dynamic3"
+  - "dynamic4"
 
 # Upstream forwarders for resolver mode. When non-empty, resolver config
 # emits `forwarders { ... }; forward only;` and skips root-based recursion.
