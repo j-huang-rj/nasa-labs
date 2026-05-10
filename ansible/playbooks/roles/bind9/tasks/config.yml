@@ -171,10 +171,34 @@
          | list }}
   notify: "PHASE [handler : Restart named]"
 
+# DNSSEC key file distribution: BIND 9.18 keymgr writes runtime tracking
+# metadata (SyncPublish, PublishCDS, DNSKEYChange, *RRSIGChange) into the
+# .key/.private/.state files at runtime. A naive `copy` would revert those
+# annotations every run, report `changed`, and fire the named restart
+# handler unnecessarily. Instead we slurp the existing file, strip the
+# runtime-mutated lines from both sides via `bind9_keymgr_runtime_strip`,
+# and only copy when the normalized content actually differs. This keeps
+# the playbook idempotent while still distributing real key changes
+# (e.g., a rotation in secrets.yml) on the next run.
+- name: "PHASE [config : Slurp Existing DNSSEC Public Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.slurp:
+    src: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.key"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .key"
+  failed_when: false
+  register: _bind9_dnssec_existing_public
+
 - name: "PHASE [config : Distribute DNSSEC Public Key Files]"
   when:
     - bind9_mode == 'authoritative_primary'
     - bind9_dnssec_key_material | length > 0
+    - (_bind9_dnssec_existing_public.results[_idx].content | default('') | b64decode
+       | regex_replace(bind9_keymgr_runtime_strip.key, ''))
+      != (item.public | regex_replace(bind9_keymgr_runtime_strip.key, ''))
   ansible.builtin.copy:
     content: "{{ item.public }}"
     dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.key"
@@ -185,12 +209,28 @@
   loop: "{{ bind9_dnssec_key_material }}"
   loop_control:
     label: "{{ item.zone }} .key"
+    index_var: _idx
   notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Slurp Existing DNSSEC Private Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.slurp:
+    src: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.private"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .private"
+  failed_when: false
+  register: _bind9_dnssec_existing_private
 
 - name: "PHASE [config : Distribute DNSSEC Private Key Files]"
   when:
     - bind9_mode == 'authoritative_primary'
     - bind9_dnssec_key_material | length > 0
+    - (_bind9_dnssec_existing_private.results[_idx].content | default('') | b64decode
+       | regex_replace(bind9_keymgr_runtime_strip.private, ''))
+      != (item.private | regex_replace(bind9_keymgr_runtime_strip.private, ''))
   ansible.builtin.copy:
     content: "{{ item.private }}"
     dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.private"
@@ -201,6 +241,7 @@
   loop: "{{ bind9_dnssec_key_material }}"
   loop_control:
     label: "{{ item.zone }} .private"
+    index_var: _idx
   notify: "PHASE [handler : Restart named]"
 
 # `.state` sidecar files record per-key role (KSK/ZSK/CSK) and lifecycle
@@ -209,10 +250,25 @@
 # be misclassified as pure KSK and trigger an unwanted ZSK rollover.
 # Distributing the .state alongside .key/.private gives keymgr the canonical
 # CSK record and locks the key in place.
+- name: "PHASE [config : Slurp Existing DNSSEC Key State Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.slurp:
+    src: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.state"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .state"
+  failed_when: false
+  register: _bind9_dnssec_existing_state
+
 - name: "PHASE [config : Distribute DNSSEC Key State Files]"
   when:
     - bind9_mode == 'authoritative_primary'
     - bind9_dnssec_key_material | length > 0
+    - (_bind9_dnssec_existing_state.results[_idx].content | default('') | b64decode
+       | regex_replace(bind9_keymgr_runtime_strip.state, ''))
+      != (item.state | regex_replace(bind9_keymgr_runtime_strip.state, ''))
   ansible.builtin.copy:
     content: "{{ item.state }}"
     dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.state"
@@ -223,6 +279,7 @@
   loop: "{{ bind9_dnssec_key_material }}"
   loop_control:
     label: "{{ item.zone }} .state"
+    index_var: _idx
   notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Read Current Zone State]"
