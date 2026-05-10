@@ -162,6 +162,55 @@
           bind9_dnssec_policy.key_directory must be defined and non-empty for authoritative_primary mode;
           got '{{ bind9_dnssec_policy.key_directory | default("(undefined)") }}'
 
+    - name: "PHASE [assert : Check bind9_dnssec_policy.csk Is Defined]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_dnssec_policy.csk is defined
+          - bind9_dnssec_policy.csk.algorithm is defined
+          - bind9_dnssec_policy.csk.algorithm | length > 0
+          - bind9_dnssec_policy.csk.lifetime is defined
+        fail_msg: >-
+          bind9_dnssec_policy.csk must define 'algorithm' and 'lifetime';
+          got {{ bind9_dnssec_policy.csk | default('(undefined)') }}
+
+    - name: "PHASE [assert : Check bind9_dnssec_policy.cds_digest_types Is Defined]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_dnssec_policy.cds_digest_types is defined
+          - bind9_dnssec_policy.cds_digest_types | length > 0
+        fail_msg: >-
+          bind9_dnssec_policy.cds_digest_types must be a non-empty list;
+          got {{ bind9_dnssec_policy.cds_digest_types | default('(undefined)') }}
+
+- name: "PHASE [assert : Check bind9_tsig_key.secret Is Non-Empty For Authoritative Modes]"
+  when: bind9_mode != 'resolver'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_tsig_key is defined
+      - bind9_tsig_key.secret is defined
+      - bind9_tsig_key.secret | length > 0
+    fail_msg: >-
+      bind9_tsig_key.secret must be non-empty for authoritative modes.
+      Ensure host_vars/*/secrets.yml provides the TSIG key.
+
+- name: "PHASE [assert : Check bind9_axfr_key.secret Is Non-Empty For Authoritative Modes]"
+  when: bind9_mode != 'resolver'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_axfr_key is defined
+      - bind9_axfr_key.secret is defined
+      - bind9_axfr_key.secret | length > 0
+    fail_msg: >-
+      bind9_axfr_key.secret must be non-empty for authoritative modes.
+      Used for public-view AXFR connection discrimination and DNSSEC verification.
+      Ensure host_vars/*/secrets.yml provides the AXFR key.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:

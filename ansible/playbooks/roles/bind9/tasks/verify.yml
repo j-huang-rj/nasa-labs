@@ -46,6 +46,45 @@
       ansible.builtin.set_fact:
         _bind9_private_source: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
 
+    # --- Temp key files: avoid exposing secrets on the command line ---
+    - name: "PHASE [verify : Create TSIG Key Temp File]"
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".key"
+      register: _bind9_tsig_keyfile
+
+    - name: "PHASE [verify : Write TSIG Key To Temp File]"
+      ansible.builtin.copy:
+        dest: "{{ _bind9_tsig_keyfile.path }}"
+        content: |
+          key "{{ bind9_tsig_key.name }}" {
+                  algorithm {{ bind9_tsig_key.algorithm }};
+                  secret "{{ bind9_tsig_key.secret }}";
+          };
+        owner: named
+        group: named
+        mode: "0600"
+      no_log: true
+
+    - name: "PHASE [verify : Create AXFR Key Temp File]"
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".key"
+      register: _bind9_axfr_keyfile
+
+    - name: "PHASE [verify : Write AXFR Key To Temp File]"
+      ansible.builtin.copy:
+        dest: "{{ _bind9_axfr_keyfile.path }}"
+        content: |
+          key "{{ bind9_axfr_key.name }}" {
+                  algorithm {{ bind9_axfr_key.algorithm }};
+                  secret "{{ bind9_axfr_key.secret }}";
+          };
+        owner: named
+        group: named
+        mode: "0600"
+      no_log: true
+
     - name: "PHASE [verify : Build Private Forward A Lookup Matrix]"
       ansible.builtin.set_fact:
         _bind9_private_fwd_a: >-
@@ -151,8 +190,7 @@
     - name: "PHASE [verify : Dynamic Update - Create dynamic1 A Record]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -164,8 +202,7 @@
     - name: "PHASE [verify : Dynamic Update - Modify dynamic1 A Record]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -178,8 +215,7 @@
     - name: "PHASE [verify : Dynamic Update - Add PTR Record]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server {{ _bind9_private_source }}
           zone 1.16.172.in-addr.arpa
@@ -191,8 +227,7 @@
     - name: "PHASE [verify : Dynamic Update - Delete dynamic1 And PTR Records]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -231,8 +266,7 @@
     - name: "PHASE [verify : Out-Of-Policy Signed Update Must Be Rejected]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server {{ _bind9_private_source }}
           zone {{ bind9_forward_zone_name }}
@@ -373,10 +407,142 @@
         index_var: idx
         label: "{{ item }}"
 
+    # --- Public-view DNSSEC verification: confirm that public-view signed
+    #     zones also emit DNSKEY and RRSIG records, and verify algorithm 13.
+    #     These queries must use the AXFR TSIG key to match the public view
+    #     (queried from the private source IP, which would otherwise be
+    #     routed to the private view and get REFUSED for public-only zones). ---
+    - name: "PHASE [verify : DNSSEC - Query DNSKEY For Public-View Signed Zones]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          -k {{ _bind9_axfr_keyfile.path }}
+          {{ item.name }} DNSKEY +dnssec
+      changed_when: false
+      register: _bind9_verify_dnskey_public
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | list }}"
+      loop_control:
+        label: "{{ item.name }} ({{ item.view }})"
+
+    - name: "PHASE [verify : Assert Public DNSKEY And RRSIG Present]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'DNSKEY' in _bind9_verify_dnskey_public.results[idx].stdout"
+          - "'RRSIG' in _bind9_verify_dnskey_public.results[idx].stdout"
+        fail_msg: >-
+          Public-view DNSSEC verification failed for {{ item.name }}.
+          DNSKEY or RRSIG not found in DNSKEY response.
+          stdout={{ _bind9_verify_dnskey_public.results[idx].stdout | default('') }}
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }} ({{ item.view }})"
+
+    - name: "PHASE [verify : Assert Public Algorithm 13 In Public-View Signed Zones]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "' 13 ' in _bind9_verify_dnskey_public.results[idx].stdout"
+        fail_msg: >-
+          Algorithm 13 (ECDSAP256SHA256) not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
+          stdout={{ _bind9_verify_dnskey_public.results[idx].stdout | default('') }}
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }} ({{ item.view }})"
+
+    - name: "PHASE [verify : DNSSEC - Extract DS Records For Public-View Zones]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          -k {{ _bind9_axfr_keyfile.path }}
+          {{ item }} DNSKEY | dnssec-dsfromkey -f - {{ item }}
+      changed_when: false
+      register: _bind9_verify_ds_extract_public
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | map(attribute='name') | unique | list }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "PHASE [verify : Assert Public DS Records Contain Algorithm 13 Digest 2]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "' IN DS ' in _bind9_verify_ds_extract_public.results[idx].stdout"
+          - "' 13 2 ' in _bind9_verify_ds_extract_public.results[idx].stdout"
+        fail_msg: >-
+          Public-view DS record for {{ item }} does not contain expected algorithm 13 and digest type 2.
+          stdout={{ _bind9_verify_ds_extract_public.results[idx].stdout | default('') }}
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | map(attribute='name') | unique | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item }}"
+
+    - name: "PHASE [verify : DNSSEC - Display Public-View DS Records For OJ Submission]"
+      ansible.builtin.debug:
+        msg: "{{ _bind9_verify_ds_extract_public.results[idx].stdout }}"
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | map(attribute='name') | unique | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item }}"
+
+    # --- Cleanup: remove key temp files ---
+    - name: "PHASE [verify : Remove TSIG Key Temp File]"
+      ansible.builtin.file:
+        path: "{{ _bind9_tsig_keyfile.path }}"
+        state: absent
+      when: _bind9_tsig_keyfile.path is defined
+
+    - name: "PHASE [verify : Remove AXFR Key Temp File]"
+      ansible.builtin.file:
+        path: "{{ _bind9_axfr_keyfile.path }}"
+        state: absent
+      when: _bind9_axfr_keyfile.path is defined
+
   # --- Authoritative secondary: zone transfer verification ---
 - name: "PHASE [verify : Authoritative Secondary Verification]"
   when: bind9_mode == 'authoritative_secondary'
   block:
+    # --- Temp key files: avoid exposing secrets on the command line ---
+    - name: "PHASE [verify : Secondary - Create TSIG Key Temp File]"
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".key"
+      register: _bind9_tsig_keyfile
+
+    - name: "PHASE [verify : Secondary - Write TSIG Key To Temp File]"
+      ansible.builtin.copy:
+        dest: "{{ _bind9_tsig_keyfile.path }}"
+        content: |
+          key "{{ bind9_tsig_key.name }}" {
+                  algorithm {{ bind9_tsig_key.algorithm }};
+                  secret "{{ bind9_tsig_key.secret }}";
+          };
+        owner: named
+        group: named
+        mode: "0600"
+      no_log: true
+
+    - name: "PHASE [verify : Secondary - Create AXFR Key Temp File]"
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".key"
+      register: _bind9_axfr_keyfile
+
+    - name: "PHASE [verify : Secondary - Write AXFR Key To Temp File]"
+      ansible.builtin.copy:
+        dest: "{{ _bind9_axfr_keyfile.path }}"
+        content: |
+          key "{{ bind9_axfr_key.name }}" {
+                  algorithm {{ bind9_axfr_key.algorithm }};
+                  secret "{{ bind9_axfr_key.secret }}";
+          };
+        owner: named
+        group: named
+        mode: "0600"
+      no_log: true
+
     - name: "PHASE [verify : Secondary - Check Slave Zone Directory Exists]"
       ansible.builtin.stat:
         path: "{{ bind9_zone_dir }}/slaves"
@@ -414,7 +580,7 @@
           ns.{{ bind9_forward_zone_name }}.
           stdout={{ _bind9_verify_secondary_private_fwd.stdout | default('') }}
 
-    - name: "PHASE [verify : Secondary - Public View Forward A Lookup]"
+    - name: "PHASE [verify : Secondary - Forward A Lookup Via Private View]"
       ansible.builtin.command:
         cmd: >-
           dig @172.16.0.53
@@ -442,8 +608,7 @@
     - name: "PHASE [verify : Secondary - Public-Only Reverse Zone SOA Lookup]"
       ansible.builtin.command:
         cmd: >-
-          dig @172.16.0.53 -y
-          "{{ bind9_axfr_key.algorithm }}:{{ bind9_axfr_key.name }}:{{ bind9_axfr_key.secret }}"
+          dig @172.16.0.53 -k {{ _bind9_axfr_keyfile.path }}
           {{ bind9_vpn_child_reverse_zone_name }} SOA +noall +answer
       changed_when: false
       register: _bind9_verify_secondary_public_only_soa
@@ -480,8 +645,7 @@
     - name: "PHASE [verify : Propagation - Create dynamic2 A Record On Primary]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server 172.16.1.53
           zone {{ bind9_forward_zone_name }}
@@ -493,8 +657,7 @@
     - name: "PHASE [verify : Propagation - Add Matching PTR Record On Primary]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
@@ -518,8 +681,7 @@
     - name: "PHASE [verify : Propagation - Delete dynamic2 A Record From Primary]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server 172.16.1.53
           zone {{ bind9_forward_zone_name }}
@@ -530,8 +692,7 @@
     - name: "PHASE [verify : Propagation - Delete dynamic2 PTR Record From Primary]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server 172.16.1.53
           zone 1.16.172.in-addr.arpa
@@ -544,8 +705,7 @@
     - name: "PHASE [verify : Secondary - Direct Signed Update Must Be Refused]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -y
-          "{{ bind9_tsig_key.algorithm }}:{{ bind9_tsig_key.name }}:{{ bind9_tsig_key.secret }}"
+          nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
           server 172.16.0.53
           zone {{ bind9_forward_zone_name }}
@@ -592,7 +752,7 @@
     # --- DNSSEC verification on the secondary: confirm that signed data
     #     transferred via AXFR includes DNSKEY and RRSIG material, proving
     #     the external publication path carries DNSSEC records. ---
-    - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For Forward Zone]"
+    - name: "PHASE [verify : Secondary - Via Private View DNSKEY +dnssec For Forward Zone]"
       ansible.builtin.command:
         cmd: >-
           dig @172.16.0.53 {{ bind9_forward_zone_name }} DNSKEY +dnssec
@@ -610,11 +770,20 @@
           DNSKEY and RRSIG records. Signed data is not propagating via AXFR.
           stdout={{ _bind9_verify_secondary_dnskey_fwd.stdout | default('') }}
 
+    - name: "PHASE [verify : Assert Secondary Forward Zone Has Algorithm 13]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "' 13 ' in _bind9_verify_secondary_dnskey_fwd.stdout"
+        fail_msg: >-
+          Algorithm 13 (ECDSAP256SHA256) not found in DNSKEY response for
+          {{ bind9_forward_zone_name }} on secondary.
+          stdout={{ _bind9_verify_secondary_dnskey_fwd.stdout | default('') }}
+
     - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For VPN Child Reverse Zone]"
       ansible.builtin.command:
         cmd: >-
-          dig @172.16.0.53 -y
-          "{{ bind9_axfr_key.algorithm }}:{{ bind9_axfr_key.name }}:{{ bind9_axfr_key.secret }}"
+          dig @172.16.0.53 -k {{ _bind9_axfr_keyfile.path }}
           {{ bind9_vpn_child_reverse_zone_name }} DNSKEY +dnssec
       changed_when: false
       register: _bind9_verify_secondary_dnskey_vpn_rev
@@ -629,6 +798,29 @@
           Secondary public view for {{ bind9_vpn_child_reverse_zone_name }} did not return
           DNSKEY and RRSIG records. Signed data is not propagating via AXFR.
           stdout={{ _bind9_verify_secondary_dnskey_vpn_rev.stdout | default('') }}
+
+    - name: "PHASE [verify : Assert Secondary VPN Child Reverse Zone Has Algorithm 13]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "' 13 ' in _bind9_verify_secondary_dnskey_vpn_rev.stdout"
+        fail_msg: >-
+          Algorithm 13 (ECDSAP256SHA256) not found in DNSKEY response for
+          {{ bind9_vpn_child_reverse_zone_name }} on secondary.
+          stdout={{ _bind9_verify_secondary_dnskey_vpn_rev.stdout | default('') }}
+
+    # --- Cleanup: remove secondary key temp files ---
+    - name: "PHASE [verify : Secondary - Remove TSIG Key Temp File]"
+      ansible.builtin.file:
+        path: "{{ _bind9_tsig_keyfile.path }}"
+        state: absent
+      when: _bind9_tsig_keyfile.path is defined
+
+    - name: "PHASE [verify : Secondary - Remove AXFR Key Temp File]"
+      ansible.builtin.file:
+        path: "{{ _bind9_axfr_keyfile.path }}"
+        state: absent
+      when: _bind9_axfr_keyfile.path is defined
 
 # --- TSIG key assertion ---
 - name: "PHASE [verify : TSIG Key Assertion]"
