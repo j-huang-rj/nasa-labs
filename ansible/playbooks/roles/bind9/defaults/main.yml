@@ -79,3 +79,21 @@ bind9_keys_conf_path: /etc/named/named.keys.conf
 # discard the live journal and overwrite live dynamic records with the
 # static model. DDNS zones should be seeded once and then excluded from
 # ongoing templating, or managed separately.
+
+# DNSSEC signing policy for authoritative zones.
+# When at least one zone declares dnssec_policy, BIND signs that zone
+# using this policy's algorithm and digest settings.
+bind9_dnssec_policy:
+  name: nasa-lab
+  key_directory: /etc/named/keys
+  cds_digest_types:
+    - SHA-256
+  csk:
+    algorithm: ECDSAP256SHA256
+    lifetime: unlimited
+
+# Pre-generated DNSSEC key material for distribution to the primary NS.
+# Each item is a dict with keys: zone, basename, public, private.
+# Populated from secrets.yml on the control node; the empty default means
+# no keys are distributed when the variable is omitted.
+bind9_dnssec_key_material: []

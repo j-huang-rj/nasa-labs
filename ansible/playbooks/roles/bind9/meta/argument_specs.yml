@@ -177,3 +177,20 @@ argument_specs:
         description: >-
           Upstream IPv4 addresses used as forwarders in resolver mode. When non-empty, the resolver emits a
           forwarders clause with forward only and does not attempt root-based recursion.
+
+      bind9_dnssec_policy:
+        type: dict
+        required: false
+        description: >-
+          DNSSEC signing policy definition for authoritative_primary mode. Must include 'name' and 'key_directory'.
+          The policy name is referenced by zone-level dnssec_policy fields. The key_directory specifies where
+          BIND stores signing key material on the target host.
+
+      bind9_dnssec_key_material:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Pre-generated DNSSEC key material for distribution to the primary NS. Each item is a dict with
+          keys: zone, basename, public, private. Populated from secrets.yml; empty default means no keys
+          are distributed when omitted.
