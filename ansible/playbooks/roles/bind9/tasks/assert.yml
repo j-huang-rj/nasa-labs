@@ -175,8 +175,6 @@
           bind9_dnssec_policy.csk must define 'algorithm' and 'lifetime';
           got {{ bind9_dnssec_policy.csk | default('(undefined)') }}
 
-    
-
 - name: "PHASE [assert : Check bind9_tsig_key.secret Is Non-Empty For Authoritative Modes]"
   when: bind9_mode != 'resolver'
   ansible.builtin.assert:
