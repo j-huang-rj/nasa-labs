@@ -106,7 +106,7 @@ argument_specs:
           Zone definitions for authoritative modes. Each entry must define name, view, type, and file; primary zones
           also need soa, ns, and records data for zone-file rendering, while secondary/slave zones must define masters.
           The masters list accepts either a plain IPv4 string for unkeyed transfers or a {address, key} dict to sign
-          the AXFR/IXFR with a TSIG key (used for public-view zones on the secondary).
+          the AXFR/IXFR with a TSIG key.
 
       bind9_dynamic_hosts:
         type: list
@@ -114,8 +114,7 @@ argument_specs:
         required: false
         description: >-
           Fixed set of dynamic hostnames bound to bind9_tsig_key by the update-policy template
-          on the private forward zone. Lab requirement pins this to ['dynamic1', 'dynamic2',
-          'dynamic3', 'dynamic4']; the assert phase enforces that.
+          on the private forward zone.
 
       bind9_forward_zone_name:
         type: str
@@ -135,7 +134,7 @@ argument_specs:
         type: str
         required: false
         description: >-
-          SOA MNAME (primary master FQDN with trailing dot) used in rendered zone files.
+          SOA MNAME used in rendered zone files.
           Required for authoritative_primary. Computed by the dns.yml play's pre_tasks.
 
       bind9_soa_serial_date:
