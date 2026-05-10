@@ -58,7 +58,7 @@ bind9_axfr_key:
 bind9_keys_conf_path: /etc/named/named.keys.conf
 
 # DNSSEC signing policy for authoritative zones.
-# When at least one zone declares bind9_dnssec_policy,
+# When at least one zone declares dnssec_policy,
 # BIND signs that zone using this policy's algorithm and digest settings.
 bind9_dnssec_policy:
   name: nasa-lab
@@ -68,7 +68,10 @@ bind9_dnssec_policy:
     lifetime: unlimited
 
 # Pre-generated DNSSEC key material for distribution to the primary NS.
-# Each item is a dict with keys: zone, basename, public, private.
+# Each item is a dict with keys: zone, basename, public, private, state.
+# The .state file pins the key's role (KSK + ZSK = CSK) so dnssec-policy's
+# keymgr accepts the pre-distributed key instead of retiring it and minting
+# a fresh one on every restart.
 # Populated from secrets.yml on the control node; the empty default means
 # no keys are distributed when the variable is omitted.
 bind9_dnssec_key_material: []

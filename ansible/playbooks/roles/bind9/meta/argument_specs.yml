@@ -192,5 +192,7 @@ argument_specs:
         required: false
         description: >-
           Pre-generated DNSSEC key material for distribution to the primary NS. Each item is a dict with
-          keys: zone, basename, public, private. Populated from secrets.yml; empty default means no keys
+          keys: zone, basename, public, private, state. The .state file pins the key's role (KSK + ZSK =
+          CSK) so dnssec-policy's keymgr accepts the pre-distributed key instead of retiring it and
+          minting a fresh one on every restart. Populated from secrets.yml; empty default means no keys
           are distributed when omitted.
