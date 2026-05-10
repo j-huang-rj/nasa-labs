@@ -545,6 +545,19 @@
         index_var: idx
         label: "{{ item.name }}"
 
+    # Display DS for public-only zones (those without a private-view
+    # counterpart). Zones present in both views are already displayed by
+    # the private-view OJ submission task above, so we skip them here to
+    # avoid duplicate output.
+    - name: "PHASE [verify : DNSSEC - Display DS Records For Public-Only Zones]"
+      ansible.builtin.debug:
+        msg: "{{ _bind9_verify_ds_extract_public.results[idx].stdout }}"
+      when: item.name not in _bind9_dnssec_unique_zones
+      loop: "{{ _bind9_dnssec_public_zones }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }}"
+
     # --- Cleanup: remove key temp files ---
     - name: "PHASE [verify : Tear Down TSIG / AXFR Keyfiles]"
       ansible.builtin.include_tasks: tsig_teardown.yml
