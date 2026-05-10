@@ -115,7 +115,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md — Enable resolver-mode zone rendering, lab-identity derivation, and runtime trust-anchor delivery for dns-01.
+- [x] 05-01-PLAN.md — Enable resolver-mode zone rendering, lab-identity derivation, and runtime trust-anchor delivery for dns-01.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-02-PLAN.md — Populate dns-01 static-stub and forwarder inventory, then verify recursive resolution, private answers, DNSSEC AD-bit validation, and blocked clients.
