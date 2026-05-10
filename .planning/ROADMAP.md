@@ -118,7 +118,7 @@ Plans:
 - [x] 05-01-PLAN.md — Enable resolver-mode zone rendering, lab-identity derivation, and runtime trust-anchor delivery for dns-01.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05-02-PLAN.md — Populate dns-01 static-stub and forwarder inventory, then verify recursive resolution, private answers, DNSSEC AD-bit validation, and blocked clients.
+- [x] 05-02-PLAN.md — Populate dns-01 static-stub and forwarder inventory, then verify recursive resolution, private answers, DNSSEC AD-bit validation, and blocked clients.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-03-PLAN.md — Add the cross-host grading-readiness playbook for DMZ/Private resolver queries, DS extraction, propagation rechecks, and consecutive-run idempotency.
