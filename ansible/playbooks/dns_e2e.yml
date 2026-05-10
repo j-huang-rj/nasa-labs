@@ -269,6 +269,11 @@
 - name: "E2E Propagation Through Resolver"
   hosts: primary-ns-01
   gather_facts: false
+  # become required: tsig_setup.yml writes a keyfile owned by named (mode 0600)
+  # so DDNS secrets do not appear on the nsupdate command line; chown'ing to
+  # named requires root. tsig_teardown.yml removes that named-owned file at
+  # cleanup, also requiring root.
+  become: true
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
@@ -277,6 +282,14 @@
     - name: "PHASE [e2e-prop : START]"
       ansible.builtin.debug:
         msg: "E2E dynamic4 propagation test through resolver"
+
+    # Render a single-key keyfile so nsupdate gets the DDNS TSIG key in
+    # isolation. Avoids depending on key ordering inside the multi-key
+    # /etc/named/named.keys.conf.
+    - name: "PHASE [e2e-prop : Render Scoped TSIG Keyfile]"
+      ansible.builtin.include_tasks: roles/bind9/tasks/tsig_setup.yml
+      vars:
+        _keyfiles_label_prefix: "E2E - "
 
     - name: "PHASE [e2e-prop : Set Test Address]"
       ansible.builtin.set_fact:
@@ -289,7 +302,7 @@
       block:
         - name: "PHASE [e2e-prop : Create dynamic4 A Record]"
           ansible.builtin.command:
-            cmd: nsupdate -k /etc/named/named.keys.conf
+            cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
               server 172.16.1.53
               zone {{ _e2e_forward_zone }}
@@ -299,7 +312,7 @@
 
         - name: "PHASE [e2e-prop : Add Matching PTR Record]"
           ansible.builtin.command:
-            cmd: nsupdate -k /etc/named/named.keys.conf
+            cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
               server 172.16.1.53
               zone 1.16.172.in-addr.arpa
@@ -319,6 +332,17 @@
           retries: 10
           delay: 1
 
+        - name: "PHASE [e2e-prop : Poll dynamic4 PTR From DMZ Agent Through Resolver]"
+          ansible.builtin.command:
+            cmd: >-
+              dig @{{ _e2e_resolver }} -x {{ _e2e_prop_ip }} +short
+          changed_when: false
+          register: _e2e_prop_dmz_ptr
+          delegate_to: dmz-agent-01
+          until: ('dynamic4.' + _e2e_forward_zone + '.') in _e2e_prop_dmz_ptr.stdout
+          retries: 10
+          delay: 1
+
         # Poll from internal-agent-01 through the resolver
         - name: "PHASE [e2e-prop : Poll dynamic4 A From Private Agent Through Resolver]"
           ansible.builtin.command:
@@ -331,12 +355,23 @@
           retries: 10
           delay: 1
 
+        - name: "PHASE [e2e-prop : Poll dynamic4 PTR From Private Agent Through Resolver]"
+          ansible.builtin.command:
+            cmd: >-
+              dig @{{ _e2e_resolver }} -x {{ _e2e_prop_ip }} +short
+          changed_when: false
+          register: _e2e_prop_internal_ptr
+          delegate_to: internal-agent-01
+          until: ('dynamic4.' + _e2e_forward_zone + '.') in _e2e_prop_internal_ptr.stdout
+          retries: 10
+          delay: 1
+
       always:
         # Safety-net cleanup: always revert dynamic4 and PTR even if poll
         # exhausted retries. `nsupdate update delete` is idempotent.
         - name: "PHASE [e2e-prop : Cleanup - Delete dynamic4 A Record]"
           ansible.builtin.command:
-            cmd: nsupdate -k /etc/named/named.keys.conf
+            cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
               server 172.16.1.53
               zone {{ _e2e_forward_zone }}
@@ -348,6 +383,11 @@
           changed_when: false
           failed_when: false
 
+        - name: "PHASE [e2e-prop : Cleanup - Remove Scoped TSIG Keyfile]"
+          ansible.builtin.include_tasks: roles/bind9/tasks/tsig_teardown.yml
+          vars:
+            _keyfiles_label_prefix: "E2E - "
+
     - name: "PHASE [e2e-prop : END]"
       ansible.builtin.debug:
         msg: "E2E dynamic4 propagation test complete"
@@ -358,49 +398,81 @@
 - name: "E2E DS Extraction"
   hosts: primary-ns-01
   gather_facts: false
+  # become required: tsig_setup.yml writes a keyfile owned by named (mode 0600).
+  become: true
   vars:
-    _e2e_zones:
-      - "{{ bind9_forward_zone_name }}"
-      - "{{ bind9_vpn_child_reverse_zone_name }}"
-      - "0.16.172.in-addr.arpa"
-      - "1.16.172.in-addr.arpa"
+    # Each spec carries `view` so we know whether dig must be AXFR-keyed to
+    # force public-view selection. From primary-ns-01's source IP (172.16.1.53),
+    # bare dig matches !internal_clients in the public-view match-clients and
+    # falls through to private view. The VPN child reverse zone is declared
+    # only in the public view (lab/dns.md:117-120 says private-ns must be
+    # untouchable from outside, so reverse-zone delegation lives public-side).
+    # Forcing public view via `-k {{ _bind9_axfr_keyfile.path }}` matches the
+    # first match-clients clause `key {{ bind9_axfr_key.name }};`.
+    _e2e_zone_specs:
+      - name: "{{ bind9_forward_zone_name }}"
+        view: private
+      - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+        view: public
+      - name: "0.16.172.in-addr.arpa"
+        view: private
+      - name: "1.16.172.in-addr.arpa"
+        view: private
   tasks:
     - name: "PHASE [e2e-ds : START]"
       ansible.builtin.debug:
         msg: "E2E DS record extraction for all signed zones"
 
+    - name: "PHASE [e2e-ds : Render Scoped TSIG Keyfile]"
+      ansible.builtin.include_tasks: roles/bind9/tasks/tsig_setup.yml
+      vars:
+        _keyfiles_label_prefix: "E2E DS - "
+
     - name: "PHASE [e2e-ds : Extract DS Records For Each Zone]"
-      ansible.builtin.shell:
-        cmd: >-
-          set -o pipefail &&
-          dig @172.16.1.53 {{ item }} DNSKEY | dnssec-dsfromkey -f - {{ item }}
-      changed_when: false
-      register: _e2e_ds_extract
-      loop: "{{ _e2e_zones }}"
-      loop_control:
-        label: "{{ item }}"
+      block:
+        - name: "PHASE [e2e-ds : Extract DS Records For Each Zone]"
+          ansible.builtin.shell:
+            # `+noall +answer` suppresses dig sections (status, opt, authority,
+            # additional) so dnssec-dsfromkey only sees DNSKEY answer RRs.
+            # Without this, keyed dig responses include a TSIG meta-RR in the
+            # additional section (class ANY), which dnssec-dsfromkey rejects
+            # with "class 'ANY' != zone class 'IN'".
+            cmd: >-
+              set -o pipefail &&
+              dig @172.16.1.53 {% if item.view == 'public' %}-k {{ _bind9_axfr_keyfile.path }} {% endif %}{{ item.name }} DNSKEY +noall +answer
+              | dnssec-dsfromkey -f - {{ item.name }}
+          changed_when: false
+          register: _e2e_ds_extract
+          loop: "{{ _e2e_zone_specs }}"
+          loop_control:
+            label: "{{ item.name }}"
 
-    - name: "PHASE [e2e-ds : Assert DS Records Contain Algorithm 13 Digest 2]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - "' IN DS ' in _e2e_ds_extract.results[idx].stdout"
-          - "' 13 2 ' in _e2e_ds_extract.results[idx].stdout"
-        fail_msg: >-
-          DS record for {{ item }} does not contain expected algorithm 13 and digest type 2.
-          stdout={{ _e2e_ds_extract.results[idx].stdout | default('') }}
-      loop: "{{ _e2e_zones }}"
-      loop_control:
-        index_var: idx
-        label: "{{ item }}"
+        - name: "PHASE [e2e-ds : Assert DS Records Contain Algorithm 13 Digest 2]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - "' IN DS ' in _e2e_ds_extract.results[idx].stdout"
+              - "' 13 2 ' in _e2e_ds_extract.results[idx].stdout"
+            fail_msg: >-
+              DS record for {{ item.name }} does not contain expected algorithm 13 and digest type 2.
+              stdout={{ _e2e_ds_extract.results[idx].stdout | default('') }}
+          loop: "{{ _e2e_zone_specs }}"
+          loop_control:
+            index_var: idx
+            label: "{{ item.name }}"
 
-    - name: "PHASE [e2e-ds : Display DS Records]"
-      ansible.builtin.debug:
-        msg: "{{ _e2e_ds_extract.results[idx].stdout }}"
-      loop: "{{ _e2e_zones }}"
-      loop_control:
-        index_var: idx
-        label: "{{ item }}"
+        - name: "PHASE [e2e-ds : Display DS Records]"
+          ansible.builtin.debug:
+            msg: "{{ _e2e_ds_extract.results[idx].stdout }}"
+          loop: "{{ _e2e_zone_specs }}"
+          loop_control:
+            index_var: idx
+            label: "{{ item.name }}"
+      always:
+        - name: "PHASE [e2e-ds : Cleanup - Remove Scoped TSIG Keyfile]"
+          ansible.builtin.include_tasks: roles/bind9/tasks/tsig_teardown.yml
+          vars:
+            _keyfiles_label_prefix: "E2E DS - "
 
     - name: "PHASE [e2e-ds : END]"
       ansible.builtin.debug:

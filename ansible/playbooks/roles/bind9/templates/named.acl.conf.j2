@@ -2,6 +2,3 @@
 
 acl "dmz_clients"      { {{ bind9_dmz_cidr }}; };
 acl "internal_clients" { {{ bind9_internal_cidr }}; };
-{% if bind9_vpn_network_cidr is defined %}
-acl "vpn_clients"      { {{ bind9_vpn_network_cidr }}; };
-{% endif %}

@@ -49,6 +49,12 @@ bind9_mode: authoritative_secondary
 bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.0.53
+  # WireGuard address: secondary serves the public view to the VPN
+  # subnet (192.168.255.x) — the spec at lab/dns.md:117-120 makes the
+  # secondary the public-facing NS, and the public glue at primary-ns-01
+  # advertises this host's WG IP. Without binding here, named accepts
+  # the VPN-side query in named.conf but no socket actually listens.
+  - "{{ wireguard_address.split('/')[0] }}"
 
 # View policy: mirror the primary's split-view structure
 bind9_views:
