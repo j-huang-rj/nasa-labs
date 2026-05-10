@@ -62,6 +62,7 @@
     mode: "0640"
     setype: "named_conf_t"
   notify: "PHASE [handler : Restart named]"
+  no_log: true
 
 - name: "PHASE [config : Render Zones Conf]"
   ansible.builtin.template:
@@ -203,6 +204,24 @@
     label: "{{ item.zone }} .key"
   failed_when: false
   register: _bind9_dnssec_existing_public
+  no_log: true
+
+- name: "PHASE [config : Validate Public Key Slurp Failures Are ENOENT-Only]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_bind9_dnssec_existing_public.results
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | rejectattr('msg', 'search', '(?i)not found|no such file|does not exist|could not stat')
+         | list | length) == 0
+    fail_msg: >-
+      Slurp of DNSSEC public key files reported a non-ENOENT failure (e.g. permission denied,
+      read error). Investigate before proceeding so real host-state issues are not masked.
 
 - name: "PHASE [config : Distribute DNSSEC Public Key Files]"
   when:
@@ -223,6 +242,7 @@
     label: "{{ item.zone }} .key"
     index_var: _idx
   notify: "PHASE [handler : Restart named]"
+  no_log: true
 
 - name: "PHASE [config : Slurp Existing DNSSEC Private Key Files]"
   when:
@@ -235,6 +255,24 @@
     label: "{{ item.zone }} .private"
   failed_when: false
   register: _bind9_dnssec_existing_private
+  no_log: true
+
+- name: "PHASE [config : Validate Private Key Slurp Failures Are ENOENT-Only]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_bind9_dnssec_existing_private.results
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | rejectattr('msg', 'search', '(?i)not found|no such file|does not exist|could not stat')
+         | list | length) == 0
+    fail_msg: >-
+      Slurp of DNSSEC private key files reported a non-ENOENT failure (e.g. permission denied,
+      read error). Investigate before proceeding so real host-state issues are not masked.
 
 - name: "PHASE [config : Distribute DNSSEC Private Key Files]"
   when:
@@ -255,6 +293,7 @@
     label: "{{ item.zone }} .private"
     index_var: _idx
   notify: "PHASE [handler : Restart named]"
+  no_log: true
 
 # `.state` sidecar files record per-key role (KSK/ZSK/CSK) and lifecycle
 # timestamps. dnssec-policy's keymgr consults these on startup; if absent,
@@ -273,6 +312,24 @@
     label: "{{ item.zone }} .state"
   failed_when: false
   register: _bind9_dnssec_existing_state
+  no_log: true
+
+- name: "PHASE [config : Validate Key State Slurp Failures Are ENOENT-Only]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_bind9_dnssec_existing_state.results
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | rejectattr('msg', 'search', '(?i)not found|no such file|does not exist|could not stat')
+         | list | length) == 0
+    fail_msg: >-
+      Slurp of DNSSEC key state files reported a non-ENOENT failure (e.g. permission denied,
+      read error). Investigate before proceeding so real host-state issues are not masked.
 
 - name: "PHASE [config : Distribute DNSSEC Key State Files]"
   when:
@@ -293,6 +350,7 @@
     label: "{{ item.zone }} .state"
     index_var: _idx
   notify: "PHASE [handler : Restart named]"
+  no_log: true
 
 - name: "PHASE [config : Read Current Zone State]"
   when: bind9_mode == 'authoritative_primary'

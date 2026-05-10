@@ -717,6 +717,17 @@
           until: "_bind9_prop_test_ip in _bind9_verify_prop_poll.stdout"
           retries: 10
           delay: 1
+
+        - name: "PHASE [verify : Propagation - Poll Secondary Until Reverse PTR Appears]"
+          ansible.builtin.command:
+            cmd: >-
+              dig -b 172.16.0.53 @172.16.0.53
+              -x {{ _bind9_prop_test_ip }} +short
+          changed_when: false
+          register: _bind9_verify_prop_poll_ptr
+          until: ('dynamic2.' + bind9_forward_zone_name + '.') in _bind9_verify_prop_poll_ptr.stdout
+          retries: 10
+          delay: 1
       always:
         # Safety-net cleanup: the previous shape ran two delete tasks at
         # the end of the block; if poll exhausted retries those deletes
@@ -789,11 +800,18 @@
 
     # --- DNSSEC verification on the secondary: confirm that signed data
     #     transferred via AXFR includes DNSKEY and RRSIG material, proving
-    #     the external publication path carries DNSSEC records. ---
-    - name: "PHASE [verify : Secondary - Via Private View DNSKEY +dnssec For Forward Zone]"
+    #     the external publication path carries DNSSEC records. The dig is
+    #     keyed with bind9_axfr_key so the secondary's public-view
+    #     match-clients selects the public view (the public view's
+    #     `key {{ bind9_axfr_key.name }};` clause matches before the
+    #     IP-based exclusions); without the key this query lands in the
+    #     private view and would not exercise the externally-published
+    #     DNSKEY/RRSIG path. ---
+    - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For Forward Zone]"
       ansible.builtin.command:
         cmd: >-
-          dig @172.16.0.53 {{ bind9_forward_zone_name }} DNSKEY +dnssec
+          dig @172.16.0.53 -k {{ _bind9_axfr_keyfile.path }}
+          {{ bind9_forward_zone_name }} DNSKEY +dnssec
       changed_when: false
       register: _bind9_verify_secondary_dnskey_fwd
 

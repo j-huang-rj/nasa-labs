@@ -200,6 +200,46 @@
       Used for public-view AXFR connection discrimination and DNSSEC verification.
       Ensure host_vars/*/secrets.yml provides the AXFR key.
 
+- name: "PHASE [assert : Check Derived Identity Facts Are Defined For Non-Resolver Modes]"
+  when: bind9_mode != 'resolver'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_forward_zone_name is defined
+      - bind9_forward_zone_name | length > 0
+      - bind9_vpn_child_reverse_zone_name is defined
+      - bind9_vpn_child_reverse_zone_name | length > 0
+    fail_msg: >-
+      bind9_forward_zone_name and bind9_vpn_child_reverse_zone_name must be defined for
+      authoritative modes. These facts are normally derived by dns_configure.yml pre_tasks
+      from wireguard_address; ensure that pre_tasks block has run before invoking this role.
+
+- name: "PHASE [assert : Check Primary Identity Facts Are Defined For authoritative_primary]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_primary_mname is defined
+      - bind9_primary_mname | length > 0
+      - bind9_soa_serial_date is defined
+      - bind9_soa_serial_date | length > 0
+    fail_msg: >-
+      bind9_primary_mname and bind9_soa_serial_date must be defined for authoritative_primary
+      mode. These facts are normally derived by dns_configure.yml pre_tasks; ensure that block
+      has run before invoking this role.
+
+- name: "PHASE [assert : Check bind9_dnssec_key_material Is Populated For authoritative_primary]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_dnssec_key_material is defined
+      - bind9_dnssec_key_material | length > 0
+    fail_msg: >-
+      bind9_dnssec_key_material must be a non-empty list on the primary NS so DS records
+      remain stable across reboots/restarts. Ensure host_vars/primary-ns-01/secrets.yml
+      provides the pre-generated key material.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:

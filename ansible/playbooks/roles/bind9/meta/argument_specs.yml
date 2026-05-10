@@ -167,8 +167,9 @@ argument_specs:
         required: false
         description: >-
           Absolute path where the rendered named.keys.conf file is placed on the target host.
-          Included from named.conf before the zone definitions section so key definitions are
-          available to update-policy and allow-transfer directives.
+          Included from named.conf in authoritative modes. BIND parses the full configuration
+          before resolving symbols, so include order does not affect update-policy or
+          allow-transfer key references.
 
       bind9_forwarders:
         type: list

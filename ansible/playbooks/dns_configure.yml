@@ -38,12 +38,9 @@
             _bind9_wg_octets: "{{ _bind9_source_wg_address.split('/')[0].split('.') }}"
             _bind9_wg_prefix: "{{ _bind9_source_wg_address.split('/')[1] | default('28') }}"
 
-        - name: "PRE [dns : Compute bind9_vpn_network_base And CIDR]"
+        - name: "PRE [dns : Compute bind9_vpn_network_base And Lab ID]"
           ansible.builtin.set_fact:
             bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 }}"
-            bind9_vpn_network_cidr: >-
-              {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (_bind9_wg_octets[3] | int //
-              16) * 16 }}/{{ _bind9_wg_prefix }}
             bind9_derived_lab_id: >-
               {{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}
 
@@ -59,7 +56,6 @@
               {{ _bind9_wg_octets[0] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[2] }}.{{ (bind9_vpn_network_base |
               int) + bind9_vpn_ns_offset }}
             bind9_forward_zone_name: "{{ bind9_derived_lab_id }}.nasa"
-            bind9_vpn_parent_reverse_zone_name: "{{ _bind9_wg_octets[2] }}.{{ _bind9_wg_octets[1] }}.{{ _bind9_wg_octets[0] }}.in-addr.arpa"
             bind9_vpn_child_reverse_zone_name: >-
               {{ bind9_derived_lab_id }}-sub{{ _bind9_wg_prefix }}.{{ _bind9_wg_octets[2] }}.{{ _bind9_wg_octets[1] }}.{{
               _bind9_wg_octets[0] }}.in-addr.arpa
