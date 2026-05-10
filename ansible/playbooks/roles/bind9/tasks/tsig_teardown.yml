@@ -1,6 +1,6 @@
 ---
 # Shared keyfile cleanup for verify.yml's primary and secondary blocks.
-# Removes the tempfiles created by _verify_keyfiles_setup.yml.
+# Removes the tempfiles created by tsig_setup.yml.
 #
 # Caller must pass `_keyfiles_label_prefix` (string, e.g. "" or "Secondary").
 #
