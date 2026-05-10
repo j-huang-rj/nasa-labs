@@ -342,7 +342,32 @@
           stdout={{ _bind9_verify_axfr_reject.stdout | default('') }}
 
     # --- DNSSEC verification: confirm that all signed zones emit DNSKEY
-    #     and RRSIG records, and extract DS records. ---
+    #     and RRSIG records, and extract DS records. Per-view zone lists
+    #     are computed once here and reused below.
+    #     `_bind9_dnssec_unique_zones` covers zones reachable via the
+    #     unkeyed private-source path (private-view names). Public-only
+    #     zones (e.g. `14-sub28...`) live only in the keyed public path
+    #     and are extracted separately. ---
+    - name: "PHASE [verify : DNSSEC - Build Signed Zone Lists]"
+      ansible.builtin.set_fact:
+        _bind9_dnssec_private_zones: >-
+          {{ bind9_zones
+             | selectattr('dnssec_policy', 'defined')
+             | selectattr('view', 'equalto', 'private')
+             | list }}
+        _bind9_dnssec_public_zones: >-
+          {{ bind9_zones
+             | selectattr('dnssec_policy', 'defined')
+             | selectattr('view', 'equalto', 'public')
+             | list }}
+        _bind9_dnssec_unique_zones: >-
+          {{ bind9_zones
+             | selectattr('dnssec_policy', 'defined')
+             | selectattr('view', 'equalto', 'private')
+             | map(attribute='name')
+             | unique
+             | list }}
+
     - name: "PHASE [verify : DNSSEC - Query DNSKEY For Each Signed Zone]"
       ansible.builtin.command:
         cmd: >-
@@ -350,62 +375,30 @@
           {{ item.name }} DNSKEY +dnssec
       changed_when: false
       register: _bind9_verify_dnskey
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
+      loop: "{{ _bind9_dnssec_private_zones }}"
       loop_control:
         label: "{{ item.name }} ({{ item.view }})"
 
-    - name: "PHASE [verify : Assert DNSKEY Present In All Signed Zones]"
+    - name: "PHASE [verify : Assert DNSKEY, RRSIG, And Algorithm 13 In Signed Zones]"
       ansible.builtin.assert:
         quiet: true
         that:
           - >-
             _bind9_verify_dnskey.results[idx].stdout
               is regex('(?m)^[^;].*\sIN\s+DNSKEY\s')
-        fail_msg: >-
-          DNSKEY answer record not found for {{ item.name }} ({{ item.view }} view).
-          stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
-      loop_control:
-        index_var: idx
-        label: "{{ item.name }} ({{ item.view }})"
-
-    - name: "PHASE [verify : Assert RRSIG Present In All Signed Zones]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
           - "'RRSIG' in _bind9_verify_dnskey.results[idx].stdout"
-        fail_msg: >-
-          RRSIG record not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
-          stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
-      loop_control:
-        index_var: idx
-        label: "{{ item.name }} ({{ item.view }})"
-
-    - name: "PHASE [verify : Assert Algorithm 13 In All Signed Zones]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
           - "' 13 ' in _bind9_verify_dnskey.results[idx].stdout"
         fail_msg: >-
-          Algorithm 13 (ECDSAP256SHA256) not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
+          DNSSEC verification failed for {{ item.name }} ({{ item.view }} view).
+          Expected DNSKEY answer, RRSIG, and algorithm 13 (ECDSAP256SHA256).
           stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
+      loop: "{{ _bind9_dnssec_private_zones }}"
       loop_control:
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
 
-    # --- DS record extraction ---
-    - name: "PHASE [verify : Build List Of Unique Zone Names For DS Extraction]"
-      ansible.builtin.set_fact:
-        _bind9_dnssec_unique_zones: >-
-          {{ bind9_zones
-             | selectattr('view', 'equalto', 'private')
-             | selectattr('dnssec_policy', 'defined')
-             | map(attribute='name')
-             | unique
-             | list }}
-
+    # --- DS record extraction: dedup by zone name (some zones live in
+    #     both views and yield the same DS) so we don't display twice. ---
     - name: "PHASE [verify : DNSSEC - Extract DS Records For Each Zone]"
       ansible.builtin.shell:
         cmd: >-
@@ -440,11 +433,11 @@
         index_var: idx
         label: "{{ item }}"
 
-    # --- Public-view DNSSEC verification: confirm that public-view signed
-    #     zones also emit DNSKEY and RRSIG records, and verify algorithm 13.
-    #     These queries must use the AXFR TSIG key to match the public view
-    #     (queried from the private source IP, which would otherwise be
-    #     routed to the private view and get REFUSED for public-only zones). ---
+    # --- Public-view DNSSEC verification: confirms public-view signed zones
+    #     also emit DNSKEY/RRSIG/algorithm 13. Queries must use the AXFR TSIG
+    #     key to match the public view (queried from the private source IP,
+    #     which would otherwise route to the private view and REFUSE
+    #     public-only zones). ---
     - name: "PHASE [verify : DNSSEC - Query DNSKEY For Public-View Signed Zones]"
       ansible.builtin.command:
         cmd: >-
@@ -453,38 +446,32 @@
           {{ item.name }} DNSKEY +dnssec
       changed_when: false
       register: _bind9_verify_dnskey_public
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | list }}"
+      loop: "{{ _bind9_dnssec_public_zones }}"
       loop_control:
         label: "{{ item.name }} ({{ item.view }})"
 
-    - name: "PHASE [verify : Assert Public DNSKEY And RRSIG Present]"
+    - name: "PHASE [verify : Assert Public DNSKEY, RRSIG, And Algorithm 13]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'DNSKEY' in _bind9_verify_dnskey_public.results[idx].stdout"
+          - >-
+            _bind9_verify_dnskey_public.results[idx].stdout
+              is regex('(?m)^[^;].*\sIN\s+DNSKEY\s')
           - "'RRSIG' in _bind9_verify_dnskey_public.results[idx].stdout"
-        fail_msg: >-
-          Public-view DNSSEC verification failed for {{ item.name }}.
-          DNSKEY or RRSIG not found in DNSKEY response.
-          stdout={{ _bind9_verify_dnskey_public.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | list }}"
-      loop_control:
-        index_var: idx
-        label: "{{ item.name }} ({{ item.view }})"
-
-    - name: "PHASE [verify : Assert Public Algorithm 13 In Public-View Signed Zones]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
           - "' 13 ' in _bind9_verify_dnskey_public.results[idx].stdout"
         fail_msg: >-
-          Algorithm 13 (ECDSAP256SHA256) not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
+          Public-view DNSSEC verification failed for {{ item.name }}.
+          Expected DNSKEY answer, RRSIG, and algorithm 13 (ECDSAP256SHA256).
           stdout={{ _bind9_verify_dnskey_public.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | list }}"
+      loop: "{{ _bind9_dnssec_public_zones }}"
       loop_control:
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
 
+    # --- Public-view DS extraction: cross-checks that the DS computed via
+    #     the keyed/public path equals the one extracted via the private path
+    #     above. They share the same CSK so the values must match; this
+    #     guards against accidental view-divergent signing. ---
     - name: "PHASE [verify : DNSSEC - Extract DS Records For Public-View Zones]"
       ansible.builtin.shell:
         # `+noall +answer` restricts output to ANSWER-section records only.
@@ -497,34 +484,39 @@
           dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
           -k {{ _bind9_axfr_keyfile.path }}
           +noall +answer
-          {{ item }} DNSKEY | dnssec-dsfromkey -f - {{ item }}
+          {{ item.name }} DNSKEY | dnssec-dsfromkey -f - {{ item.name }}
       changed_when: false
       register: _bind9_verify_ds_extract_public
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | map(attribute='name') | unique | list }}"
+      loop: "{{ _bind9_dnssec_public_zones }}"
       loop_control:
-        label: "{{ item }}"
+        label: "{{ item.name }}"
 
-    - name: "PHASE [verify : Assert Public DS Records Contain Algorithm 13 Digest 2]"
+    - name: "PHASE [verify : Assert Public DS Matches Private DS For Same Zone]"
       ansible.builtin.assert:
         quiet: true
         that:
           - "' IN DS ' in _bind9_verify_ds_extract_public.results[idx].stdout"
           - "' 13 2 ' in _bind9_verify_ds_extract_public.results[idx].stdout"
+          # Cross-view consistency: when a zone exists in both views, the
+          # same CSK signs both copies, so DS lines extracted via the keyed
+          # public path must be a subset of the DS lines extracted via the
+          # private path. Public-only zones (no private counterpart) skip
+          # the cross-view check.
+          - >-
+            item.name not in _bind9_dnssec_unique_zones
+            or _bind9_verify_ds_extract_public.results[idx].stdout.strip()
+               in _bind9_verify_ds_extract.results[
+                    _bind9_dnssec_unique_zones.index(item.name)
+                  ].stdout
         fail_msg: >-
-          Public-view DS record for {{ item }} does not contain expected algorithm 13 and digest type 2.
-          stdout={{ _bind9_verify_ds_extract_public.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | map(attribute='name') | unique | list }}"
+          Public DS for {{ item.name }} either lacks algo 13 / digest 2 or
+          diverges from the private-view DS (different keys signing the same
+          zone in different views?).
+          public_stdout={{ _bind9_verify_ds_extract_public.results[idx].stdout | default('') }}
+      loop: "{{ _bind9_dnssec_public_zones }}"
       loop_control:
         index_var: idx
-        label: "{{ item }}"
-
-    - name: "PHASE [verify : DNSSEC - Display Public-View DS Records For OJ Submission]"
-      ansible.builtin.debug:
-        msg: "{{ _bind9_verify_ds_extract_public.results[idx].stdout }}"
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'public') | map(attribute='name') | unique | list }}"
-      loop_control:
-        index_var: idx
-        label: "{{ item }}"
+        label: "{{ item.name }}"
 
     # --- Cleanup: remove key temp files ---
     - name: "PHASE [verify : Remove TSIG Key Temp File]"
