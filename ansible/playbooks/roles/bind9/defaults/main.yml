@@ -63,8 +63,6 @@ bind9_keys_conf_path: /etc/named/named.keys.conf
 bind9_dnssec_policy:
   name: nasa-lab
   key_directory: /etc/named/keys
-  cds_digest_types:
-    - SHA-256
   csk:
     algorithm: ECDSAP256SHA256
     lifetime: unlimited

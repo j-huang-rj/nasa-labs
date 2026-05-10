@@ -51,6 +51,12 @@ options {
 
     // ---- DNSSEC ----
     dnssec-validation yes;
+{% if bind9_mode == 'authoritative_primary' and bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0 %}
+
+    // DNSSEC key storage directory (BIND 9.18 requires key-directory in options,
+    // not inside dnssec-policy)
+    key-directory "{{ bind9_dnssec_policy.key_directory }}";
+{% endif %}
 
     // Apply the RHEL's crypto policy
     include "/etc/crypto-policies/back-ends/bind.config";
@@ -58,11 +64,11 @@ options {
 {% if bind9_mode == 'authoritative_primary' and bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0 %}
 
 // DNSSEC signing policy — algorithm and digest are fixed per AUTH-09.
+// NOTE: cds-digest-types is not supported in BIND 9.18 (added in 9.20+).
+// The CDS/CDNSKEY digest type defaults to SHA-256 in BIND 9.18.
 dnssec-policy "{{ bind9_dnssec_policy.name }}" {
-    cds-digest-types { {{ bind9_dnssec_policy.cds_digest_types | join('; ') }}; };
     keys {
         csk lifetime {{ bind9_dnssec_policy.csk.lifetime }} algorithm {{ bind9_dnssec_policy.csk.algorithm }};
     };
-    key-directory "{{ bind9_dnssec_policy.key_directory }}";
 };
 {% endif %}
