@@ -124,10 +124,52 @@
   ansible.builtin.file:
     path: "{{ bind9_dnssec_policy.key_directory }}"
     state: directory
-    owner: root
+    # named user must own the directory: BIND 9.18 dnssec-policy keymgr
+    # writes/updates `.state` sidecar files alongside the distributed
+    # `.key`/`.private` material. Without write access keymgr fails with
+    # "error occurred writing key to disk" and zones never publish DNSKEY/RRSIG.
+    owner: named
     group: named
     mode: "0750"
-    setype: "named_conf_t"
+    # named_zone_t (read-write zone data) rather than named_conf_t (read-only).
+    setype: "named_zone_t"
+
+# Enumerate key-directory contents so we can prune stale `K*` material
+# (old keyids, retired-policy keys, hand-written test files) that would
+# otherwise confuse keymgr when it scans the directory at startup.
+- name: "PHASE [config : List Existing DNSSEC Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.find:
+    paths: "{{ bind9_dnssec_policy.key_directory }}"
+    patterns:
+      - "K*.key"
+      - "K*.private"
+      - "K*.state"
+    file_type: file
+  register: _bind9_dnssec_existing_keys
+
+- name: "PHASE [config : Remove Orphaned DNSSEC Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+    - item.path | basename not in _bind9_expected_key_filenames
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _bind9_dnssec_existing_keys.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  vars:
+    _bind9_expected_key_filenames: >-
+      {{ bind9_dnssec_key_material
+         | map(attribute='basename')
+         | map('regex_replace', '$', '')
+         | product(['.key', '.private', '.state'])
+         | map('join')
+         | list }}
+  notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Distribute DNSSEC Public Key Files]"
   when:
@@ -136,10 +178,10 @@
   ansible.builtin.copy:
     content: "{{ item.public }}"
     dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.key"
-    owner: root
+    owner: named
     group: named
     mode: "0640"
-    setype: "named_conf_t"
+    setype: "named_zone_t"
   loop: "{{ bind9_dnssec_key_material }}"
   loop_control:
     label: "{{ item.zone }} .key"
@@ -152,13 +194,35 @@
   ansible.builtin.copy:
     content: "{{ item.private }}"
     dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.private"
-    owner: root
+    owner: named
     group: named
     mode: "0640"
-    setype: "named_conf_t"
+    setype: "named_zone_t"
   loop: "{{ bind9_dnssec_key_material }}"
   loop_control:
     label: "{{ item.zone }} .private"
+  notify: "PHASE [handler : Restart named]"
+
+# `.state` sidecar files record per-key role (KSK/ZSK/CSK) and lifecycle
+# timestamps. dnssec-policy's keymgr consults these on startup; if absent,
+# keymgr infers role from the DNSKEY flag bit alone, which for our keys would
+# be misclassified as pure KSK and trigger an unwanted ZSK rollover.
+# Distributing the .state alongside .key/.private gives keymgr the canonical
+# CSK record and locks the key in place.
+- name: "PHASE [config : Distribute DNSSEC Key State Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.copy:
+    content: "{{ item.state }}"
+    dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.state"
+    owner: named
+    group: named
+    mode: "0640"
+    setype: "named_zone_t"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .state"
   notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Read Current Zone State]"
