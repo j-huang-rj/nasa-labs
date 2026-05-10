@@ -81,11 +81,17 @@
           ansible.builtin.command: dig @192.168.255.1 nasa. DNSKEY +noall +answer
           register: _bind9_nasa_dnskey
           changed_when: false
+          until: _bind9_nasa_dnskey.rc == 0 and _bind9_nasa_dnskey.stdout | length > 0
+          retries: 3
+          delay: 2
 
         - name: "PRE [dns : Query 168.192.in-addr.arpa. DNSKEY from Course Root]"
           ansible.builtin.command: dig @192.168.255.1 168.192.in-addr.arpa. DNSKEY +noall +answer
           register: _bind9_reverse_dnskey
           changed_when: false
+          until: _bind9_reverse_dnskey.rc == 0 and _bind9_reverse_dnskey.stdout | length > 0
+          retries: 3
+          delay: 2
 
         - name: "PRE [dns : Fail If No nasa. KSK Records Found]"
           ansible.builtin.fail:

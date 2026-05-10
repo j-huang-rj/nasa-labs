@@ -977,7 +977,7 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'ad' in _bind9_verify_resolver_fwd_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ad' in (_bind9_verify_resolver_fwd_ad.stdout | regex_search('flags:[^\\n]*') | default('') | split())"
           - "'ANSWER: 0' not in _bind9_verify_resolver_fwd_ad.stdout"
         fail_msg: >-
           Resolver forward zone SOA response missing AD flag or has empty answer.
@@ -995,7 +995,7 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'ad' in _bind9_verify_resolver_vpn_rev_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ad' in (_bind9_verify_resolver_vpn_rev_ad.stdout | regex_search('flags:[^\\n]*') | default('') | split())"
           - "'ANSWER: 0' not in _bind9_verify_resolver_vpn_rev_ad.stdout"
         fail_msg: >-
           Resolver VPN child reverse zone SOA response missing AD flag or has empty answer.
