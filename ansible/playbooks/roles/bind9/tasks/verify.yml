@@ -283,7 +283,7 @@
           {{ item.name }} DNSKEY +dnssec
       changed_when: false
       register: _bind9_verify_dnskey
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
       loop_control:
         label: "{{ item.name }} ({{ item.view }})"
 
@@ -295,7 +295,7 @@
         fail_msg: >-
           DNSKEY record not found for {{ item.name }} ({{ item.view }} view).
           stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
       loop_control:
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
@@ -308,7 +308,7 @@
         fail_msg: >-
           RRSIG record not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
           stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
       loop_control:
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
@@ -321,7 +321,7 @@
         fail_msg: >-
           Algorithm 13 (ECDSAP256SHA256) not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
           stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
-      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
       loop_control:
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
@@ -332,7 +332,12 @@
     - name: "PHASE [verify : Build List Of Unique Zone Names For DS Extraction]"
       ansible.builtin.set_fact:
         _bind9_dnssec_unique_zones: >-
-          {{ bind9_dnssec_key_material | map(attribute='zone') | list }}
+          {{ bind9_zones
+             | selectattr('view', 'equalto', 'private')
+             | selectattr('dnssec_policy', 'defined')
+             | map(attribute='name')
+             | unique
+             | list }}
 
     - name: "PHASE [verify : DNSSEC - Extract DS Records For Each Zone]"
       ansible.builtin.shell:
