@@ -961,7 +961,7 @@
 
     # --- RES-05: DNSSEC AD-bit validation. The resolver must set the AD
     #     flag on answers for signed zones when DNSSEC validation succeeds.
-    #     Course-root trust anchors (fetched in dns.yml pre_tasks) enable
+    #     Course-root trust anchors (fetched in dns_configure.yml pre_tasks) enable
     #     validation for nasa. and 168.192.in-addr.arpa.; the lab-zone
     #     CSK chains back through the course root via DS records.
     #     The +dnssec flag forces EDNS with DO bit so the resolver

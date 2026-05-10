@@ -1,7 +1,7 @@
 ---
 # Cross-host grading-readiness playbook for the resolver, authoritative
 # DNSSEC artifacts, dynamic-update propagation, and full-stack idempotency.
-# Imports dns.yml first to converge all DNS hosts, then exercises the
+# Imports dns_configure.yml first to converge all DNS hosts, then exercises the
 # resolver from real client perspectives, rechecks propagation and DS
 # extraction, and enforces consecutive-run idempotency.
 #
@@ -10,7 +10,7 @@
 #   - WireGuard up on secondary-ns-01 / router-01
 
 - name: DNS Services
-  ansible.builtin.import_playbook: dns.yml
+  ansible.builtin.import_playbook: dns_configure.yml
 
 # ──────────────────────────────────────────────────────────
 # E2E: DMZ Agent — resolver queries through dns-01
@@ -447,10 +447,10 @@
       ansible.builtin.debug:
         msg: "E2E consecutive-run idempotency check"
 
-    - name: "PHASE [e2e-idempotency : Re-run dns.yml]"
+    - name: "PHASE [e2e-idempotency : Re-run dns_configure.yml]"
       ansible.builtin.command:
         cmd: >-
-          ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/dns.yml
+          ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/dns_configure.yml
       args:
         chdir: "{{ playbook_dir | dirname | dirname }}"
       environment:
@@ -472,7 +472,7 @@
             _e2e_idempotency_run.stdout is regex(
               'dns-01\s*:\s*ok=.*changed=0.*failed=0')
         fail_msg: >-
-          Idempotency check failed — dns.yml rerun reported changes or failures.
+          Idempotency check failed — dns_configure.yml rerun reported changes or failures.
           Verify the output above for changed>0 or failed>0 on DNS hosts.
           stdout={{ _e2e_idempotency_run.stdout | default('') }}
 
