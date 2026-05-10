@@ -1,6 +1,5 @@
 ---
 - name: "PHASE [verify : START]"
-  become: false
   ansible.builtin.debug:
     msg: "Verify bind9 configuration and service state"
 
@@ -80,43 +79,10 @@
         _bind9_private_source: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
 
     # --- Temp key files: avoid exposing secrets on the command line ---
-    - name: "PHASE [verify : Create TSIG Key Temp File]"
-      ansible.builtin.tempfile:
-        state: file
-        suffix: ".key"
-      register: _bind9_tsig_keyfile
-
-    - name: "PHASE [verify : Write TSIG Key To Temp File]"
-      ansible.builtin.copy:
-        dest: "{{ _bind9_tsig_keyfile.path }}"
-        content: |
-          key "{{ bind9_tsig_key.name }}" {
-                  algorithm {{ bind9_tsig_key.algorithm }};
-                  secret "{{ bind9_tsig_key.secret }}";
-          };
-        owner: named
-        group: named
-        mode: "0600"
-      no_log: true
-
-    - name: "PHASE [verify : Create AXFR Key Temp File]"
-      ansible.builtin.tempfile:
-        state: file
-        suffix: ".key"
-      register: _bind9_axfr_keyfile
-
-    - name: "PHASE [verify : Write AXFR Key To Temp File]"
-      ansible.builtin.copy:
-        dest: "{{ _bind9_axfr_keyfile.path }}"
-        content: |
-          key "{{ bind9_axfr_key.name }}" {
-                  algorithm {{ bind9_axfr_key.algorithm }};
-                  secret "{{ bind9_axfr_key.secret }}";
-          };
-        owner: named
-        group: named
-        mode: "0600"
-      no_log: true
+    - name: "PHASE [verify : Set Up TSIG / AXFR Keyfiles]"
+      ansible.builtin.include_tasks: _verify_keyfiles_setup.yml
+      vars:
+        _keyfiles_label_prefix: ""
 
     - name: "PHASE [verify : Build Private Forward A Lookup Matrix]"
       ansible.builtin.set_fact:
@@ -553,60 +519,21 @@
         label: "{{ item.name }}"
 
     # --- Cleanup: remove key temp files ---
-    - name: "PHASE [verify : Remove TSIG Key Temp File]"
-      ansible.builtin.file:
-        path: "{{ _bind9_tsig_keyfile.path }}"
-        state: absent
-      when: _bind9_tsig_keyfile.path is defined
-
-    - name: "PHASE [verify : Remove AXFR Key Temp File]"
-      ansible.builtin.file:
-        path: "{{ _bind9_axfr_keyfile.path }}"
-        state: absent
-      when: _bind9_axfr_keyfile.path is defined
+    - name: "PHASE [verify : Tear Down TSIG / AXFR Keyfiles]"
+      ansible.builtin.include_tasks: _verify_keyfiles_cleanup.yml
+      vars:
+        _keyfiles_label_prefix: ""
 
   # --- Authoritative secondary: zone transfer verification ---
 - name: "PHASE [verify : Authoritative Secondary Verification]"
   when: bind9_mode == 'authoritative_secondary'
   block:
     # --- Temp key files: avoid exposing secrets on the command line ---
-    - name: "PHASE [verify : Secondary - Create TSIG Key Temp File]"
-      ansible.builtin.tempfile:
-        state: file
-        suffix: ".key"
-      register: _bind9_tsig_keyfile
+    - name: "PHASE [verify : Secondary - Set Up TSIG / AXFR Keyfiles]"
+      ansible.builtin.include_tasks: _verify_keyfiles_setup.yml
+      vars:
+        _keyfiles_label_prefix: "Secondary - "
 
-    - name: "PHASE [verify : Secondary - Write TSIG Key To Temp File]"
-      ansible.builtin.copy:
-        dest: "{{ _bind9_tsig_keyfile.path }}"
-        content: |
-          key "{{ bind9_tsig_key.name }}" {
-                  algorithm {{ bind9_tsig_key.algorithm }};
-                  secret "{{ bind9_tsig_key.secret }}";
-          };
-        owner: named
-        group: named
-        mode: "0600"
-      no_log: true
-
-    - name: "PHASE [verify : Secondary - Create AXFR Key Temp File]"
-      ansible.builtin.tempfile:
-        state: file
-        suffix: ".key"
-      register: _bind9_axfr_keyfile
-
-    - name: "PHASE [verify : Secondary - Write AXFR Key To Temp File]"
-      ansible.builtin.copy:
-        dest: "{{ _bind9_axfr_keyfile.path }}"
-        content: |
-          key "{{ bind9_axfr_key.name }}" {
-                  algorithm {{ bind9_axfr_key.algorithm }};
-                  secret "{{ bind9_axfr_key.secret }}";
-          };
-        owner: named
-        group: named
-        mode: "0600"
-      no_log: true
 
     - name: "PHASE [verify : Secondary - Check Slave Zone Directory Exists]"
       ansible.builtin.stat:
@@ -645,26 +572,33 @@
           ns.{{ bind9_forward_zone_name }}.
           stdout={{ _bind9_verify_secondary_private_fwd.stdout | default('') }}
 
-    - name: "PHASE [verify : Secondary - Forward A Lookup Via Private View]"
+    # Same answer queried with the kernel's default source binding (no -b)
+    # rather than the explicit 172.16.0.53 above. Both land in secondary's
+    # DMZ-side private view (source 172.16.0.53 is in dmz_clients, no TSIG
+    # presented, so public view's `!dmz_clients` rejects and we fall
+    # through to private). Documents the implicit-source path; '172.16'
+    # substring match covers either DMZ or VPN-side answer in case the
+    # default source ever binds differently.
+    - name: "PHASE [verify : Secondary - Default-Source Forward A Lookup (DMZ Private View)]"
       ansible.builtin.command:
         cmd: >-
           dig @172.16.0.53
           ns.{{ bind9_forward_zone_name }} A +noall +answer
       changed_when: false
-      register: _bind9_verify_secondary_public_fwd
-      until: "'172.16' in _bind9_verify_secondary_public_fwd.stdout"
+      register: _bind9_verify_secondary_default_src_fwd
+      until: "'172.16' in _bind9_verify_secondary_default_src_fwd.stdout"
       retries: 10
       delay: 1
 
-    - name: "PHASE [verify : Assert Secondary Public Forward A Lookup]"
+    - name: "PHASE [verify : Assert Secondary Default-Source Forward A Lookup]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'172.16' in _bind9_verify_secondary_public_fwd.stdout"
+          - "'172.16' in _bind9_verify_secondary_default_src_fwd.stdout"
         fail_msg: >-
-          Secondary public view did not return an A record for
-          ns.{{ bind9_forward_zone_name }}.
-          stdout={{ _bind9_verify_secondary_public_fwd.stdout | default('') }}
+          Secondary did not return an A record for
+          ns.{{ bind9_forward_zone_name }} via the default-source path.
+          stdout={{ _bind9_verify_secondary_default_src_fwd.stdout | default('') }}
 
     # --- Public-only zone propagation: this zone exists ONLY in primary's
     #     public view. Reaching it on the secondary proves keyed AXFR view
@@ -875,56 +809,44 @@
           stdout={{ _bind9_verify_secondary_dnskey_vpn_rev.stdout | default('') }}
 
     # --- Cleanup: remove secondary key temp files ---
-    - name: "PHASE [verify : Secondary - Remove TSIG Key Temp File]"
-      ansible.builtin.file:
-        path: "{{ _bind9_tsig_keyfile.path }}"
-        state: absent
-      when: _bind9_tsig_keyfile.path is defined
-
-    - name: "PHASE [verify : Secondary - Remove AXFR Key Temp File]"
-      ansible.builtin.file:
-        path: "{{ _bind9_axfr_keyfile.path }}"
-        state: absent
-      when: _bind9_axfr_keyfile.path is defined
+    - name: "PHASE [verify : Secondary - Tear Down TSIG / AXFR Keyfiles]"
+      ansible.builtin.include_tasks: _verify_keyfiles_cleanup.yml
+      vars:
+        _keyfiles_label_prefix: "Secondary - "
 
 # --- Resolver: recursive resolution verification ---
 - name: "PHASE [verify : Resolver Verification]"
   when: bind9_mode == 'resolver'
   block:
+    # Default dig output (not +short) so the retry's stdout carries both
+    # the answer record on success AND the SERVFAIL/REFUSED status on
+    # failure. This replaced a separate 'diagnostic dig' task that ran
+    # only in the failure path and was strictly redundant.
     - name: "PHASE [verify : Resolver - Test Recursive Resolution]"
-      ansible.builtin.command:
-        cmd: "dig @127.0.0.1 google.com A +short"
-      changed_when: false
-      register: _bind9_verify_resolver_recursive
-      until: "_bind9_verify_resolver_recursive.rc == 0 and _bind9_verify_resolver_recursive.stdout | length > 0"
-      retries: 5
-      delay: 2
-
-    - name: "PHASE [verify : Resolver Diagnostic dig On Failure]"
       ansible.builtin.command:
         cmd: "dig @127.0.0.1 google.com A"
       changed_when: false
-      register: _bind9_verify_resolver_diag
-      ignore_errors: true
-      when:
-        - >-
-          _bind9_verify_resolver_recursive.rc != 0
-          or (_bind9_verify_resolver_recursive.stdout | length == 0)
+      register: _bind9_verify_resolver_recursive
+      until: >-
+        _bind9_verify_resolver_recursive.rc == 0
+        and 'status: NOERROR' in _bind9_verify_resolver_recursive.stdout
+        and 'ANSWER: 0' not in _bind9_verify_resolver_recursive.stdout
+      retries: 5
+      delay: 2
 
     - name: "PHASE [verify : Assert Resolver Can Resolve External Domains]"
       ansible.builtin.assert:
         quiet: true
         that:
           - _bind9_verify_resolver_recursive.rc == 0
-          - _bind9_verify_resolver_recursive.stdout | length > 0
+          - "'status: NOERROR' in _bind9_verify_resolver_recursive.stdout"
+          - "'ANSWER: 0' not in _bind9_verify_resolver_recursive.stdout"
         fail_msg: >-
           Resolver cannot resolve external domains recursively.
           rc={{ _bind9_verify_resolver_recursive.rc }},
           stdout={{ _bind9_verify_resolver_recursive.stdout | default('') }},
-          stderr={{ _bind9_verify_resolver_recursive.stderr | default('') }},
-          diag={{ _bind9_verify_resolver_diag.stdout | default('') }}
+          stderr={{ _bind9_verify_resolver_recursive.stderr | default('') }}
 
 - name: "PHASE [verify : END]"
-  become: false
   ansible.builtin.debug:
     msg: "Completed verify phase"

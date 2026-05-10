@@ -1,0 +1,45 @@
+---
+# Shared keyfile setup for verify.yml's primary and secondary blocks.
+# Writes TSIG (DDNS) and AXFR keys to per-run tempfiles owned by named so
+# the secrets are never visible on the dig/nsupdate command line.
+#
+# Caller must pass `_keyfiles_label_prefix` (string, e.g. "" or "Secondary").
+# The label is appended to the PHASE tag so the play recap stays distinct.
+
+- name: "PHASE [verify : Create TSIG Key Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.tempfile:
+    state: file
+    suffix: ".key"
+  register: _bind9_tsig_keyfile
+
+- name: "PHASE [verify : Write TSIG Key To Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.copy:
+    dest: "{{ _bind9_tsig_keyfile.path }}"
+    content: |
+      key "{{ bind9_tsig_key.name }}" {
+              algorithm {{ bind9_tsig_key.algorithm }};
+              secret "{{ bind9_tsig_key.secret }}";
+      };
+    owner: named
+    group: named
+    mode: "0600"
+  no_log: true
+
+- name: "PHASE [verify : Create AXFR Key Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.tempfile:
+    state: file
+    suffix: ".key"
+  register: _bind9_axfr_keyfile
+
+- name: "PHASE [verify : Write AXFR Key To Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.copy:
+    dest: "{{ _bind9_axfr_keyfile.path }}"
+    content: |
+      key "{{ bind9_axfr_key.name }}" {
+              algorithm {{ bind9_axfr_key.algorithm }};
+              secret "{{ bind9_axfr_key.secret }}";
+      };
+    owner: named
+    group: named
+    mode: "0600"
+  no_log: true
