@@ -8,6 +8,6 @@
 #}
 trust-anchors {
 {% for _anchor in bind9_trust_anchors %}
-    {{ _anchor.zone }}. static-key {{ _anchor.flags }} {{ _anchor.protocol }} {{ _anchor.algorithm }} "{{ _anchor.key }}";
+    {{ _anchor.zone }} static-key {{ _anchor.flags }} {{ _anchor.protocol }} {{ _anchor.algorithm }} "{{ _anchor.key }}";
 {% endfor %}
 };
