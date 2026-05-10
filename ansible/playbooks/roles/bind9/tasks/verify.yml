@@ -886,6 +886,153 @@
           stdout={{ _bind9_verify_resolver_recursive.stdout | default('') }},
           stderr={{ _bind9_verify_resolver_recursive.stderr | default('') }}
 
+    # --- RES-02: Course-root recursive resolution (nasa. and
+    #     168.192.in-addr.arpa. static-stub zones must resolve) ---
+    - name: "PHASE [verify : Resolver - Course-Root nasa SOA]"
+      ansible.builtin.command:
+        cmd: "dig @127.0.0.1 nasa SOA +dnssec"
+      changed_when: false
+      register: _bind9_verify_resolver_nasa_soa
+
+    - name: "PHASE [verify : Assert nasa SOA Returned NOERROR]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'status: NOERROR' in _bind9_verify_resolver_nasa_soa.stdout"
+          - "'ANSWER: 0' not in _bind9_verify_resolver_nasa_soa.stdout"
+        fail_msg: >-
+          Resolver cannot resolve nasa. SOA via course-root static stub.
+          stdout={{ _bind9_verify_resolver_nasa_soa.stdout | default('') }}
+
+    - name: "PHASE [verify : Resolver - Course-Root 168.192.in-addr.arpa SOA]"
+      ansible.builtin.command:
+        cmd: "dig @127.0.0.1 168.192.in-addr.arpa SOA +dnssec"
+      changed_when: false
+      register: _bind9_verify_resolver_reverse_soa
+
+    - name: "PHASE [verify : Assert 168.192.in-addr.arpa SOA Returned NOERROR]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'status: NOERROR' in _bind9_verify_resolver_reverse_soa.stdout"
+          - "'ANSWER: 0' not in _bind9_verify_resolver_reverse_soa.stdout"
+        fail_msg: >-
+          Resolver cannot resolve 168.192.in-addr.arpa. SOA via course-root static stub.
+          stdout={{ _bind9_verify_resolver_reverse_soa.stdout | default('') }}
+
+    # --- RES-03: Private-view routing — queries for the lab forward zone
+    #     and 16.172.in-addr.arpa. must return private-view answers
+    #     (172.16.x.x addresses, not VPN-side addresses). The resolver's
+    #     source IP 127.0.0.1 matches the primary's internal_clients ACL
+    #     indirectly (localhost → allow-query → allow-recursion), and the
+    #     static-stub server 172.16.1.53 selects the private view. ---
+    - name: "PHASE [verify : Resolver - Private-NS Forward Lookup]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @127.0.0.1 private-ns.{{ bind9_forward_zone_name }} A +short
+      changed_when: false
+      register: _bind9_verify_resolver_private_ns
+
+    - name: "PHASE [verify : Assert Private-NS Resolves To 172.16.1.53]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'172.16.1.53' in _bind9_verify_resolver_private_ns.stdout"
+        fail_msg: >-
+          Resolver private-ns forward lookup did not return 172.16.1.53.
+          Got: {{ _bind9_verify_resolver_private_ns.stdout | default('') }}
+
+    - name: "PHASE [verify : Resolver - Private-NS Reverse Lookup]"
+      ansible.builtin.command:
+        cmd: "dig @127.0.0.1 -x 172.16.1.53 +short"
+      changed_when: false
+      register: _bind9_verify_resolver_private_ns_rev
+
+    - name: "PHASE [verify : Assert 172.16.1.53 Reverse Lookup Returns Private-NS]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            ('private-ns.' ~ bind9_forward_zone_name ~ '.')
+            in _bind9_verify_resolver_private_ns_rev.stdout
+        fail_msg: >-
+          Resolver reverse lookup for 172.16.1.53 did not return private-ns.{{ bind9_forward_zone_name }}.
+          Got: {{ _bind9_verify_resolver_private_ns_rev.stdout | default('') }}
+
+    # --- RES-05: DNSSEC AD-bit validation. The resolver must set the AD
+    #     flag on answers for signed zones when DNSSEC validation succeeds.
+    #     Course-root trust anchors (fetched in dns.yml pre_tasks) enable
+    #     validation for nasa. and 168.192.in-addr.arpa.; the lab-zone
+    #     CSK chains back through the course root via DS records.
+    #     The +dnssec flag forces EDNS with DO bit so the resolver
+    #     returns RRSIG records alongside the answer. ---
+    - name: "PHASE [verify : Resolver - Forward Zone SOA AD-bit Check]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @127.0.0.1 {{ bind9_forward_zone_name }} SOA +dnssec
+      changed_when: false
+      register: _bind9_verify_resolver_fwd_ad
+
+    - name: "PHASE [verify : Assert Forward Zone SOA Has AD Flag]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'ad' in _bind9_verify_resolver_fwd_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ANSWER: 0' not in _bind9_verify_resolver_fwd_ad.stdout"
+        fail_msg: >-
+          Resolver forward zone SOA response missing AD flag or has empty answer.
+          AD-bit validation may not be working for {{ bind9_forward_zone_name }}.
+          stdout={{ _bind9_verify_resolver_fwd_ad.stdout | default('') }}
+
+    - name: "PHASE [verify : Resolver - VPN Child Reverse Zone SOA AD-bit Check]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @127.0.0.1 {{ bind9_vpn_child_reverse_zone_name }} SOA +dnssec
+      changed_when: false
+      register: _bind9_verify_resolver_vpn_rev_ad
+
+    - name: "PHASE [verify : Assert VPN Child Reverse Zone SOA Has AD Flag]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'ad' in _bind9_verify_resolver_vpn_rev_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ANSWER: 0' not in _bind9_verify_resolver_vpn_rev_ad.stdout"
+        fail_msg: >-
+          Resolver VPN child reverse zone SOA response missing AD flag or has empty answer.
+          AD-bit validation may not be working for {{ bind9_vpn_child_reverse_zone_name }}.
+          stdout={{ _bind9_verify_resolver_vpn_rev_ad.stdout | default('') }}
+
+    # --- RES-06: Blocked-client probe. Queries from source IPs outside
+    #     the DMZ (172.16.0.0/24) and Private (172.16.1.0/24) CIDRs must
+    #     be refused. We delegate to the router and use its WireGuard
+    #     source IP which is in the VPN subnet — outside both allowed
+    #     CIDRs. Expected outcomes: REFUSED, connection timed out, or
+    #     no servers could be reached (if the firewall drops the packet
+    #     entirely before it reaches named). ---
+    - name: "PHASE [verify : Resolver - Blocked Client Probe From VPN Subnet]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ hostvars[groups['router'] | first].wireguard_address.split('/')[0] }}
+          @172.16.1.153 google.com A
+      changed_when: false
+      register: _bind9_verify_resolver_blocked
+      failed_when: false
+      delegate_to: "{{ groups['router'] | first }}"
+
+    - name: "PHASE [verify : Assert Blocked Client Query Was Refused]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            'REFUSED' in _bind9_verify_resolver_blocked.stdout
+            or 'connection timed out' in _bind9_verify_resolver_blocked.stdout
+            or 'no servers could be reached' in _bind9_verify_resolver_blocked.stdout
+        fail_msg: >-
+          Blocked-client probe from VPN subnet did not return REFUSED or timeout.
+          The resolver accepted a query from a source IP outside DMZ/Private CIDRs.
+          stdout={{ _bind9_verify_resolver_blocked.stdout | default('') }},
+          stderr={{ _bind9_verify_resolver_blocked.stderr | default('') }}
+
 - name: "PHASE [verify : END]"
   ansible.builtin.debug:
     msg: "Completed verify phase"
