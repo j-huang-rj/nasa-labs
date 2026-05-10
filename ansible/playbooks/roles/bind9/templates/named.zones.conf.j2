@@ -16,6 +16,13 @@
   `masters` items may be either a plain IP string or a dict
   `{address: <ip>, key: <tsig-key-name>}` to sign the AXFR with a TSIG key.
 
+  `also_notify` items may likewise be either a plain IP string or a dict
+  `{address: <ip>, key: <tsig-key-name>}`. When `key` is supplied the NOTIFY
+  is signed with that TSIG key so the receiving side can match the message
+  against a view selected by `match-clients { key <name>; ... }` rather than
+  by source IP. This is required for public-view-only zones whose master
+  is itself an internal_clients address.
+
   Key constraints:
     * dynamic_update_scope is only valid on private-view master zones.
     * allow-update must never appear; update-policy is the correct directive.
@@ -51,7 +58,15 @@
 {{ indent }}    allow-transfer { {{ zone.allow_transfer | join('; ') }}; };
 {% endif %}
 {% if zone.also_notify is defined %}
-{{ indent }}    also-notify { {{ zone.also_notify | join('; ') }}; };
+{{ indent }}    also-notify {
+{% for _n in zone.also_notify %}
+{% if _n is mapping %}
+{{ indent }}        {{ _n.address }} key {{ _n.key }};
+{% else %}
+{{ indent }}        {{ _n }};
+{% endif %}
+{% endfor %}
+{{ indent }}    };
 {% endif %}
 {% if zone.dynamic_update_scope is defined %}
 {% if zone.dynamic_update_scope == 'forward_a_hosts' %}
