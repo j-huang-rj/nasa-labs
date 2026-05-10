@@ -80,7 +80,7 @@
 
     # --- Temp key files: avoid exposing secrets on the command line ---
     - name: "PHASE [verify : Set Up TSIG / AXFR Keyfiles]"
-      ansible.builtin.include_tasks: _verify_keyfiles_setup.yml
+      ansible.builtin.include_tasks: tsig_setup.yml
       vars:
         _keyfiles_label_prefix: ""
 
@@ -547,7 +547,7 @@
 
     # --- Cleanup: remove key temp files ---
     - name: "PHASE [verify : Tear Down TSIG / AXFR Keyfiles]"
-      ansible.builtin.include_tasks: _verify_keyfiles_cleanup.yml
+      ansible.builtin.include_tasks: tsig_teardown.yml
       vars:
         _keyfiles_label_prefix: ""
 
@@ -557,7 +557,7 @@
   block:
     # --- Temp key files: avoid exposing secrets on the command line ---
     - name: "PHASE [verify : Secondary - Set Up TSIG / AXFR Keyfiles]"
-      ansible.builtin.include_tasks: _verify_keyfiles_setup.yml
+      ansible.builtin.include_tasks: tsig_setup.yml
       vars:
         _keyfiles_label_prefix: "Secondary - "
 
@@ -837,7 +837,7 @@
 
     # --- Cleanup: remove secondary key temp files ---
     - name: "PHASE [verify : Secondary - Tear Down TSIG / AXFR Keyfiles]"
-      ansible.builtin.include_tasks: _verify_keyfiles_cleanup.yml
+      ansible.builtin.include_tasks: tsig_teardown.yml
       vars:
         _keyfiles_label_prefix: "Secondary - "
 
