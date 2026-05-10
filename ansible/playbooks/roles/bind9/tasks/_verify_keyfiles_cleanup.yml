@@ -3,15 +3,21 @@
 # Removes the tempfiles created by _verify_keyfiles_setup.yml.
 #
 # Caller must pass `_keyfiles_label_prefix` (string, e.g. "" or "Secondary").
+#
+# `changed_when: false` because these are paired with the run-scoped scratch
+# tempfiles in the setup file; together they're a no-op on the host's
+# resting state.
 
 - name: "PHASE [verify : Remove TSIG Key Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.file:
     path: "{{ _bind9_tsig_keyfile.path }}"
     state: absent
   when: _bind9_tsig_keyfile.path is defined
+  changed_when: false
 
 - name: "PHASE [verify : Remove AXFR Key Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.file:
     path: "{{ _bind9_axfr_keyfile.path }}"
     state: absent
   when: _bind9_axfr_keyfile.path is defined
+  changed_when: false
