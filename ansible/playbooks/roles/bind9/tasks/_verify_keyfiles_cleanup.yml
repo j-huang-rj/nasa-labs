@@ -1,0 +1,17 @@
+---
+# Shared keyfile cleanup for verify.yml's primary and secondary blocks.
+# Removes the tempfiles created by _verify_keyfiles_setup.yml.
+#
+# Caller must pass `_keyfiles_label_prefix` (string, e.g. "" or "Secondary").
+
+- name: "PHASE [verify : Remove TSIG Key Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.file:
+    path: "{{ _bind9_tsig_keyfile.path }}"
+    state: absent
+  when: _bind9_tsig_keyfile.path is defined
+
+- name: "PHASE [verify : Remove AXFR Key Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.file:
+    path: "{{ _bind9_axfr_keyfile.path }}"
+    state: absent
+  when: _bind9_axfr_keyfile.path is defined
