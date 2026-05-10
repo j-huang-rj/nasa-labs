@@ -28,8 +28,7 @@ bind9_views: []
 bind9_zones: []
 
 # Dynamic update hosts. The role's update-policy template binds these names
-# (e.g. "dynamic1.<zone>") to the bind9_tsig_key. The list is fixed by lab
-# requirements; the assert phase validates that callers don't tamper with it.
+# (e.g. "dynamic1.<zone>") to the bind9_tsig_key.
 bind9_dynamic_hosts:
   - "dynamic1"
   - "dynamic2"
