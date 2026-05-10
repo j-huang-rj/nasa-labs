@@ -117,6 +117,50 @@
     - private
     - public
 
+- name: "PHASE [config : Create DNSSEC Key Directory]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.file:
+    path: "{{ bind9_dnssec_policy.key_directory }}"
+    state: directory
+    owner: root
+    group: named
+    mode: "0750"
+    setype: "named_conf_t"
+
+- name: "PHASE [config : Distribute DNSSEC Public Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.copy:
+    content: "{{ item.public }}"
+    dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.key"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .key"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Distribute DNSSEC Private Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.copy:
+    content: "{{ item.private }}"
+    dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.private"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .private"
+  notify: "PHASE [handler : Restart named]"
+
 - name: "PHASE [config : Read Current Zone State]"
   when: bind9_mode == 'authoritative_primary'
   bind9_zone_state:

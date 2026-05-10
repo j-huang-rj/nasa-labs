@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Sign the graded authoritative zones (`${ID}.nasa` and `${ID}-sub28.{x}.168.192.in-addr.arpa`) with DNSSEC algorithm 13 (ECDSAP256SHA256), generate DS records ready for OJ upload, and ensure the `172.16.{0|1}` reverse zones remain unsigned and authoritative without DNSSEC.
+Sign all authoritative zones with DNSSEC algorithm 13 (ECDSAP256SHA256), generate DS records ready for OJ upload, and ensure the `172.16.{0|1}` reverse zones are also signed (the lab permits signing these zones even though it won't check them).
 
 </domain>
 
@@ -15,7 +15,7 @@ Sign the graded authoritative zones (`${ID}.nasa` and `${ID}-sub28.{x}.168.192.i
 
 ### DNSSEC Signing Method
 - **D-01:** Use `dnssec-policy "nasa-lab"` — a custom BIND9 dnssec-policy block with explicit algorithm 13 (ECDSAP256SHA256), CDS digest type 2 (SHA-256), and unlimited CSK lifetime. Applied per-zone only to signing-eligible zones.
-- **D-02:** The `dnssec-policy` block is defined in `named.options.conf.j2` (or a dedicated include) and referenced by name in `named.zones.conf.j2` per-zone via `dnssec-policy nasa-lab;` directive. Zones that must NOT be signed (172.16.{0|1} reverse zones) simply omit the directive.
+- **D-02:** The `dnssec-policy` block is defined in `named.options.conf.j2` (or a dedicated include) and referenced by name in `named.zones.conf.j2` per-zone via `dnssec-policy nasa-lab;` directive. All zones receive the directive.
 - **D-03:** `inline-signing yes;` is included in the zone block for signed zones, allowing BIND to maintain the `.signed` sidecar alongside the unsigned zone file without disrupting the existing hash-based idempotency pipeline.
 - **D-04:** The unsigned zone file (rendered by `db.zone.j2`) remains the source of truth. BIND's inline-signing maintains the `.signed` version independently. The hash-sidecar pipeline tracks the unsigned template — as long as the unsigned template stays hash-stable, the signed output is never disturbed.
 
@@ -31,15 +31,15 @@ Sign the graded authoritative zones (`${ID}.nasa` and `${ID}-sub28.{x}.168.192.i
 - **D-11:** DS extraction is included in `verify.yml` as a validation step, confirming that the live DNSKEY matches the expected algorithm and digest type.
 
 ### Zones to Sign
-- **D-12:** Signing-eligible zones (3 total): `${ID}.nasa` private view, `${ID}.nasa` public view, `${ID}-sub28.{x}.168.192.in-addr.arpa` public view.
-- **D-13:** Explicitly unsigned zones: `0.16.172.in-addr.arpa` and `1.16.172.in-addr.arpa` (private view reverse zones). These remain authoritative without DNSSEC per spec allowance (AUTH-10).
+- **D-12:** All 5 master zones are signed: `${ID}.nasa` private view, `${ID}.nasa` public view, `${ID}-sub28.{x}.168.192.in-addr.arpa` public view, `0.16.172.in-addr.arpa` private view, `1.16.172.in-addr.arpa` private view.
+- **D-13:** No zones are explicitly unsigned. The lab permits signing the `172.16` reverse zones even though it won't check them, and signing them simplifies the contract by removing the opt-in guardrail.
 
 ### the agent's Discretion
 - Exact `dnssec-policy` block placement (dedicated include file vs. inline in `named.options.conf.j2`) — planner can choose based on template structure.
 - Key directory path on the primary NS (e.g., `/var/named/keys/` vs. `/etc/named/keys/`) — planner can choose based on BIND9 conventions and SELinux.
 - Whether to add a `bind9_dnssec` feature flag in `defaults/main.yml` or always include DNSSEC tasks when `bind9_mode == 'authoritative_primary'` — planner can decide.
 - Exact Ansible task structure for key generation (local action vs. shell command vs. custom module) — planner can choose.
-- Whether `named.zones.conf.j2` adds `inline-signing yes;` globally for all zones or only for signed zones — planner should add it only for signed zones.
+- Whether `named.zones.conf.j2` adds `inline-signing yes;` globally for all zones or only for signed zones — since all zones are signed, it applies to all.
 - Verification task details in `verify.yml` (dig commands, assertion checks) — planner can design.
 
 </decisions>
