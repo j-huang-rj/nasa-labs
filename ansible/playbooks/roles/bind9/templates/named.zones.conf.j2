@@ -89,7 +89,6 @@
 {%- endmacro %}
 {% set _global_zones = bind9_zones | rejectattr('view', 'defined') | list %}
 {% if _global_zones | length > 0 %}
-
 {# Global-scope zones #}
 {% for _zone in _global_zones %}
 
@@ -98,7 +97,6 @@
 {% endif %}
 {% set _views = bind9_views | sort(attribute='order') %}
 {% if _views | length > 0 %}
-
 {# View-scoped zones, ordered by `order` #}
 {% for _view in _views %}
 
