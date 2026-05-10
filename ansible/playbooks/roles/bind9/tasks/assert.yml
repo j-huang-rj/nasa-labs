@@ -135,7 +135,9 @@
         | map(attribute='name') | list }}
 
 - name: "PHASE [assert : Validate DNSSEC Policy For Authoritative Primary]"
-  when: bind9_mode == 'authoritative_primary'
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0
   block:
     - name: "PHASE [assert : Check bind9_dnssec_policy.name Is Defined]"
       become: false
