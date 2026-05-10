@@ -8,7 +8,10 @@
   Supported zone `type` values: master, slave, static-stub, forward, hint.
 
   Optional zone fields: file, masters, server_addresses, forwarders, forward,
-  allow_transfer, also_notify, dynamic_update_scope.
+  allow_transfer, also_notify, dynamic_update_scope, dnssec_policy.
+
+  When dnssec_policy is set on a master zone, the template emits
+  `dnssec-policy "<policy_name>";` and `inline-signing yes;` directives.
 
   `masters` items may be either a plain IP string or a dict
   `{address: <ip>, key: <tsig-key-name>}` to sign the AXFR with a TSIG key.
@@ -62,6 +65,10 @@
 {{ indent }}        grant {{ bind9_tsig_key.name }} zonesub PTR;
 {{ indent }}    };
 {% endif %}
+{% endif %}
+{% if zone.dnssec_policy is defined %}
+{{ indent }}    dnssec-policy "{{ zone.dnssec_policy }}";
+{{ indent }}    inline-signing yes;
 {% endif %}
 {{ indent }}};
 {%- endmacro %}
