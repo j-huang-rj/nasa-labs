@@ -27,3 +27,32 @@ bind9_mode: resolver
 bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.1.153
+
+# Cloudflare forwarder for all domains outside static-stub zones (RES-04)
+bind9_forwarders:
+  - 1.1.1.1
+
+# Resolver static-stub zones (RES-02, RES-03, RES-05)
+# Global-scoped (no view field) — BIND longest-prefix match ensures
+# lab-zone stubs override the course-root stubs which override the
+# global forwarder.  No per-zone forwarders needed (D-12).
+bind9_zones:
+  - name: nasa
+    type: static-stub
+    server_addresses:
+      - 192.168.255.1
+
+  - name: 168.192.in-addr.arpa
+    type: static-stub
+    server_addresses:
+      - 192.168.255.1
+
+  - name: "{{ bind9_forward_zone_name }}"
+    type: static-stub
+    server_addresses:
+      - 172.16.1.53
+
+  - name: 16.172.in-addr.arpa
+    type: static-stub
+    server_addresses:
+      - 172.16.1.53
