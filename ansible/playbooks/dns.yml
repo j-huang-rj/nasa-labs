@@ -9,10 +9,14 @@
   vars:
     bind9_identity_source_host: "{{ groups['router'] | first }}"
   pre_tasks:
+    # ──────────────────────────────────────────────────────────
+    # VPN identity derivation — runs for ALL modes (including
+    # resolver) because bind9_forward_zone_name and the reverse-
+    # zone naming are needed for resolver static-stub configuration.
+    # ──────────────────────────────────────────────────────────
     - name: "PRE [dns : Derive bind9 VPN Identity Facts]"
       when:
         - bind9_enabled | default(false) | bool
-        - bind9_mode | default('') != 'resolver'
       block:
         - name: "PRE [dns : Read Source Host wireguard_address]"
           ansible.builtin.set_fact:
@@ -20,11 +24,11 @@
               {{ hostvars[bind9_identity_source_host].wireguard_address
                  | default('') }}
 
-        - name: "PRE [dns : Fail If VPN Address Unavailable For Authoritative Mode]"
+        - name: "PRE [dns : Fail If VPN Address Unavailable]"
           ansible.builtin.fail:
             msg: >-
               bind9 role requires WireGuard address from '{{ bind9_identity_source_host }}'
-              for authoritative mode, but wireguard_address is not defined.
+              for zone name derivation, but wireguard_address is not defined.
               Ensure WireGuard is configured on '{{ bind9_identity_source_host }}' and
               the host is accessible in the play.
           when: _bind9_source_wg_address | length == 0
@@ -61,6 +65,69 @@
               _bind9_wg_octets[0] }}.in-addr.arpa
             bind9_primary_mname: "private-ns.{{ bind9_derived_lab_id }}.nasa."
             bind9_soa_serial_date: "{{ ansible_facts['date_time'].date | replace('-', '') }}"
+
+    # ──────────────────────────────────────────────────────────
+    # Trust-anchor fetch — resolver mode only. Queries the
+    # course root server for KSK (flags 257) DNSKEY records and
+    # builds the bind9_trust_anchors fact for DNSSEC validation.
+    # Trust anchors are PUBLIC key material, NOT secrets.
+    # ──────────────────────────────────────────────────────────
+    - name: "PRE [dns : Fetch Course-Root Trust Anchors for Resolver Mode]"
+      when:
+        - bind9_enabled | default(false) | bool
+        - bind9_mode | default('') == 'resolver'
+      block:
+        - name: "PRE [dns : Query nasa. DNSKEY from Course Root]"
+          ansible.builtin.command: dig @192.168.255.1 nasa. DNSKEY +noall +answer
+          register: _bind9_nasa_dnskey
+          changed_when: false
+
+        - name: "PRE [dns : Query 168.192.in-addr.arpa. DNSKEY from Course Root]"
+          ansible.builtin.command: dig @192.168.255.1 168.192.in-addr.arpa. DNSKEY +noall +answer
+          register: _bind9_reverse_dnskey
+          changed_when: false
+
+        - name: "PRE [dns : Fail If No nasa. KSK Records Found]"
+          ansible.builtin.fail:
+            msg: >-
+              No KSK (flags 257) found in nasa. DNSKEY response from
+              192.168.255.1. Ensure the course root server is reachable
+              and serving DNSKEY records for nasa.
+          when: >-
+            _bind9_nasa_dnskey.stdout_lines |
+              select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
+              list | length == 0
+
+        - name: "PRE [dns : Fail If No 168.192.in-addr.arpa. KSK Records Found]"
+          ansible.builtin.fail:
+            msg: >-
+              No KSK (flags 257) found in 168.192.in-addr.arpa. DNSKEY response
+              from 192.168.255.1. Ensure the course root server is reachable
+              and serving DNSKEY records for 168.192.in-addr.arpa.
+          when: >-
+            _bind9_reverse_dnskey.stdout_lines |
+              select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
+              list | length == 0
+
+        - name: "PRE [dns : Parse Trust Anchors from DNSKEY Responses]"
+          ansible.builtin.set_fact:
+            bind9_trust_anchors: >-
+              {{ (
+                  _bind9_nasa_dnskey.stdout_lines |
+                  select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
+                  map('regex_replace',
+                    '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)$',
+                    '{"zone":"nasa.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
+                  map('from_json') | list
+                ) + (
+                  _bind9_reverse_dnskey.stdout_lines |
+                  select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
+                  map('regex_replace',
+                    '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)$',
+                    '{"zone":"168.192.in-addr.arpa.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
+                  map('from_json') | list
+                ) }}
+
   roles:
     - role: bind9
       when: bind9_enabled
