@@ -37,6 +37,39 @@
   loop_control:
     label: "{{ item }}:53"
 
+# --- TSIG key precondition ---
+# Asserted up front so missing keys fail with a clear message before any
+# block below tries to use them. Without this, the first dig/nsupdate that
+# references an undefined key writes an empty `secret` to a temp keyfile and
+# fails with cryptic BIND parse errors instead.
+- name: "PHASE [verify : TSIG Key Precondition]"
+  when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
+  block:
+    - name: "PHASE [verify : Assert bind9_tsig_key Is Defined And Non-Empty]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_tsig_key is defined
+          - bind9_tsig_key.name is defined and bind9_tsig_key.name | length > 0
+          - bind9_tsig_key.algorithm is defined and bind9_tsig_key.algorithm | length > 0
+          - bind9_tsig_key.secret is defined and bind9_tsig_key.secret | length > 0
+        fail_msg: >-
+          bind9_tsig_key must be defined with name, algorithm, and secret on authoritative hosts.
+          Ensure host_vars/*/secrets.yml provides the TSIG key.
+
+    - name: "PHASE [verify : Assert bind9_axfr_key Is Defined And Non-Empty]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_axfr_key is defined
+          - bind9_axfr_key.name is defined and bind9_axfr_key.name | length > 0
+          - bind9_axfr_key.algorithm is defined and bind9_axfr_key.algorithm | length > 0
+          - bind9_axfr_key.secret is defined and bind9_axfr_key.secret | length > 0
+        fail_msg: >-
+          bind9_axfr_key must be defined with name, algorithm, and secret on authoritative hosts.
+          Used to discriminate public-view AXFR connections from IP-based view selection.
+          Ensure host_vars/*/secrets.yml provides the key.
+
 # --- Authoritative primary: data-driven dig verification ---
 - name: "PHASE [verify : Authoritative Primary Verification]"
   when: bind9_mode == 'authoritative_primary'
@@ -827,35 +860,6 @@
         path: "{{ _bind9_axfr_keyfile.path }}"
         state: absent
       when: _bind9_axfr_keyfile.path is defined
-
-# --- TSIG key assertion ---
-- name: "PHASE [verify : TSIG Key Assertion]"
-  when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
-  block:
-    - name: "PHASE [verify : Assert bind9_tsig_key Is Defined And Non-Empty]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - bind9_tsig_key is defined
-          - bind9_tsig_key.name is defined and bind9_tsig_key.name | length > 0
-          - bind9_tsig_key.algorithm is defined and bind9_tsig_key.algorithm | length > 0
-          - bind9_tsig_key.secret is defined and bind9_tsig_key.secret | length > 0
-        fail_msg: >-
-          bind9_tsig_key must be defined with name, algorithm, and secret on authoritative hosts.
-          Ensure host_vars/*/secrets.yml provides the TSIG key.
-
-    - name: "PHASE [verify : Assert bind9_axfr_key Is Defined And Non-Empty]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - bind9_axfr_key is defined
-          - bind9_axfr_key.name is defined and bind9_axfr_key.name | length > 0
-          - bind9_axfr_key.algorithm is defined and bind9_axfr_key.algorithm | length > 0
-          - bind9_axfr_key.secret is defined and bind9_axfr_key.secret | length > 0
-        fail_msg: >-
-          bind9_axfr_key must be defined with name, algorithm, and secret on authoritative hosts.
-          Used to discriminate public-view AXFR connections from IP-based view selection.
-          Ensure host_vars/*/secrets.yml provides the key.
 
 # --- Resolver: recursive resolution verification ---
 - name: "PHASE [verify : Resolver Verification]"
