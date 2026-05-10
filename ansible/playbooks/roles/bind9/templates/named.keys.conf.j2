@@ -1,4 +1,5 @@
 // Managed by Ansible -- do not edit manually.
+
 {% if bind9_tsig_key.secret | length > 0 %}
 key "{{ bind9_tsig_key.name }}" {
         algorithm {{ bind9_tsig_key.algorithm }};

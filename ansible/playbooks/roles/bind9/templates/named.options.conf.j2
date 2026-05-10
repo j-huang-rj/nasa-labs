@@ -53,8 +53,7 @@ options {
     dnssec-validation yes;
 {% if bind9_mode == 'authoritative_primary' and bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0 %}
 
-    // DNSSEC key storage directory (BIND 9.18 requires key-directory in options,
-    // not inside dnssec-policy)
+    // DNSSEC key storage directory
     key-directory "{{ bind9_dnssec_policy.key_directory }}";
 {% endif %}
 
@@ -63,9 +62,7 @@ options {
 };
 {% if bind9_mode == 'authoritative_primary' and bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0 %}
 
-// DNSSEC signing policy — algorithm and digest are fixed per AUTH-09.
-// NOTE: cds-digest-types is not supported in BIND 9.18 (added in 9.20+).
-// The CDS/CDNSKEY digest type defaults to SHA-256 in BIND 9.18.
+// DNSSEC signing policy
 dnssec-policy "{{ bind9_dnssec_policy.name }}" {
     keys {
         csk lifetime {{ bind9_dnssec_policy.csk.lifetime }} algorithm {{ bind9_dnssec_policy.csk.algorithm }};
