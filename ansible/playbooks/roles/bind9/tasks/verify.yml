@@ -561,7 +561,6 @@
       vars:
         _keyfiles_label_prefix: "Secondary - "
 
-
     - name: "PHASE [verify : Secondary - Check Slave Zone Directory Exists]"
       ansible.builtin.stat:
         path: "{{ bind9_zone_dir }}/slaves"

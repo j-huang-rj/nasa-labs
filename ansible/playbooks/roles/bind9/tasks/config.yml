@@ -197,7 +197,7 @@
     - bind9_mode == 'authoritative_primary'
     - bind9_dnssec_key_material | length > 0
     - (_bind9_dnssec_existing_public.results[_idx].content | default('') | b64decode
-       | regex_replace(bind9_keymgr_runtime_strip.key, ''))
+      | regex_replace(bind9_keymgr_runtime_strip.key, ''))
       != (item.public | regex_replace(bind9_keymgr_runtime_strip.key, ''))
   ansible.builtin.copy:
     content: "{{ item.public }}"
@@ -229,7 +229,7 @@
     - bind9_mode == 'authoritative_primary'
     - bind9_dnssec_key_material | length > 0
     - (_bind9_dnssec_existing_private.results[_idx].content | default('') | b64decode
-       | regex_replace(bind9_keymgr_runtime_strip.private, ''))
+      | regex_replace(bind9_keymgr_runtime_strip.private, ''))
       != (item.private | regex_replace(bind9_keymgr_runtime_strip.private, ''))
   ansible.builtin.copy:
     content: "{{ item.private }}"
@@ -267,7 +267,7 @@
     - bind9_mode == 'authoritative_primary'
     - bind9_dnssec_key_material | length > 0
     - (_bind9_dnssec_existing_state.results[_idx].content | default('') | b64decode
-       | regex_replace(bind9_keymgr_runtime_strip.state, ''))
+      | regex_replace(bind9_keymgr_runtime_strip.state, ''))
       != (item.state | regex_replace(bind9_keymgr_runtime_strip.state, ''))
   ansible.builtin.copy:
     content: "{{ item.state }}"
