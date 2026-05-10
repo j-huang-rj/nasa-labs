@@ -59,9 +59,9 @@ options {
 
 // DNSSEC signing policy — algorithm and digest are fixed per AUTH-09.
 dnssec-policy "{{ bind9_dnssec_policy.name }}" {
-    cds-digest-types { SHA-256; };
+    cds-digest-types { {{ bind9_dnssec_policy.cds_digest_types | join('; ') }}; };
     keys {
-        csk lifetime unlimited algorithm ECDSAP256SHA256;
+        csk lifetime {{ bind9_dnssec_policy.csk.lifetime }} algorithm {{ bind9_dnssec_policy.csk.algorithm }};
     };
     key-directory "{{ bind9_dnssec_policy.key_directory }}";
 };
