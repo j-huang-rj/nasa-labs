@@ -55,3 +55,14 @@ options {
     // Apply the RHEL's crypto policy
     include "/etc/crypto-policies/back-ends/bind.config";
 };
+{% if bind9_mode == 'authoritative_primary' and bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0 %}
+
+// DNSSEC signing policy — algorithm and digest are fixed per AUTH-09.
+dnssec-policy "{{ bind9_dnssec_policy.name }}" {
+    cds-digest-types { SHA-256; };
+    keys {
+        csk lifetime unlimited algorithm ECDSAP256SHA256;
+    };
+    key-directory "{{ bind9_dnssec_policy.key_directory }}";
+};
+{% endif %}
