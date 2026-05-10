@@ -109,6 +109,7 @@ bind9_zones:
       minimum: 86400
     ns:
       - "ns.{{ bind9_forward_zone_name }}."
+      - "private-ns.{{ bind9_forward_zone_name }}."
     records:
       - name: "ns"
         type: "A"
