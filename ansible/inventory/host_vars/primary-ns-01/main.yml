@@ -100,7 +100,8 @@ bind9_zones:
     allow_transfer:
       - "172.16.0.53"
     also_notify:
-      - "172.16.0.53"
+      - address: "172.16.0.53"
+        key: "{{ bind9_axfr_key.name }}"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       refresh: 3600
@@ -200,7 +201,8 @@ bind9_zones:
     allow_transfer:
       - "172.16.0.53"
     also_notify:
-      - "172.16.0.53"
+      - address: "172.16.0.53"
+        key: "{{ bind9_axfr_key.name }}"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       refresh: 3600
