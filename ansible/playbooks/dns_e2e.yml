@@ -1,0 +1,478 @@
+---
+# Cross-host grading-readiness playbook for the resolver, authoritative
+# DNSSEC artifacts, dynamic-update propagation, and full-stack idempotency.
+# Imports dns.yml first to converge all DNS hosts, then exercises the
+# resolver from real client perspectives, rechecks propagation and DS
+# extraction, and enforces consecutive-run idempotency.
+#
+# Prerequisites:
+#   - site.yml or bootstrap.yml already applied
+#   - WireGuard up on secondary-ns-01 / router-01
+
+- name: DNS Services
+  ansible.builtin.import_playbook: dns.yml
+
+# ──────────────────────────────────────────────────────────
+# E2E: DMZ Agent — resolver queries through dns-01
+# ──────────────────────────────────────────────────────────
+- name: "E2E DMZ Agent Resolver Verification"
+  hosts: dmz-agent-01
+  gather_facts: false
+  vars:
+    _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
+    _e2e_forward_zone: "{{ hostvars['primary-ns-01'].bind9_forward_zone_name }}"
+    _e2e_vpn_child_rev: "{{ hostvars['primary-ns-01'].bind9_vpn_child_reverse_zone_name }}"
+  tasks:
+    - name: "PHASE [e2e-dmz : START]"
+      ansible.builtin.debug:
+        msg: "E2E resolver verification from DMZ Agent"
+
+    # RES-03: Private-NS A lookup through resolver (private-view answer)
+    - name: "PHASE [e2e-dmz : Resolver Private-NS Forward Lookup]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @{{ _e2e_resolver }} private-ns.{{ _e2e_forward_zone }} A +short
+      changed_when: false
+      register: _e2e_dmz_private_ns
+
+    - name: "PHASE [e2e-dmz : Assert Private-NS Resolves To 172.16.1.53]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'172.16.1.53' in _e2e_dmz_private_ns.stdout"
+        fail_msg: >-
+          DMZ agent private-ns forward lookup did not return 172.16.1.53 via resolver.
+          Got: {{ _e2e_dmz_private_ns.stdout | default('') }}
+
+    # RES-03: Reverse lookup through resolver (private-view answer)
+    - name: "PHASE [e2e-dmz : Resolver Reverse Lookup For 172.16.1.53]"
+      ansible.builtin.command:
+        cmd: "dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
+      changed_when: false
+      register: _e2e_dmz_reverse
+
+    - name: "PHASE [e2e-dmz : Assert 172.16.1.53 Reverse Returns Private-NS]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            ('private-ns.' ~ _e2e_forward_zone ~ '.')
+            in _e2e_dmz_reverse.stdout
+        fail_msg: >-
+          DMZ agent reverse lookup for 172.16.1.53 did not return private-ns.{{ _e2e_forward_zone }}.
+          Got: {{ _e2e_dmz_reverse.stdout | default('') }}
+
+    # RES-04: Cloudflare forwarding — non-lab domains resolve
+    - name: "PHASE [e2e-dmz : Resolver Recursive Google Lookup]"
+      ansible.builtin.command:
+        cmd: "dig @{{ _e2e_resolver }} google.com A"
+      changed_when: false
+      register: _e2e_dmz_google
+      until: >-
+        _e2e_dmz_google.rc == 0
+        and 'status: NOERROR' in _e2e_dmz_google.stdout
+        and 'ANSWER: 0' not in _e2e_dmz_google.stdout
+      retries: 5
+      delay: 2
+
+    - name: "PHASE [e2e-dmz : Assert External Domain Resolution]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _e2e_dmz_google.rc == 0
+          - "'status: NOERROR' in _e2e_dmz_google.stdout"
+          - "'ANSWER: 0' not in _e2e_dmz_google.stdout"
+        fail_msg: >-
+          DMZ agent cannot resolve external domains through resolver.
+          rc={{ _e2e_dmz_google.rc }},
+          stdout={{ _e2e_dmz_google.stdout | default('') }},
+          stderr={{ _e2e_dmz_google.stderr | default('') }}
+
+    # RES-05: AD-bit DNSSEC validation — forward zone SOA
+    - name: "PHASE [e2e-dmz : Forward Zone SOA AD-bit Check]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @{{ _e2e_resolver }} {{ _e2e_forward_zone }} SOA +dnssec
+      changed_when: false
+      register: _e2e_dmz_fwd_ad
+
+    - name: "PHASE [e2e-dmz : Assert Forward Zone SOA Has AD Flag]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'ad' in _e2e_dmz_fwd_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ANSWER: 0' not in _e2e_dmz_fwd_ad.stdout"
+        fail_msg: >-
+          DMZ agent forward zone SOA response from resolver missing AD flag or has empty answer.
+          DNSSEC validation may not be working for {{ _e2e_forward_zone }}.
+          stdout={{ _e2e_dmz_fwd_ad.stdout | default('') }}
+
+    # RES-05: AD-bit DNSSEC validation — VPN child reverse zone SOA
+    - name: "PHASE [e2e-dmz : VPN Child Reverse Zone SOA AD-bit Check]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @{{ _e2e_resolver }} {{ _e2e_vpn_child_rev }} SOA +dnssec
+      changed_when: false
+      register: _e2e_dmz_vpn_rev_ad
+
+    - name: "PHASE [e2e-dmz : Assert VPN Child Reverse Zone SOA Has AD Flag]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'ad' in _e2e_dmz_vpn_rev_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ANSWER: 0' not in _e2e_dmz_vpn_rev_ad.stdout"
+        fail_msg: >-
+          DMZ agent VPN child reverse zone SOA response from resolver missing AD flag or has empty answer.
+          DNSSEC validation may not be working for {{ _e2e_vpn_child_rev }}.
+          stdout={{ _e2e_dmz_vpn_rev_ad.stdout | default('') }}
+
+    - name: "PHASE [e2e-dmz : END]"
+      ansible.builtin.debug:
+        msg: "E2E DMZ agent resolver verification complete"
+
+# ──────────────────────────────────────────────────────────
+# E2E: Private Agent — resolver queries through dns-01
+# ──────────────────────────────────────────────────────────
+- name: "E2E Private Agent Resolver Verification"
+  hosts: internal-agent-01
+  gather_facts: false
+  vars:
+    _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
+    _e2e_forward_zone: "{{ hostvars['primary-ns-01'].bind9_forward_zone_name }}"
+    _e2e_vpn_child_rev: "{{ hostvars['primary-ns-01'].bind9_vpn_child_reverse_zone_name }}"
+  tasks:
+    - name: "PHASE [e2e-private : START]"
+      ansible.builtin.debug:
+        msg: "E2E resolver verification from Private Agent"
+
+    # RES-03: Private-NS A lookup through resolver (private-view answer)
+    - name: "PHASE [e2e-private : Resolver Private-NS Forward Lookup]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @{{ _e2e_resolver }} private-ns.{{ _e2e_forward_zone }} A +short
+      changed_when: false
+      register: _e2e_private_private_ns
+
+    - name: "PHASE [e2e-private : Assert Private-NS Resolves To 172.16.1.53]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'172.16.1.53' in _e2e_private_private_ns.stdout"
+        fail_msg: >-
+          Private agent private-ns forward lookup did not return 172.16.1.53 via resolver.
+          Got: {{ _e2e_private_private_ns.stdout | default('') }}
+
+    # RES-03: Reverse lookup through resolver (private-view answer)
+    - name: "PHASE [e2e-private : Resolver Reverse Lookup For 172.16.1.53]"
+      ansible.builtin.command:
+        cmd: "dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
+      changed_when: false
+      register: _e2e_private_reverse
+
+    - name: "PHASE [e2e-private : Assert 172.16.1.53 Reverse Returns Private-NS]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            ('private-ns.' ~ _e2e_forward_zone ~ '.')
+            in _e2e_private_reverse.stdout
+        fail_msg: >-
+          Private agent reverse lookup for 172.16.1.53 did not return private-ns.{{ _e2e_forward_zone }}.
+          Got: {{ _e2e_private_reverse.stdout | default('') }}
+
+    # RES-04: Cloudflare forwarding — non-lab domains resolve
+    - name: "PHASE [e2e-private : Resolver Recursive Google Lookup]"
+      ansible.builtin.command:
+        cmd: "dig @{{ _e2e_resolver }} google.com A"
+      changed_when: false
+      register: _e2e_private_google
+      until: >-
+        _e2e_private_google.rc == 0
+        and 'status: NOERROR' in _e2e_private_google.stdout
+        and 'ANSWER: 0' not in _e2e_private_google.stdout
+      retries: 5
+      delay: 2
+
+    - name: "PHASE [e2e-private : Assert External Domain Resolution]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _e2e_private_google.rc == 0
+          - "'status: NOERROR' in _e2e_private_google.stdout"
+          - "'ANSWER: 0' not in _e2e_private_google.stdout"
+        fail_msg: >-
+          Private agent cannot resolve external domains through resolver.
+          rc={{ _e2e_private_google.rc }},
+          stdout={{ _e2e_private_google.stdout | default('') }},
+          stderr={{ _e2e_private_google.stderr | default('') }}
+
+    # RES-05: AD-bit DNSSEC validation — forward zone SOA
+    - name: "PHASE [e2e-private : Forward Zone SOA AD-bit Check]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @{{ _e2e_resolver }} {{ _e2e_forward_zone }} SOA +dnssec
+      changed_when: false
+      register: _e2e_private_fwd_ad
+
+    - name: "PHASE [e2e-private : Assert Forward Zone SOA Has AD Flag]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'ad' in _e2e_private_fwd_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ANSWER: 0' not in _e2e_private_fwd_ad.stdout"
+        fail_msg: >-
+          Private agent forward zone SOA response from resolver missing AD flag or has empty answer.
+          DNSSEC validation may not be working for {{ _e2e_forward_zone }}.
+          stdout={{ _e2e_private_fwd_ad.stdout | default('') }}
+
+    # RES-05: AD-bit DNSSEC validation — VPN child reverse zone SOA
+    - name: "PHASE [e2e-private : VPN Child Reverse Zone SOA AD-bit Check]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @{{ _e2e_resolver }} {{ _e2e_vpn_child_rev }} SOA +dnssec
+      changed_when: false
+      register: _e2e_private_vpn_rev_ad
+
+    - name: "PHASE [e2e-private : Assert VPN Child Reverse Zone SOA Has AD Flag]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'ad' in _e2e_private_vpn_rev_ad.stdout | regex_search('flags:.*', multiline=False) | default('')"
+          - "'ANSWER: 0' not in _e2e_private_vpn_rev_ad.stdout"
+        fail_msg: >-
+          Private agent VPN child reverse zone SOA response from resolver missing AD flag or has empty answer.
+          DNSSEC validation may not be working for {{ _e2e_vpn_child_rev }}.
+          stdout={{ _e2e_private_vpn_rev_ad.stdout | default('') }}
+
+    - name: "PHASE [e2e-private : END]"
+      ansible.builtin.debug:
+        msg: "E2E Private agent resolver verification complete"
+
+# ──────────────────────────────────────────────────────────
+# E2E: Blocked-client probe from VPN subnet (RES-06)
+# ──────────────────────────────────────────────────────────
+- name: "E2E Blocked Client Verification"
+  hosts: router-01
+  gather_facts: false
+  tasks:
+    - name: "PHASE [e2e-blocked : START]"
+      ansible.builtin.debug:
+        msg: "E2E blocked-client probe from VPN subnet"
+
+    # RES-06: Queries from source IPs outside DMZ/Private CIDRs must be
+    # refused. The router's WireGuard IP is in the VPN subnet — outside
+    # both allowed CIDRs — so a dig -b from that IP must return REFUSED,
+    # time out, or report no servers reachable.
+    - name: "PHASE [e2e-blocked : Resolver Blocked Client Probe From VPN Subnet]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ wireguard_address.split('/')[0] }}
+          @172.16.1.153 google.com A
+      changed_when: false
+      register: _e2e_blocked_probe
+      failed_when: false
+
+    - name: "PHASE [e2e-blocked : Assert Blocked Client Query Was Refused]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            'REFUSED' in _e2e_blocked_probe.stdout
+            or 'connection timed out' in _e2e_blocked_probe.stdout
+            or 'no servers could be reached' in _e2e_blocked_probe.stdout
+        fail_msg: >-
+          Blocked-client probe from VPN subnet did not return REFUSED or timeout.
+          The resolver accepted a query from a source IP outside DMZ/Private CIDRs.
+          stdout={{ _e2e_blocked_probe.stdout | default('') }},
+          stderr={{ _e2e_blocked_probe.stderr | default('') }}
+
+    - name: "PHASE [e2e-blocked : END]"
+      ansible.builtin.debug:
+        msg: "E2E blocked-client probe complete"
+
+# ──────────────────────────────────────────────────────────
+# E2E: Propagation through resolver — dynamic4 end-to-end
+# ──────────────────────────────────────────────────────────
+- name: "E2E Propagation Through Resolver"
+  hosts: primary-ns-01
+  gather_facts: false
+  vars:
+    _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
+    _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
+    _e2e_prop_ip: "172.16.1.204"
+  tasks:
+    - name: "PHASE [e2e-prop : START]"
+      ansible.builtin.debug:
+        msg: "E2E dynamic4 propagation test through resolver"
+
+    - name: "PHASE [e2e-prop : Set Test Address]"
+      ansible.builtin.set_fact:
+        _e2e_prop_ip_rev: >-
+          {{ _e2e_prop_ip.split('.')[3] }}.{{ _e2e_prop_ip.split('.')[2] }}.{{ _e2e_prop_ip.split('.')[1] }}.{{ _e2e_prop_ip.split('.')[0] }}.in-addr.arpa
+
+    # Create dynamic4 A + matching PTR on the primary, then poll the
+    # resolver until both records converge, and always clean up.
+    - name: "PHASE [e2e-prop : Dynamic Update Exercise]"
+      block:
+        - name: "PHASE [e2e-prop : Create dynamic4 A Record]"
+          ansible.builtin.command:
+            cmd: nsupdate -k /etc/named/named.keys.conf
+            stdin: |
+              server 172.16.1.53
+              zone {{ _e2e_forward_zone }}
+              update add dynamic4.{{ _e2e_forward_zone }}. 300 A {{ _e2e_prop_ip }}
+              send
+          changed_when: false
+
+        - name: "PHASE [e2e-prop : Add Matching PTR Record]"
+          ansible.builtin.command:
+            cmd: nsupdate -k /etc/named/named.keys.conf
+            stdin: |
+              server 172.16.1.53
+              zone 1.16.172.in-addr.arpa
+              update add {{ _e2e_prop_ip_rev }}. 300 PTR dynamic4.{{ _e2e_forward_zone }}.
+              send
+          changed_when: false
+
+        # Poll from dmz-agent-01 through the resolver
+        - name: "PHASE [e2e-prop : Poll dynamic4 A From DMZ Agent Through Resolver]"
+          ansible.builtin.command:
+            cmd: >-
+              dig @{{ _e2e_resolver }} dynamic4.{{ _e2e_forward_zone }} A +short
+          changed_when: false
+          register: _e2e_prop_dmz_a
+          delegate_to: dmz-agent-01
+          until: "_e2e_prop_ip in _e2e_prop_dmz_a.stdout"
+          retries: 10
+          delay: 1
+
+        # Poll from internal-agent-01 through the resolver
+        - name: "PHASE [e2e-prop : Poll dynamic4 A From Private Agent Through Resolver]"
+          ansible.builtin.command:
+            cmd: >-
+              dig @{{ _e2e_resolver }} dynamic4.{{ _e2e_forward_zone }} A +short
+          changed_when: false
+          register: _e2e_prop_internal_a
+          delegate_to: internal-agent-01
+          until: "_e2e_prop_ip in _e2e_prop_internal_a.stdout"
+          retries: 10
+          delay: 1
+
+      always:
+        # Safety-net cleanup: always revert dynamic4 and PTR even if poll
+        # exhausted retries. `nsupdate update delete` is idempotent.
+        - name: "PHASE [e2e-prop : Cleanup - Delete dynamic4 A Record]"
+          ansible.builtin.command:
+            cmd: nsupdate -k /etc/named/named.keys.conf
+            stdin: |
+              server 172.16.1.53
+              zone {{ _e2e_forward_zone }}
+              update delete dynamic4.{{ _e2e_forward_zone }}. A
+              send
+              zone 1.16.172.in-addr.arpa
+              update delete {{ _e2e_prop_ip_rev }}. PTR
+              send
+          changed_when: false
+          failed_when: false
+
+    - name: "PHASE [e2e-prop : END]"
+      ansible.builtin.debug:
+        msg: "E2E dynamic4 propagation test complete"
+
+# ──────────────────────────────────────────────────────────
+# E2E: DS extraction from primary for all 4 signed zones
+# ──────────────────────────────────────────────────────────
+- name: "E2E DS Extraction"
+  hosts: primary-ns-01
+  gather_facts: false
+  vars:
+    _e2e_zones:
+      - "{{ bind9_forward_zone_name }}"
+      - "{{ bind9_vpn_child_reverse_zone_name }}"
+      - "0.16.172.in-addr.arpa"
+      - "1.16.172.in-addr.arpa"
+  tasks:
+    - name: "PHASE [e2e-ds : START]"
+      ansible.builtin.debug:
+        msg: "E2E DS record extraction for all signed zones"
+
+    - name: "PHASE [e2e-ds : Extract DS Records For Each Zone]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          dig @172.16.1.53 {{ item }} DNSKEY | dnssec-dsfromkey -f - {{ item }}
+      changed_when: false
+      register: _e2e_ds_extract
+      loop: "{{ _e2e_zones }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "PHASE [e2e-ds : Assert DS Records Contain Algorithm 13 Digest 2]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "' IN DS ' in _e2e_ds_extract.results[idx].stdout"
+          - "' 13 2 ' in _e2e_ds_extract.results[idx].stdout"
+        fail_msg: >-
+          DS record for {{ item }} does not contain expected algorithm 13 and digest type 2.
+          stdout={{ _e2e_ds_extract.results[idx].stdout | default('') }}
+      loop: "{{ _e2e_zones }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item }}"
+
+    - name: "PHASE [e2e-ds : Display DS Records]"
+      ansible.builtin.debug:
+        msg: "{{ _e2e_ds_extract.results[idx].stdout }}"
+      loop: "{{ _e2e_zones }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item }}"
+
+    - name: "PHASE [e2e-ds : END]"
+      ansible.builtin.debug:
+        msg: "E2E DS extraction complete"
+
+# ──────────────────────────────────────────────────────────
+# E2E: Consecutive-run idempotency gate
+# ──────────────────────────────────────────────────────────
+- name: "E2E Idempotency Verification"
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: "PHASE [e2e-idempotency : START]"
+      ansible.builtin.debug:
+        msg: "E2E consecutive-run idempotency check"
+
+    - name: "PHASE [e2e-idempotency : Re-run dns.yml]"
+      ansible.builtin.command:
+        cmd: >-
+          ANSIBLE_CONFIG=ansible/ansible.cfg
+          ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/dns.yml
+      args:
+        chdir: "{{ playbook_dir | dirname | dirname }}"
+      changed_when: false
+      register: _e2e_idempotency_run
+
+    - name: "PHASE [e2e-idempotency : Parse Play Recap For DNS Hosts]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _e2e_idempotency_run.stdout is regex(
+              'primary-ns-01\s*:\s*ok=.*changed=0.*failed=0')
+          - >-
+            _e2e_idempotency_run.stdout is regex(
+              'secondary-ns-01\s*:\s*ok=.*changed=0.*failed=0')
+          - >-
+            _e2e_idempotency_run.stdout is regex(
+              'dns-01\s*:\s*ok=.*changed=0.*failed=0')
+        fail_msg: >-
+          Idempotency check failed — dns.yml rerun reported changes or failures.
+          Verify the output above for changed>0 or failed>0 on DNS hosts.
+          stdout={{ _e2e_idempotency_run.stdout | default('') }}
+
+    - name: "PHASE [e2e-idempotency : END]"
+      ansible.builtin.debug:
+        msg: "E2E idempotency check complete"
