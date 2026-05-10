@@ -452,7 +452,7 @@
         index_var: idx
         label: "{{ item }}"
 
-    - name: "PHASE [verify : DNSSEC - Display DS Records For OJ Submission]"
+    - name: "PHASE [verify : DNSSEC - Display DS Records]"
       ansible.builtin.debug:
         msg: "{{ _bind9_verify_ds_extract.results[idx].stdout }}"
       loop: "{{ _bind9_dnssec_unique_zones }}"
@@ -547,7 +547,7 @@
 
     # Display DS for public-only zones (those without a private-view
     # counterpart). Zones present in both views are already displayed by
-    # the private-view OJ submission task above, so we skip them here to
+    # the private-view task above, so we skip them here to
     # avoid duplicate output.
     - name: "PHASE [verify : DNSSEC - Display DS Records For Public-Only Zones]"
       ansible.builtin.debug:
