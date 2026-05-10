@@ -12,7 +12,7 @@
     # ──────────────────────────────────────────────────────────
     # VPN identity derivation — runs for ALL modes (including
     # resolver) because bind9_forward_zone_name and the reverse-
-    # zone naming are needed for resolver static-stub configuration.
+    # zone naming are needed for resolver forward-zone configuration.
     # ──────────────────────────────────────────────────────────
     - name: "PRE [dns : Derive bind9 VPN Identity Facts]"
       when:

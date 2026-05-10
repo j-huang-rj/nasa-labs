@@ -4,8 +4,9 @@ include "{{ bind9_conf_dir }}/named.acl.conf";
 include "{{ bind9_conf_dir }}/named.options.conf";
 {#
   Zone declarations render for ALL modes — resolver uses bind9_zones for
-  static-stub entries that direct lab-zone queries to authoritative servers,
-  while authoritative modes use bind9_zones for view-scoped zone data.
+  per-zone forward entries that direct lab-zone queries to authoritative
+  servers, while authoritative modes use bind9_zones for view-scoped zone
+  data.
 #}
 include "{{ bind9_conf_dir }}/named.zones.conf";
 
