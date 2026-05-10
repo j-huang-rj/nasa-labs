@@ -5,12 +5,19 @@
 #
 # Caller must pass `_keyfiles_label_prefix` (string, e.g. "" or "Secondary").
 # The label is appended to the PHASE tag so the play recap stays distinct.
+#
+# `changed_when: false` is set on every task here because these tempfiles
+# are run-scoped scratch state, not persistent system configuration. The
+# cleanup file deletes them at the end of the verify block, so a re-run
+# leaves the host in identical resting state and the play recap reports
+# `changed=0` honestly.
 
 - name: "PHASE [verify : Create TSIG Key Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.tempfile:
     state: file
     suffix: ".key"
   register: _bind9_tsig_keyfile
+  changed_when: false
 
 - name: "PHASE [verify : Write TSIG Key To Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.copy:
@@ -24,12 +31,14 @@
     group: named
     mode: "0600"
   no_log: true
+  changed_when: false
 
 - name: "PHASE [verify : Create AXFR Key Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.tempfile:
     state: file
     suffix: ".key"
   register: _bind9_axfr_keyfile
+  changed_when: false
 
 - name: "PHASE [verify : Write AXFR Key To Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.copy:
@@ -43,3 +52,4 @@
     group: named
     mode: "0600"
   no_log: true
+  changed_when: false

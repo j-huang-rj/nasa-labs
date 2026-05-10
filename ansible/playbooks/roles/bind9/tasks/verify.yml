@@ -170,107 +170,134 @@
     #     so a silent rc=0 from nsupdate (e.g. policy-rejected with no error)
     #     can't pass through unnoticed. The redundant 'modify' step from
     #     earlier revisions was dropped: create + delete on a fresh name
-    #     already exercises the same allow-add and allow-delete paths. ---
-    - name: "PHASE [verify : Dynamic Update - Create dynamic1 A Record]"
-      ansible.builtin.command:
-        cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server {{ _bind9_private_source }}
-          zone {{ bind9_forward_zone_name }}
-          update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.200
-          send
-      changed_when: false
+    #     already exercises the same allow-add and allow-delete paths.
+    #     The whole exercise is wrapped in block/always so a half-failed
+    #     run (e.g. an assert fails between the create and the delete)
+    #     still reverts dynamic1 and its PTR. Without this safety net the
+    #     primary's zone would carry leaked records into the next run and
+    #     drift from the playbook's declared state. ---
+    - name: "PHASE [verify : Dynamic Update Exercise]"
+      block:
+        - name: "PHASE [verify : Dynamic Update - Create dynamic1 A Record]"
+          ansible.builtin.command:
+            cmd: >-
+              nsupdate -k {{ _bind9_tsig_keyfile.path }}
+            stdin: |
+              server {{ _bind9_private_source }}
+              zone {{ bind9_forward_zone_name }}
+              update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.200
+              send
+          changed_when: false
 
-    - name: "PHASE [verify : Dynamic Update - Verify dynamic1 A Record Was Added]"
-      ansible.builtin.command:
-        cmd: >-
-          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
-          dynamic1.{{ bind9_forward_zone_name }} A +short
-      changed_when: false
-      register: _bind9_verify_dyn_create_dig
+        - name: "PHASE [verify : Dynamic Update - Verify dynamic1 A Record Was Added]"
+          ansible.builtin.command:
+            cmd: >-
+              dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+              dynamic1.{{ bind9_forward_zone_name }} A +short
+          changed_when: false
+          register: _bind9_verify_dyn_create_dig
 
-    - name: "PHASE [verify : Assert dynamic1 A Record Is 172.16.1.200]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - "'172.16.1.200' in _bind9_verify_dyn_create_dig.stdout"
-        fail_msg: >-
-          DDNS create succeeded (rc=0) but dynamic1.{{ bind9_forward_zone_name }}
-          does not resolve to 172.16.1.200.
-          stdout={{ _bind9_verify_dyn_create_dig.stdout | default('') }}
+        - name: "PHASE [verify : Assert dynamic1 A Record Is 172.16.1.200]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - "'172.16.1.200' in _bind9_verify_dyn_create_dig.stdout"
+            fail_msg: >-
+              DDNS create succeeded (rc=0) but dynamic1.{{ bind9_forward_zone_name }}
+              does not resolve to 172.16.1.200.
+              stdout={{ _bind9_verify_dyn_create_dig.stdout | default('') }}
 
-    - name: "PHASE [verify : Dynamic Update - Add PTR Record]"
-      ansible.builtin.command:
-        cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server {{ _bind9_private_source }}
-          zone 1.16.172.in-addr.arpa
-          update add 200.1.16.172.in-addr.arpa. 300 PTR dynamic1.{{ bind9_forward_zone_name }}.
-          send
-      changed_when: false
+        - name: "PHASE [verify : Dynamic Update - Add PTR Record]"
+          ansible.builtin.command:
+            cmd: >-
+              nsupdate -k {{ _bind9_tsig_keyfile.path }}
+            stdin: |
+              server {{ _bind9_private_source }}
+              zone 1.16.172.in-addr.arpa
+              update add 200.1.16.172.in-addr.arpa. 300 PTR dynamic1.{{ bind9_forward_zone_name }}.
+              send
+          changed_when: false
 
-    - name: "PHASE [verify : Dynamic Update - Verify PTR Record Was Added]"
-      ansible.builtin.command:
-        cmd: >-
-          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
-          -x 172.16.1.200 +short
-      changed_when: false
-      register: _bind9_verify_dyn_ptr_dig
+        - name: "PHASE [verify : Dynamic Update - Verify PTR Record Was Added]"
+          ansible.builtin.command:
+            cmd: >-
+              dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+              -x 172.16.1.200 +short
+          changed_when: false
+          register: _bind9_verify_dyn_ptr_dig
 
-    - name: "PHASE [verify : Assert PTR For 172.16.1.200 Points To dynamic1]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - >-
-            ('dynamic1.' ~ bind9_forward_zone_name ~ '.')
-            in _bind9_verify_dyn_ptr_dig.stdout
-        fail_msg: >-
-          DDNS add-PTR succeeded (rc=0) but reverse lookup for 172.16.1.200
-          does not return dynamic1.{{ bind9_forward_zone_name }}.
-          stdout={{ _bind9_verify_dyn_ptr_dig.stdout | default('') }}
+        - name: "PHASE [verify : Assert PTR For 172.16.1.200 Points To dynamic1]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - >-
+                ('dynamic1.' ~ bind9_forward_zone_name ~ '.')
+                in _bind9_verify_dyn_ptr_dig.stdout
+            fail_msg: >-
+              DDNS add-PTR succeeded (rc=0) but reverse lookup for 172.16.1.200
+              does not return dynamic1.{{ bind9_forward_zone_name }}.
+              stdout={{ _bind9_verify_dyn_ptr_dig.stdout | default('') }}
 
-    - name: "PHASE [verify : Dynamic Update - Delete dynamic1 And PTR Records]"
-      ansible.builtin.command:
-        cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server {{ _bind9_private_source }}
-          zone {{ bind9_forward_zone_name }}
-          update delete dynamic1.{{ bind9_forward_zone_name }}. A
-          send
-          zone 1.16.172.in-addr.arpa
-          update delete 200.1.16.172.in-addr.arpa. PTR
-          send
-      changed_when: false
+        - name: "PHASE [verify : Dynamic Update - Delete dynamic1 And PTR Records]"
+          ansible.builtin.command:
+            cmd: >-
+              nsupdate -k {{ _bind9_tsig_keyfile.path }}
+            stdin: |
+              server {{ _bind9_private_source }}
+              zone {{ bind9_forward_zone_name }}
+              update delete dynamic1.{{ bind9_forward_zone_name }}. A
+              send
+              zone 1.16.172.in-addr.arpa
+              update delete 200.1.16.172.in-addr.arpa. PTR
+              send
+          changed_when: false
 
-    - name: "PHASE [verify : Dynamic Update - Verify dynamic1 A Record Was Removed]"
-      ansible.builtin.command:
-        cmd: >-
-          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
-          dynamic1.{{ bind9_forward_zone_name }} A +short
-      changed_when: false
-      register: _bind9_verify_dyn_del_a_dig
+        - name: "PHASE [verify : Dynamic Update - Verify dynamic1 A Record Was Removed]"
+          ansible.builtin.command:
+            cmd: >-
+              dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+              dynamic1.{{ bind9_forward_zone_name }} A +short
+          changed_when: false
+          register: _bind9_verify_dyn_del_a_dig
 
-    - name: "PHASE [verify : Dynamic Update - Verify PTR Record Was Removed]"
-      ansible.builtin.command:
-        cmd: >-
-          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
-          -x 172.16.1.200 +short
-      changed_when: false
-      register: _bind9_verify_dyn_del_ptr_dig
+        - name: "PHASE [verify : Dynamic Update - Verify PTR Record Was Removed]"
+          ansible.builtin.command:
+            cmd: >-
+              dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+              -x 172.16.1.200 +short
+          changed_when: false
+          register: _bind9_verify_dyn_del_ptr_dig
 
-    - name: "PHASE [verify : Assert dynamic1 And PTR Records Are Gone]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - _bind9_verify_dyn_del_a_dig.stdout | trim | length == 0
-          - _bind9_verify_dyn_del_ptr_dig.stdout | trim | length == 0
-        fail_msg: >-
-          DDNS delete succeeded (rc=0) but records linger.
-          A_stdout={{ _bind9_verify_dyn_del_a_dig.stdout | default('') }}
-          PTR_stdout={{ _bind9_verify_dyn_del_ptr_dig.stdout | default('') }}
+        - name: "PHASE [verify : Assert dynamic1 And PTR Records Are Gone]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - _bind9_verify_dyn_del_a_dig.stdout | trim | length == 0
+              - _bind9_verify_dyn_del_ptr_dig.stdout | trim | length == 0
+            fail_msg: >-
+              DDNS delete succeeded (rc=0) but records linger.
+              A_stdout={{ _bind9_verify_dyn_del_a_dig.stdout | default('') }}
+              PTR_stdout={{ _bind9_verify_dyn_del_ptr_dig.stdout | default('') }}
+      always:
+        # Safety-net cleanup: runs even when the block above failed mid-way.
+        # `nsupdate update delete` is idempotent — it succeeds whether or
+        # not the record exists, so this is a no-op on the happy path
+        # (the block's own delete already ran). `failed_when: false`
+        # ensures a hiccup in cleanup never masks the original failure.
+        - name: "PHASE [verify : Dynamic Update - Cleanup Safety Net]"
+          ansible.builtin.command:
+            cmd: >-
+              nsupdate -k {{ _bind9_tsig_keyfile.path }}
+            stdin: |
+              server {{ _bind9_private_source }}
+              zone {{ bind9_forward_zone_name }}
+              update delete dynamic1.{{ bind9_forward_zone_name }}. A
+              send
+              zone 1.16.172.in-addr.arpa
+              update delete 200.1.16.172.in-addr.arpa. PTR
+              send
+          changed_when: false
+          failed_when: false
 
     # --- Dynamic update rejection checks ---
     - name: "PHASE [verify : Unsigned Update Must Be Rejected]"
@@ -629,7 +656,10 @@
           stdout={{ _bind9_verify_secondary_public_only_soa.stdout | default('') }}
 
     # --- Propagation test: update on primary, poll secondary until
-    #     convergence. Capped at 10 seconds via retries/delay. ---
+    #     convergence. Capped at 10 seconds via retries/delay.
+    #     The mutating tasks (create/PTR-add/poll) are wrapped in
+    #     block/always so the cleanup-delete runs even if poll exhausts
+    #     its retries, keeping the primary's zone idempotent at rest. ---
     - name: "PHASE [verify : Propagation - Set Test Address]"
       ansible.builtin.set_fact:
         _bind9_prop_test_ip: "172.16.1.202"
@@ -641,63 +671,60 @@
         _bind9_prop_test_ip_rev: >-
           {{ _octets[3] }}.{{ _octets[2] }}.{{ _octets[1] }}.{{ _octets[0] }}.in-addr.arpa
 
-    - name: "PHASE [verify : Propagation - Create dynamic2 A Record On Primary]"
-      ansible.builtin.command:
-        cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server 172.16.1.53
-          zone {{ bind9_forward_zone_name }}
-          update add dynamic2.{{ bind9_forward_zone_name }}. 300 A {{ _bind9_prop_test_ip }}
-          send
-      changed_when: false
-      register: _bind9_verify_prop_create
+    - name: "PHASE [verify : Propagation Exercise]"
+      block:
+        - name: "PHASE [verify : Propagation - Create dynamic2 A Record On Primary]"
+          ansible.builtin.command:
+            cmd: >-
+              nsupdate -k {{ _bind9_tsig_keyfile.path }}
+            stdin: |
+              server 172.16.1.53
+              zone {{ bind9_forward_zone_name }}
+              update add dynamic2.{{ bind9_forward_zone_name }}. 300 A {{ _bind9_prop_test_ip }}
+              send
+          changed_when: false
 
-    - name: "PHASE [verify : Propagation - Add Matching PTR Record On Primary]"
-      ansible.builtin.command:
-        cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server 172.16.1.53
-          zone 1.16.172.in-addr.arpa
-          update add {{ _bind9_prop_test_ip_rev }}. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
-          send
-      changed_when: false
-      register: _bind9_verify_prop_ptr_create
+        - name: "PHASE [verify : Propagation - Add Matching PTR Record On Primary]"
+          ansible.builtin.command:
+            cmd: >-
+              nsupdate -k {{ _bind9_tsig_keyfile.path }}
+            stdin: |
+              server 172.16.1.53
+              zone 1.16.172.in-addr.arpa
+              update add {{ _bind9_prop_test_ip_rev }}. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
+              send
+          changed_when: false
 
-    - name: "PHASE [verify : Propagation - Poll Secondary Until dynamic2 Appears]"
-      ansible.builtin.command:
-        cmd: >-
-          dig -b 172.16.0.53 @172.16.0.53
-          dynamic2.{{ bind9_forward_zone_name }} A +short
-      changed_when: false
-      register: _bind9_verify_prop_poll
-      until: "_bind9_prop_test_ip in _bind9_verify_prop_poll.stdout"
-      retries: 10
-      delay: 1
-
-    # --- Cleanup: remove the dynamic2 test records from the primary ---
-    - name: "PHASE [verify : Propagation - Delete dynamic2 A Record From Primary]"
-      ansible.builtin.command:
-        cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server 172.16.1.53
-          zone {{ bind9_forward_zone_name }}
-          update delete dynamic2.{{ bind9_forward_zone_name }}. A
-          send
-      changed_when: false
-
-    - name: "PHASE [verify : Propagation - Delete dynamic2 PTR Record From Primary]"
-      ansible.builtin.command:
-        cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server 172.16.1.53
-          zone 1.16.172.in-addr.arpa
-          update delete {{ _bind9_prop_test_ip_rev }}. PTR
-          send
-      changed_when: false
+        - name: "PHASE [verify : Propagation - Poll Secondary Until dynamic2 Appears]"
+          ansible.builtin.command:
+            cmd: >-
+              dig -b 172.16.0.53 @172.16.0.53
+              dynamic2.{{ bind9_forward_zone_name }} A +short
+          changed_when: false
+          register: _bind9_verify_prop_poll
+          until: "_bind9_prop_test_ip in _bind9_verify_prop_poll.stdout"
+          retries: 10
+          delay: 1
+      always:
+        # Safety-net cleanup: the previous shape ran two delete tasks at
+        # the end of the block; if poll exhausted retries those deletes
+        # were skipped and dynamic2 / its PTR leaked into the next run.
+        # `nsupdate update delete` is idempotent (succeeds whether or
+        # not the record exists) so this is also safe on the happy path.
+        - name: "PHASE [verify : Propagation - Cleanup Safety Net]"
+          ansible.builtin.command:
+            cmd: >-
+              nsupdate -k {{ _bind9_tsig_keyfile.path }}
+            stdin: |
+              server 172.16.1.53
+              zone {{ bind9_forward_zone_name }}
+              update delete dynamic2.{{ bind9_forward_zone_name }}. A
+              send
+              zone 1.16.172.in-addr.arpa
+              update delete {{ _bind9_prop_test_ip_rev }}. PTR
+              send
+          changed_when: false
+          failed_when: false
 
     # --- Refusal checks: direct updates and onward transfers
     #     against the secondary must be refused. ---
