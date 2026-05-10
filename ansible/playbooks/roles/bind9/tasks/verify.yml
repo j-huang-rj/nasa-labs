@@ -274,6 +274,100 @@
           rc={{ _bind9_verify_axfr_reject.rc }},
           stdout={{ _bind9_verify_axfr_reject.stdout | default('') }}
 
+    # --- DNSSEC verification: confirm that all signed zones emit DNSKEY
+    #     and RRSIG records, and extract DS records for OJ submission. ---
+    - name: "PHASE [verify : DNSSEC - Query DNSKEY For Each Signed Zone]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          {{ item.name }} DNSKEY +dnssec
+      changed_when: false
+      register: _bind9_verify_dnskey
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.name }} ({{ item.view }})"
+
+    - name: "PHASE [verify : Assert DNSKEY Present In All Signed Zones]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'DNSKEY' in _bind9_verify_dnskey.results[idx].stdout"
+        fail_msg: >-
+          DNSKEY record not found for {{ item.name }} ({{ item.view }} view).
+          stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }} ({{ item.view }})"
+
+    - name: "PHASE [verify : Assert RRSIG Present In All Signed Zones]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'RRSIG' in _bind9_verify_dnskey.results[idx].stdout"
+        fail_msg: >-
+          RRSIG record not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
+          stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }} ({{ item.view }})"
+
+    - name: "PHASE [verify : Assert Algorithm 13 In All Signed Zones]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "' 13 ' in _bind9_verify_dnskey.results[idx].stdout"
+        fail_msg: >-
+          Algorithm 13 (ECDSAP256SHA256) not found in DNSKEY response for {{ item.name }} ({{ item.view }} view).
+          stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
+      loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.name }} ({{ item.view }})"
+
+    # --- DS record extraction using the lab-specified pipeline:
+    #     dig @172.16.1.53 <zone> DNSKEY | dnssec-dsfromkey -f - <zone>
+    #     This produces the DS records the student submits to the OJ. ---
+    - name: "PHASE [verify : Build List Of Unique Zone Names For DS Extraction]"
+      ansible.builtin.set_fact:
+        _bind9_dnssec_unique_zones: >-
+          {{ bind9_dnssec_key_material | map(attribute='zone') | list }}
+
+    - name: "PHASE [verify : DNSSEC - Extract DS Records For Each Zone]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail &&
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          {{ item }} DNSKEY | dnssec-dsfromkey -f - {{ item }}
+      changed_when: false
+      register: _bind9_verify_ds_extract
+      loop: "{{ _bind9_dnssec_unique_zones }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "PHASE [verify : Assert DS Records Contain Algorithm 13 Digest 2]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "' IN DS ' in _bind9_verify_ds_extract.results[idx].stdout"
+          - "' 13 2 ' in _bind9_verify_ds_extract.results[idx].stdout"
+        fail_msg: >-
+          DS record for {{ item }} does not contain expected algorithm 13 and digest type 2.
+          stdout={{ _bind9_verify_ds_extract.results[idx].stdout | default('') }}
+      loop: "{{ _bind9_dnssec_unique_zones }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item }}"
+
+    - name: "PHASE [verify : DNSSEC - Display DS Records For OJ Submission]"
+      ansible.builtin.debug:
+        msg: "{{ _bind9_verify_ds_extract.results[idx].stdout }}"
+      loop: "{{ _bind9_dnssec_unique_zones }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item }}"
+
   # --- Authoritative secondary: zone transfer verification ---
 - name: "PHASE [verify : Authoritative Secondary Verification]"
   when: bind9_mode == 'authoritative_secondary'
@@ -489,6 +583,47 @@
           AXFR from secondary (non-primary source) was not refused.
           rc={{ _bind9_verify_secondary_axfr_reject.rc }},
           stdout={{ _bind9_verify_secondary_axfr_reject.stdout | default('') }}
+
+    # --- DNSSEC verification on the secondary: confirm that signed data
+    #     transferred via AXFR includes DNSKEY and RRSIG material, proving
+    #     the external publication path carries DNSSEC records. ---
+    - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For Forward Zone]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @172.16.0.53 {{ bind9_forward_zone_name }} DNSKEY +dnssec
+      changed_when: false
+      register: _bind9_verify_secondary_dnskey_fwd
+
+    - name: "PHASE [verify : Assert Secondary Public Forward Zone Has DNSKEY And RRSIG]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'DNSKEY' in _bind9_verify_secondary_dnskey_fwd.stdout"
+          - "'RRSIG' in _bind9_verify_secondary_dnskey_fwd.stdout"
+        fail_msg: >-
+          Secondary public view for {{ bind9_forward_zone_name }} did not return
+          DNSKEY and RRSIG records. Signed data is not propagating via AXFR.
+          stdout={{ _bind9_verify_secondary_dnskey_fwd.stdout | default('') }}
+
+    - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For VPN Child Reverse Zone]"
+      ansible.builtin.command:
+        cmd: >-
+          dig @172.16.0.53 -y
+          "{{ bind9_axfr_key.algorithm }}:{{ bind9_axfr_key.name }}:{{ bind9_axfr_key.secret }}"
+          {{ bind9_vpn_child_reverse_zone_name }} DNSKEY +dnssec
+      changed_when: false
+      register: _bind9_verify_secondary_dnskey_vpn_rev
+
+    - name: "PHASE [verify : Assert Secondary VPN Child Reverse Zone Has DNSKEY And RRSIG]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'DNSKEY' in _bind9_verify_secondary_dnskey_vpn_rev.stdout"
+          - "'RRSIG' in _bind9_verify_secondary_dnskey_vpn_rev.stdout"
+        fail_msg: >-
+          Secondary public view for {{ bind9_vpn_child_reverse_zone_name }} did not return
+          DNSKEY and RRSIG records. Signed data is not propagating via AXFR.
+          stdout={{ _bind9_verify_secondary_dnskey_vpn_rev.stdout | default('') }}
 
 # --- TSIG key assertion ---
 - name: "PHASE [verify : TSIG Key Assertion]"
