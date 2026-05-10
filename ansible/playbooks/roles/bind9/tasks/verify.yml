@@ -309,7 +309,7 @@
           stdout={{ _bind9_verify_axfr_reject.stdout | default('') }}
 
     # --- DNSSEC verification: confirm that all signed zones emit DNSKEY
-    #     and RRSIG records, and extract DS records for OJ submission. ---
+    #     and RRSIG records, and extract DS records. ---
     - name: "PHASE [verify : DNSSEC - Query DNSKEY For Each Signed Zone]"
       ansible.builtin.command:
         cmd: >-
@@ -325,9 +325,11 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'DNSKEY' in _bind9_verify_dnskey.results[idx].stdout"
+          - >-
+            _bind9_verify_dnskey.results[idx].stdout
+              is regex('(?m)^[^;].*\sIN\s+DNSKEY\s')
         fail_msg: >-
-          DNSKEY record not found for {{ item.name }} ({{ item.view }} view).
+          DNSKEY answer record not found for {{ item.name }} ({{ item.view }} view).
           stdout={{ _bind9_verify_dnskey.results[idx].stdout | default('') }}
       loop: "{{ bind9_zones | selectattr('dnssec_policy', 'defined') | selectattr('view', 'equalto', 'private') | list }}"
       loop_control:
@@ -360,9 +362,7 @@
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
 
-    # --- DS record extraction using the lab-specified pipeline:
-    #     dig @172.16.1.53 <zone> DNSKEY | dnssec-dsfromkey -f - <zone>
-    #     This produces the DS records the student submits to the OJ. ---
+    # --- DS record extraction ---
     - name: "PHASE [verify : Build List Of Unique Zone Names For DS Extraction]"
       ansible.builtin.set_fact:
         _bind9_dnssec_unique_zones: >-
@@ -454,10 +454,16 @@
 
     - name: "PHASE [verify : DNSSEC - Extract DS Records For Public-View Zones]"
       ansible.builtin.shell:
+        # `+noall +answer` restricts output to ANSWER-section records only.
+        # Without it, the TSIG pseudo-record appended by `-k <keyfile>`
+        # (class ANY) and the OPT pseudo-record from EDNS get piped into
+        # `dnssec-dsfromkey -f -`, which fails with:
+        #   "class 'ANY' != zone class 'IN' ... bad class".
         cmd: >-
           set -o pipefail &&
           dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
           -k {{ _bind9_axfr_keyfile.path }}
+          +noall +answer
           {{ item }} DNSKEY | dnssec-dsfromkey -f - {{ item }}
       changed_when: false
       register: _bind9_verify_ds_extract_public
