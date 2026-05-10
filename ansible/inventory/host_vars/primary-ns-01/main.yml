@@ -53,6 +53,7 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.{{ bind9_forward_zone_name }}"
+    dnssec_policy: nasa-lab
     dynamic_update_scope: forward_a_hosts
     allow_transfer:
       - "172.16.0.53"
@@ -95,6 +96,7 @@ bind9_zones:
     view: public
     type: master
     file: "public/db.{{ bind9_forward_zone_name }}"
+    dnssec_policy: nasa-lab
     allow_transfer:
       - "172.16.0.53"
     also_notify:
@@ -129,6 +131,7 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.0.16.172.in-addr.arpa"
+    dnssec_policy: nasa-lab
     dynamic_update_scope: ptr_zonesub
     allow_transfer:
       - "172.16.0.53"
@@ -159,6 +162,7 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.1.16.172.in-addr.arpa"
+    dnssec_policy: nasa-lab
     dynamic_update_scope: ptr_zonesub
     allow_transfer:
       - "172.16.0.53"
@@ -192,6 +196,7 @@ bind9_zones:
     view: public
     type: master
     file: "public/db.{{ bind9_vpn_child_reverse_zone_name }}"
+    dnssec_policy: nasa-lab
     allow_transfer:
       - "172.16.0.53"
     also_notify:

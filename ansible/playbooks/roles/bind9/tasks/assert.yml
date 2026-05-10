@@ -134,6 +134,32 @@
         | rejectattr('view', 'equalto', 'private')
         | map(attribute='name') | list }}
 
+- name: "PHASE [assert : Validate DNSSEC Policy For Authoritative Primary]"
+  when: bind9_mode == 'authoritative_primary'
+  block:
+    - name: "PHASE [assert : Check bind9_dnssec_policy.name Is Defined]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_dnssec_policy is defined
+          - bind9_dnssec_policy.name is defined
+          - bind9_dnssec_policy.name | length > 0
+        fail_msg: >-
+          bind9_dnssec_policy.name must be defined and non-empty for authoritative_primary mode;
+          got '{{ bind9_dnssec_policy.name | default("(undefined)") }}'
+
+    - name: "PHASE [assert : Check bind9_dnssec_policy.key_directory Is Defined]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_dnssec_policy.key_directory is defined
+          - bind9_dnssec_policy.key_directory | length > 0
+        fail_msg: >-
+          bind9_dnssec_policy.key_directory must be defined and non-empty for authoritative_primary mode;
+          got '{{ bind9_dnssec_policy.key_directory | default("(undefined)") }}'
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:
