@@ -39,6 +39,12 @@ bind9_dynamic_hosts:
 # emits `forwarders { ... }; forward only;` and skips root-based recursion.
 bind9_forwarders: []
 
+# Trust anchors for DNSSEC validation in resolver mode. Each item is a dict
+# with keys: zone, flags, protocol, algorithm, key. Populated by the dns.yml
+# play's pre_tasks from upstream KSK records (flags 257); not stored in
+# secrets.yml because trust anchors are public key material, not secrets.
+bind9_trust_anchors: []
+
 # TSIG key configuration
 bind9_tsig_key:
   name: lab_ddns_shared

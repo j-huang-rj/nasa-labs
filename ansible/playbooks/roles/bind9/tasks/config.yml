@@ -64,10 +64,22 @@
   notify: "PHASE [handler : Restart named]"
 
 - name: "PHASE [config : Render Zones Conf]"
-  when: bind9_mode != 'resolver'
   ansible.builtin.template:
     src: named.zones.conf.j2
     dest: "{{ bind9_conf_dir }}/named.zones.conf"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Render Trust Anchors Conf]"
+  when:
+    - bind9_mode == 'resolver'
+    - bind9_trust_anchors | default([]) | length > 0
+  ansible.builtin.template:
+    src: named.trust-anchors.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.trust-anchors.conf"
     owner: root
     group: named
     mode: "0640"
