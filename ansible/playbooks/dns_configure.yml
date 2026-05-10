@@ -122,14 +122,14 @@
                   _bind9_nasa_dnskey.stdout_lines |
                   select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
                   map('regex_replace',
-                    '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)$',
+                    '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$',
                     '{"zone":"nasa.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
                   map('from_json') | list
                 ) + (
                   _bind9_reverse_dnskey.stdout_lines |
                   select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
                   map('regex_replace',
-                    '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)$',
+                    '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$',
                     '{"zone":"168.192.in-addr.arpa.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
                   map('from_json') | list
                 ) }}
