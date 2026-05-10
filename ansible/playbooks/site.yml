@@ -3,4 +3,4 @@
   ansible.builtin.import_playbook: bootstrap.yml
 
 - name: DNS Services
-  ansible.builtin.import_playbook: dns.yml
+  ansible.builtin.import_playbook: dns_configure.yml

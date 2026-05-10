@@ -40,7 +40,7 @@ bind9_dynamic_hosts:
 bind9_forwarders: []
 
 # Trust anchors for DNSSEC validation in resolver mode. Each item is a dict
-# with keys: zone, flags, protocol, algorithm, key. Populated by the dns.yml
+# with keys: zone, flags, protocol, algorithm, key. Populated by the dns_configure.yml
 # play's pre_tasks from upstream KSK records (flags 257); not stored in
 # secrets.yml because trust anchors are public key material, not secrets.
 bind9_trust_anchors: []

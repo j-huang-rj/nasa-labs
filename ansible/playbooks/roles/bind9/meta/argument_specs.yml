@@ -121,28 +121,28 @@ argument_specs:
         required: false
         description: >-
           Authoritative forward zone name (e.g. "<lab_id>.nasa"). Required for both authoritative modes.
-          Computed by the dns.yml play's pre_tasks from the WireGuard subnet of bind9_identity_source_host.
+          Computed by the dns_configure.yml play's pre_tasks from the WireGuard subnet of bind9_identity_source_host.
 
       bind9_vpn_child_reverse_zone_name:
         type: str
         required: false
         description: >-
           RFC 2317 child reverse zone name covering the VPN /28 (e.g. "<lab_id>-sub28.x.y.z.in-addr.arpa").
-          Required for both authoritative modes. Computed by the dns.yml play's pre_tasks.
+          Required for both authoritative modes. Computed by the dns_configure.yml play's pre_tasks.
 
       bind9_primary_mname:
         type: str
         required: false
         description: >-
           SOA MNAME used in rendered zone files.
-          Required for authoritative_primary. Computed by the dns.yml play's pre_tasks.
+          Required for authoritative_primary. Computed by the dns_configure.yml play's pre_tasks.
 
       bind9_soa_serial_date:
         type: str
         required: false
         description: >-
           YYYYMMDD floor used by the bind9_zone_serial filter for first-deploy and date-rollover bumps.
-          Required for authoritative_primary. Computed by the dns.yml play's pre_tasks from the controller's date.
+          Required for authoritative_primary. Computed by the dns_configure.yml play's pre_tasks from the controller's date.
 
       bind9_tsig_key:
         type: dict
@@ -205,5 +205,5 @@ argument_specs:
           Trust anchors for DNSSEC validation in resolver mode. Each item is a dict with keys: zone (str,
           the anchor zone name), flags (int, expected 257 for KSK), protocol (int, typically 3), algorithm
           (int, e.g. 13 for ECDSAP256SHA256), and key (str, base64 key data). Populated at runtime by the
-          dns.yml play's pre_tasks from upstream DNSKEY records; empty default means no trust anchors are
+          dns_configure.yml play's pre_tasks from upstream DNSKEY records; empty default means no trust anchors are
           rendered when the variable is omitted.

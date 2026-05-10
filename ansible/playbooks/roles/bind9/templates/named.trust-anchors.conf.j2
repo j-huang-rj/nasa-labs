@@ -2,7 +2,7 @@
 {#
   Trust anchors for DNSSEC validation in resolver mode.
   Sourced from the course root server (192.168.255.1) KSK records at
-  runtime by the dns.yml play's pre_tasks. These are public key material
+  runtime by the dns_configure.yml play's pre_tasks. These are public key material
   (not secrets) and are rendered as static-key entries per BIND 9.18+
   trust-anchors syntax.
 #}
