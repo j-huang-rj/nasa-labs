@@ -147,11 +147,13 @@
           {{ result }}
 
     # --- Private-view forward A lookups ---
+    # `+comments` retained so the `flags: qr aa` header line stays in
+    # stdout for the authoritative-flag assertion below.
     - name: "PHASE [verify : Private View - Forward A Lookups]"
       ansible.builtin.command:
         cmd: >-
           dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
-          {{ item.name }}.{{ bind9_forward_zone_name }} A +noall +answer
+          {{ item.name }}.{{ bind9_forward_zone_name }} A +noall +comments +answer
       changed_when: false
       register: _bind9_verify_private_fwd
       loop: "{{ _bind9_private_fwd_a }}"
@@ -163,38 +165,17 @@
         quiet: true
         that:
           - item.value in _bind9_verify_private_fwd.results[idx].stdout
+          # Authoritative-flag check folded in here so every private-view
+          # forward answer is asserted authoritative, not just the first.
+          - "'flags: qr aa' in _bind9_verify_private_fwd.results[idx].stdout"
         fail_msg: >-
           {{ item.name }}.{{ bind9_forward_zone_name }} A → {{ item.value }}
-          not found in private view
+          not found in private view, or response was not authoritative.
+          stdout={{ _bind9_verify_private_fwd.results[idx].stdout | default('') }}
       loop: "{{ _bind9_private_fwd_a }}"
       loop_control:
         index_var: idx
         label: "{{ item.name }} → {{ item.value }}"
-
-    # --- Private-view authoritative check ---
-    - name: "PHASE [verify : Assert Private Forward A Matrix Is Non-Empty]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - _bind9_private_fwd_a | length > 0
-        fail_msg: >-
-          No private-view A records found for {{ bind9_forward_zone_name }};
-          cannot run authoritative-flag check.
-
-    - name: "PHASE [verify : Private View - Authoritative Check]"
-      ansible.builtin.command:
-        cmd: >-
-          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
-          {{ _bind9_private_fwd_a[0].name }}.{{ bind9_forward_zone_name }} A
-      changed_when: false
-      register: _bind9_verify_private_auth
-
-    - name: "PHASE [verify : Assert Private View Responses Are Authoritative]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - "'flags: qr aa' in _bind9_verify_private_auth.stdout"
-        fail_msg: "Private view response not authoritative"
 
     # --- Private-view reverse lookups ---
     - name: "PHASE [verify : Private View - Reverse Lookups]"
@@ -219,7 +200,11 @@
         index_var: idx
         label: "{{ item.ip }} → {{ item.fqdn }}"
 
-    # --- Dynamic update success checks ---
+    # --- Dynamic update lifecycle: each step is followed by a dig+assert
+    #     so a silent rc=0 from nsupdate (e.g. policy-rejected with no error)
+    #     can't pass through unnoticed. The redundant 'modify' step from
+    #     earlier revisions was dropped: create + delete on a fresh name
+    #     already exercises the same allow-add and allow-delete paths. ---
     - name: "PHASE [verify : Dynamic Update - Create dynamic1 A Record]"
       ansible.builtin.command:
         cmd: >-
@@ -230,20 +215,24 @@
           update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.200
           send
       changed_when: false
-      register: _bind9_verify_dyn_create
 
-    - name: "PHASE [verify : Dynamic Update - Modify dynamic1 A Record]"
+    - name: "PHASE [verify : Dynamic Update - Verify dynamic1 A Record Was Added]"
       ansible.builtin.command:
         cmd: >-
-          nsupdate -k {{ _bind9_tsig_keyfile.path }}
-        stdin: |
-          server {{ _bind9_private_source }}
-          zone {{ bind9_forward_zone_name }}
-          update delete dynamic1.{{ bind9_forward_zone_name }}. A
-          update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 172.16.1.201
-          send
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          dynamic1.{{ bind9_forward_zone_name }} A +short
       changed_when: false
-      register: _bind9_verify_dyn_modify
+      register: _bind9_verify_dyn_create_dig
+
+    - name: "PHASE [verify : Assert dynamic1 A Record Is 172.16.1.200]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'172.16.1.200' in _bind9_verify_dyn_create_dig.stdout"
+        fail_msg: >-
+          DDNS create succeeded (rc=0) but dynamic1.{{ bind9_forward_zone_name }}
+          does not resolve to 172.16.1.200.
+          stdout={{ _bind9_verify_dyn_create_dig.stdout | default('') }}
 
     - name: "PHASE [verify : Dynamic Update - Add PTR Record]"
       ansible.builtin.command:
@@ -255,7 +244,26 @@
           update add 200.1.16.172.in-addr.arpa. 300 PTR dynamic1.{{ bind9_forward_zone_name }}.
           send
       changed_when: false
-      register: _bind9_verify_dyn_ptr_add
+
+    - name: "PHASE [verify : Dynamic Update - Verify PTR Record Was Added]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          -x 172.16.1.200 +short
+      changed_when: false
+      register: _bind9_verify_dyn_ptr_dig
+
+    - name: "PHASE [verify : Assert PTR For 172.16.1.200 Points To dynamic1]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            ('dynamic1.' ~ bind9_forward_zone_name ~ '.')
+            in _bind9_verify_dyn_ptr_dig.stdout
+        fail_msg: >-
+          DDNS add-PTR succeeded (rc=0) but reverse lookup for 172.16.1.200
+          does not return dynamic1.{{ bind9_forward_zone_name }}.
+          stdout={{ _bind9_verify_dyn_ptr_dig.stdout | default('') }}
 
     - name: "PHASE [verify : Dynamic Update - Delete dynamic1 And PTR Records]"
       ansible.builtin.command:
@@ -270,7 +278,33 @@
           update delete 200.1.16.172.in-addr.arpa. PTR
           send
       changed_when: false
-      register: _bind9_verify_dyn_delete
+
+    - name: "PHASE [verify : Dynamic Update - Verify dynamic1 A Record Was Removed]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          dynamic1.{{ bind9_forward_zone_name }} A +short
+      changed_when: false
+      register: _bind9_verify_dyn_del_a_dig
+
+    - name: "PHASE [verify : Dynamic Update - Verify PTR Record Was Removed]"
+      ansible.builtin.command:
+        cmd: >-
+          dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
+          -x 172.16.1.200 +short
+      changed_when: false
+      register: _bind9_verify_dyn_del_ptr_dig
+
+    - name: "PHASE [verify : Assert dynamic1 And PTR Records Are Gone]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_verify_dyn_del_a_dig.stdout | trim | length == 0
+          - _bind9_verify_dyn_del_ptr_dig.stdout | trim | length == 0
+        fail_msg: >-
+          DDNS delete succeeded (rc=0) but records linger.
+          A_stdout={{ _bind9_verify_dyn_del_a_dig.stdout | default('') }}
+          PTR_stdout={{ _bind9_verify_dyn_del_ptr_dig.stdout | default('') }}
 
     # --- Dynamic update rejection checks ---
     - name: "PHASE [verify : Unsigned Update Must Be Rejected]"
