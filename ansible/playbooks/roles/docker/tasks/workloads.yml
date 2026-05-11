@@ -100,6 +100,7 @@
     restart_policy: "{{ item.restart_policy | default(docker_container_restart_policy) }}"
     network_mode: "{{ item.network_mode | default(docker_container_network_mode) }}"
     platform: "{{ item.platform | default(omit) }}"
+    dns_servers: "{{ item.dns_servers | default(omit) }}"
   loop: "{{ docker_containers | default([]) }}"
   loop_control:
     label: "{{ item.name }}"

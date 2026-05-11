@@ -89,6 +89,14 @@ argument_specs:
               - unless-stopped
             description: >-
               Restart behavior when the container exits. Overrides docker_container_restart_policy for this container.
+          dns_servers:
+            type: list
+            elements: str
+            required: false
+            description: >-
+              DNS resolvers to write into the container's /etc/resolv.conf at creation. Docker snapshots resolv.conf
+              from the host at container creation regardless of network_mode, so containers that outlive a host DNS
+              change need this to stay in sync. Wire to network_interfaces[0].dns4 to inherit the host's resolver chain.
           enabled:
             type: bool
             required: false
