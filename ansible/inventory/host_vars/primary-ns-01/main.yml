@@ -204,3 +204,11 @@ bind9_zones:
       - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
         type: "PTR"
         value: "ns.{{ bind9_forward_zone_name }}."
+
+  # Private-view alias of the public master above. Lets internal-vantage
+  # resolvers (dns-01) reach the RFC 2317 child zone via the private view
+  # without duplicating signing state. OJ grades reverse-zone resolution
+  # for VPN /28 PTRs through the lab resolver.
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    view: private
+    in_view: public

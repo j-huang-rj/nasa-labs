@@ -96,7 +96,7 @@
         _bind9_private_rev: >-
           {% set result = [] -%}
           {% for zone in bind9_zones -%}
-          {% if zone.view == 'private' and 'in-addr.arpa' in zone.name -%}
+          {% if zone.view == 'private' and 'in-addr.arpa' in zone.name and zone.in_view is not defined -%}
           {% set parts = zone.name.split('.in-addr.arpa')[0].split('.') -%}
           {% set prefix = parts[2] ~ '.' ~ parts[1] ~ '.' ~ parts[0] -%}
           {% for rec in zone.records -%}
