@@ -1,42 +1,33 @@
 ---
+# Feature flags
 base_upgrade_enabled: false
-wireguard_enabled: false
-docker_enabled: false
 bind9_enabled: false
+docker_enabled: false
+wireguard_enabled: false
 
+# firewalld built-in zones (used by firewall and network role asserts)
 firewall_builtin_zones:
+  - block
+  - dmz
+  - drop
+  - external
+  - home
+  - internal
   - public
   - trusted
-  - home
   - work
-  - internal
-  - external
-  - dmz
-  - block
-  - drop
 
-# ──────────────────────────────────────────────────────────
-# Lab identity derivation (lazy)
-# Derived from the WireGuard address of bind9_identity_source_host (the
-# router VM, which acts as the WG hub). Lifted here from group_vars/dns.yml
-# so cross-host hostvars[X].bind9_forward_zone_name lookups (used by
-# dns_e2e.yml plays running on dmz-agent-01 / internal-agent-01) re-template
-# correctly: Ansible's hostvars[X].VAR resolves the raw template string and
-# re-evaluates it in the CURRENT host's scope, so the chain must be in scope
-# on every host that may reference these names.
-# bind9_vpn_router_offset / _client_offset / _ns_offset still live in the
-# bind9 role's defaults; the *_ip vars are only consumed inside the role.
-# ──────────────────────────────────────────────────────────
+# Lab identity (lazy, derived from router's WireGuard address).
+# Lifted here so hostvars[X].bind9_* lookups re-template correctly on every host.
 bind9_identity_source_host: "{{ groups['router'] | first }}"
 
 _bind9_source_wg_address: "{{ hostvars[bind9_identity_source_host].wireguard_address | default('') }}"
 _bind9_wg_octets: "{{ _bind9_source_wg_address.split('/')[0].split('.') }}"
 _bind9_wg_prefix: "{{ _bind9_source_wg_address.split('/')[1] | default('28') }}"
+_bind9_vpn_host_prefix: "{{ (_bind9_wg_octets[0] ~ '.' ~ _bind9_wg_octets[1] ~ '.' ~ _bind9_wg_octets[2]) if _bind9_wg_octets | length >= 4 else '' }}"
 
 bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 if _bind9_wg_octets | length >= 4 else 0 }}"
 bind9_derived_lab_id: "{{ ((_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16)) if _bind9_wg_octets | length >= 4 else 0 }}"
-
-_bind9_vpn_host_prefix: "{{ (_bind9_wg_octets[0] ~ '.' ~ _bind9_wg_octets[1] ~ '.' ~ _bind9_wg_octets[2]) if _bind9_wg_octets | length >= 4 else '' }}"
 
 bind9_vpn_router_ip: "{{ _bind9_vpn_host_prefix }}.{{ (bind9_vpn_network_base | int) + (bind9_vpn_router_offset | default(0) | int) }}"
 bind9_vpn_client_ip: "{{ _bind9_vpn_host_prefix }}.{{ (bind9_vpn_network_base | int) + (bind9_vpn_client_offset | default(0) | int) }}"
