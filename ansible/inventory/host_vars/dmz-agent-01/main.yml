@@ -37,3 +37,4 @@ docker_containers:
     network_mode: host
     platform: linux/amd64
     restart_policy: unless-stopped
+    dns_servers: "{{ network_interfaces[0].dns4 }}"
