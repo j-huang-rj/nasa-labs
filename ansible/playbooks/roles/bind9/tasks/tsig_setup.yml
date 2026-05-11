@@ -1,16 +1,9 @@
 ---
-# Shared keyfile setup for verify.yml's primary and secondary blocks.
-# Writes TSIG (DDNS) and AXFR keys to per-run tempfiles owned by named so
-# the secrets are never visible on the dig/nsupdate command line.
-#
-# Caller must pass `_keyfiles_label_prefix` (string, e.g. "" or "Secondary").
-# The label is appended to the PHASE tag so the play recap stays distinct.
-#
-# `changed_when: false` is set on every task here because these tempfiles
-# are run-scoped scratch state, not persistent system configuration. The
-# cleanup file deletes them at the end of the verify block, so a re-run
-# leaves the host in identical resting state and the play recap reports
-# `changed=0` honestly.
+# Per-run keyfile setup: writes TSIG (DDNS) and AXFR keys to tempfiles owned
+# by named so secrets stay off the dig/nsupdate command line. Paired with
+# tsig_teardown.yml; `changed_when: false` because the files are run-scoped
+# scratch. Caller passes `_keyfiles_label_prefix` (e.g. "" or "Secondary")
+# which is appended to each PHASE tag for a distinct recap.
 
 - name: "PHASE [verify : Create TSIG Key Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.tempfile:
