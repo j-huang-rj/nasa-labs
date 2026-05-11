@@ -25,8 +25,8 @@ argument_specs:
         elements: str
         required: true
         description: >-
-          IPv4 addresses for named to listen on; authoritative_primary verification expects 127.0.0.1 and at least one
-          non-loopback address.
+          IPv4 addresses for named to listen on. Verification expects 127.0.0.1 plus at least one non-loopback address;
+          for the public-facing secondary it must also include the WireGuard endpoint that ns.<lab_id>.nasa is advertised on.
 
       bind9_packages:
         type: list
@@ -68,17 +68,17 @@ argument_specs:
       bind9_vpn_router_offset:
         type: int
         required: false
-        description: Host offset within the VPN /28 subnet for the router IP
+        description: Host offset within the VPN subnet for the router IP
 
       bind9_vpn_client_offset:
         type: int
         required: false
-        description: Host offset within the VPN /28 subnet for the VPN client IP
+        description: Host offset within the VPN subnet for the VPN client IP
 
       bind9_vpn_ns_offset:
         type: int
         required: false
-        description: Host offset within the VPN /28 subnet for the nameserver IP
+        description: Host offset within the VPN subnet for the nameserver IP
 
       bind9_dmz_cidr:
         type: str
@@ -88,7 +88,7 @@ argument_specs:
       bind9_internal_cidr:
         type: str
         required: false
-        description: CIDR for the internal (private) network, used in ACL definitions
+        description: CIDR for the internal network, used in ACL definitions
 
       bind9_acl_dmz:
         type: str
@@ -101,7 +101,7 @@ argument_specs:
         type: str
         required: false
         description: >-
-          Name of the internal (private) ACL. Defined once in named.acl.conf and referenced from bind9_views
+          Name of the internal ACL. Defined once in named.acl.conf and referenced from bind9_views
           match_clients. Override only if a name collision forces a rename.
 
       bind9_views:
@@ -118,10 +118,11 @@ argument_specs:
         elements: dict
         required: false
         description: >-
-          Zone definitions for authoritative modes. Each entry must define name, view, type, and file; primary zones
-          also need soa, ns, and records data for zone-file rendering, while secondary/slave zones must define masters.
-          The masters list accepts either a plain IPv4 string for unkeyed transfers or a {address, key} dict to sign
-          the AXFR/IXFR with a TSIG key.
+          Zone definitions. For authoritative modes each entry must define name, view, type, and file: primary zones
+          also need soa, ns, and records data for zone-file rendering, while secondary/slave zones must define masters
+          (the masters list accepts either a plain IPv4 string for unkeyed transfers or a {address, key} dict to sign
+          the AXFR/IXFR with a TSIG key). For resolver mode each entry is rendered top-level (no view, no file) and
+          must define name, type (forward), forward (only|first), and forwarders.
 
       bind9_dynamic_hosts:
         type: list
@@ -142,7 +143,7 @@ argument_specs:
         type: str
         required: false
         description: >-
-          RFC 2317 child reverse zone name covering the VPN /28 (e.g. "<lab_id>-sub28.x.y.z.in-addr.arpa").
+          RFC 2317 child reverse zone name (e.g. "<lab_id>-sub28.x.y.z.in-addr.arpa").
           Required for both authoritative modes. Computed by the dns_configure.yml play's pre_tasks.
 
       bind9_primary_mname:

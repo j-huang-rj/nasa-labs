@@ -2,9 +2,9 @@
 {#
   Trust anchors for DNSSEC validation in resolver mode.
   Sourced from the NASA root server's KSK records at runtime by the
-  dns_configure.yml play's pre_tasks (see bind9_nasa_root_ip in role
-  defaults). These are public key material (not secrets) and are rendered
-  as static-key entries per BIND 9.18+ trust-anchors syntax.
+  dns_configure.yml play's pre_tasks (see bind9_nasa_root_ip in
+  group_vars/dns.yml). These are public key material (not secrets) and
+  are rendered as static-key entries per BIND 9.18+ trust-anchors syntax.
 #}
 
 trust-anchors {
