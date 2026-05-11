@@ -7,12 +7,15 @@
   gather_facts: true
   become: true
   vars:
+    # Lab identity is encoded in the WireGuard /28 subnet shared by all
+    # WG-enabled hosts (router, secondary-ns, dmz-agent). Any of them
+    # would yield the same derived lab ID, but the router is the WG hub
+    # and the canonical source of truth for subnet assignment. The
+    # cross-host assertion below catches inventory drift across peers.
     bind9_identity_source_host: "{{ groups['router'] | first }}"
   pre_tasks:
     # ──────────────────────────────────────────────────────────
-    # VPN identity derivation — runs for ALL modes (including
-    # resolver) because bind9_forward_zone_name and the reverse-
-    # zone naming are needed for resolver forward-zone configuration.
+    # VPN identity derivation — runs for ALL modes
     # ──────────────────────────────────────────────────────────
     - name: "PRE [dns : Derive bind9 VPN Identity Facts]"
       when:
@@ -44,6 +47,41 @@
             bind9_derived_lab_id: >-
               {{ (_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16) }}
 
+        - name: "PRE [dns : Compute Lab IDs From All WireGuard-Enabled Peers]"
+          ansible.builtin.set_fact:
+            _bind9_peer_lab_ids: >-
+              {{ _bind9_peer_lab_ids | default([])
+                 + [(item.split('/')[0].split('.')[2] | int * 16)
+                    + (item.split('/')[0].split('.')[3] | int // 16)] }}
+          loop: >-
+            {{ groups['all']
+               | map('extract', hostvars)
+               | selectattr('wireguard_address', 'defined')
+               | rejectattr('wireguard_address', 'equalto', '')
+               | map(attribute='wireguard_address')
+               | list }}
+          loop_control:
+            label: "{{ item }}"
+
+        - name: "PRE [dns : Assert WireGuard-Enabled Peers Agree On Lab ID]"
+          ansible.builtin.assert:
+            that:
+              - _bind9_peer_lab_ids | length > 0
+              - _bind9_peer_lab_ids | unique | length == 1
+              - (_bind9_peer_lab_ids | first) == (bind9_derived_lab_id | int)
+            fail_msg: >-
+              WireGuard-enabled peers disagree on derived lab ID
+              (got {{ _bind9_peer_lab_ids | unique }} from
+              {{ groups['all']
+                 | map('extract', hostvars)
+                 | selectattr('wireguard_address', 'defined')
+                 | rejectattr('wireguard_address', 'equalto', '')
+                 | map(attribute='inventory_hostname')
+                 | list }}).
+              All WG-enabled hosts must share the same /28 subnet so that
+              lab identity is unambiguous. Check wireguard_address values
+              in inventory.
+
         - name: "PRE [dns : Compute VPN Host IPs And DNS Identity Facts]"
           ansible.builtin.set_fact:
             bind9_vpn_router_ip: >-
@@ -63,10 +101,9 @@
             bind9_soa_serial_date: "{{ ansible_facts['date_time'].date | replace('-', '') }}"
 
     # ──────────────────────────────────────────────────────────
-    # Trust-anchor fetch — resolver mode only. Queries the
-    # course root server for KSK (flags 257) DNSKEY records and
+    # Trust-anchor fetch — resolver mode only
+    # Queries the course root server for KSK DNSKEY records and
     # builds the bind9_trust_anchors fact for DNSSEC validation.
-    # Trust anchors are PUBLIC key material, NOT secrets.
     # ──────────────────────────────────────────────────────────
     - name: "PRE [dns : Fetch Course-Root Trust Anchors for Resolver Mode]"
       when:
