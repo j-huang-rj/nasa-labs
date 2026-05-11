@@ -29,10 +29,11 @@ bind9_listen_ipv4:
   - 127.0.0.1
   - "{{ ansible_host }}"
 
-bind9_secondary_ns_ip: "{{ hostvars['secondary-ns-01'].ansible_host }}"
-
 # View policy is inherited from the role default (canonical split-view).
 # Override bind9_views here only if this host needs a non-standard policy.
+# Cross-host topology vars (bind9_primary_ns_ip, bind9_secondary_ns_ip,
+# bind9_dns_resolver_ip, bind9_router_*, bind9_*_agent_ip) come from
+# inventory/group_vars/dns.yml.
 
 # Zone data — forward zones for private and public views
 bind9_zones:
@@ -41,8 +42,8 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.{{ bind9_forward_zone_name }}"
-    dnssec_policy: nasa-lab
-    dynamic_update_scope: forward_a_hosts
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    dynamic_update_scope: dynamic_hosts_A
     allow_transfer:
       - "{{ bind9_secondary_ns_ip }}"
     also_notify:
@@ -62,29 +63,29 @@ bind9_zones:
         value: "{{ bind9_secondary_ns_ip }}"
       - name: "private-ns"
         type: "A"
-        value: "172.16.1.53"
+        value: "{{ ansible_host }}"
       - name: "dns"
         type: "A"
-        value: "172.16.1.153"
+        value: "{{ bind9_dns_resolver_ip }}"
       - name: "router"
         type: "A"
-        value: "172.16.0.254"
+        value: "{{ bind9_router_dmz_ip }}"
       - name: "router"
         type: "A"
-        value: "172.16.1.254"
+        value: "{{ bind9_router_internal_ip }}"
       - name: "agent"
         type: "A"
-        value: "172.16.0.123"
+        value: "{{ bind9_dmz_agent_ip }}"
       - name: "internal-agent"
         type: "A"
-        value: "172.16.1.123"
+        value: "{{ bind9_internal_agent_ip }}"
 
   # --- Public forward zone ---
   - name: "{{ bind9_forward_zone_name }}"
     view: public
     type: master
     file: "public/db.{{ bind9_forward_zone_name }}"
-    dnssec_policy: nasa-lab
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
     allow_transfer:
       - "{{ bind9_secondary_ns_ip }}"
     also_notify:
@@ -120,8 +121,8 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.0.16.172.in-addr.arpa"
-    dnssec_policy: nasa-lab
-    dynamic_update_scope: ptr_zonesub
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    dynamic_update_scope: zonesub_PTR
     allow_transfer:
       - "{{ bind9_secondary_ns_ip }}"
     also_notify:
@@ -151,8 +152,8 @@ bind9_zones:
     view: private
     type: master
     file: "private/db.1.16.172.in-addr.arpa"
-    dnssec_policy: nasa-lab
-    dynamic_update_scope: ptr_zonesub
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    dynamic_update_scope: zonesub_PTR
     allow_transfer:
       - "{{ bind9_secondary_ns_ip }}"
     also_notify:
@@ -185,7 +186,7 @@ bind9_zones:
     view: public
     type: master
     file: "public/db.{{ bind9_vpn_child_reverse_zone_name }}"
-    dnssec_policy: nasa-lab
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
     allow_transfer:
       - "{{ bind9_secondary_ns_ip }}"
     also_notify:

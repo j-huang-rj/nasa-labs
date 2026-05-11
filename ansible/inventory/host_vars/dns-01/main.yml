@@ -32,7 +32,8 @@ bind9_listen_ipv4:
 bind9_forwarders:
   - 1.1.1.1
 
-bind9_primary_ns_ip: "{{ hostvars['primary-ns-01'].ansible_host }}"
+# bind9_primary_ns_ip and bind9_course_root_ip come from
+# inventory/group_vars/dns.yml and the bind9 role defaults respectively.
 
 bind9_zones:
   - name: nasa
