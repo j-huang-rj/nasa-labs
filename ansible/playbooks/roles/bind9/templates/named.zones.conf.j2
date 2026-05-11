@@ -58,7 +58,11 @@
 {{ indent }}    server-addresses { {{ zone.server_addresses | join('; ') }}; };
 {% endif %}
 {% if zone.forwarders is defined %}
+{% if zone.forwarders | length == 0 %}
+{{ indent }}    forwarders { };
+{% else %}
 {{ indent }}    forwarders { {{ zone.forwarders | join('; ') }}; };
+{% endif %}
 {% endif %}
 {% if zone.forward is defined %}
 {{ indent }}    forward {{ zone.forward }};
