@@ -23,7 +23,7 @@ firewall_zone_ports:
 
 # Docker Workload Config
 docker_enabled: true
-docker_binfmt_enabled: true
+docker_binfmt_enabled: false
 
 docker_image_archives:
   - name: nap-agent
@@ -35,6 +35,5 @@ docker_containers:
   - name: nap-agent
     image: nap-agent:latest
     network_mode: host
-    platform: linux/amd64
     restart_policy: unless-stopped
     dns_servers: "{{ network_interfaces[0].dns4 }}"
