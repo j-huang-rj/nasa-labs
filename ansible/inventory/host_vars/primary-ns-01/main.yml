@@ -7,7 +7,6 @@ network_interfaces:
     gw4: 172.16.1.254
     dns4:
       - 1.1.1.1
-      - 8.8.8.8
     conn_name: internal-static
     default_conn_name: "cloud-init eth0"
 
@@ -205,10 +204,7 @@ bind9_zones:
         type: "PTR"
         value: "ns.{{ bind9_forward_zone_name }}."
 
-  # Private-view alias of the public master above. Lets internal-vantage
-  # resolvers (dns-01) reach the RFC 2317 child zone via the private view
-  # without duplicating signing state. OJ grades reverse-zone resolution
-  # for VPN /28 PTRs through the lab resolver.
+  # Private-view alias of the public master above
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     view: private
     in_view: public
