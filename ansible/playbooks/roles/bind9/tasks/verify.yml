@@ -51,6 +51,7 @@
         fail_msg: >-
           bind9_tsig_key must be defined with name, algorithm, and secret on authoritative hosts.
           Ensure host_vars/*/secrets.yml provides the TSIG key.
+      no_log: true
 
     - name: "PHASE [verify : Assert bind9_axfr_key Is Defined And Non-Empty]"
       ansible.builtin.assert:
@@ -64,6 +65,7 @@
           bind9_axfr_key must be defined with name, algorithm, and secret on authoritative hosts.
           Used to discriminate public-view AXFR connections from IP-based view selection.
           Ensure host_vars/*/secrets.yml provides the key.
+      no_log: true
 
 # --- Authoritative primary: data-driven dig verification ---
 - name: "PHASE [verify : Authoritative Primary Verification]"

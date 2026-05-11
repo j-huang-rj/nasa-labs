@@ -12,4 +12,4 @@ ethernets:
       - to: 0.0.0.0/0
         via: 172.16.1.254
     nameservers:
-      addresses: [8.8.8.8, 1.1.1.1]
+      addresses: [1.1.1.1]

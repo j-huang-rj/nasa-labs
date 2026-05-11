@@ -101,3 +101,18 @@
   roles:
     - role: bind9
       when: bind9_enabled
+
+- name: DNS Client Resolver Configuration
+  hosts: dmz-agent-01:dmz-client-01:internal-agent-01
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - name: "PRE [network : Restore Final DNS Resolver Interfaces]"
+      ansible.builtin.set_fact:
+        network_interfaces: "{{ _network_final_interfaces }}"
+      when: _network_final_interfaces is defined
+
+  roles:
+    - role: network
+    - role: docker
+      when: docker_enabled | default(false) | bool
