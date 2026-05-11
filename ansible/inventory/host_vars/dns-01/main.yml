@@ -33,16 +33,22 @@ bind9_forwarders:
 
 bind9_zones:
   - name: "{{ bind9_nasa_root_zones[0] }}"
-    type: forward
-    forward: only
-    forwarders:
+    type: static-stub
+    forwarders: []
+    server_addresses:
       - "{{ bind9_nasa_root_ip }}"
 
   - name: "{{ bind9_nasa_root_zones[1] }}"
+    type: static-stub
+    forwarders: []
+    server_addresses:
+      - "{{ bind9_nasa_root_ip }}"
+
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     type: forward
     forward: only
     forwarders:
-      - "{{ bind9_nasa_root_ip }}"
+      - "{{ bind9_primary_ns_ip }}"
 
   - name: "{{ bind9_lab_primary_zones[0] }}"
     type: forward
@@ -51,16 +57,6 @@ bind9_zones:
       - "{{ bind9_primary_ns_ip }}"
 
   - name: "{{ bind9_lab_primary_zones[1] }}"
-    type: forward
-    forward: only
-    forwarders:
-      - "{{ bind9_primary_ns_ip }}"
-
-  # RFC 2317 child reverse zone for VPN /28. Longest-prefix forward overrides
-  # the parent 168.192.in-addr.arpa zone (which goes to NASA-root and fails
-  # with non-improving referral because dns-01 is forward-only and cannot
-  # follow the delegation chain back to ns.<id>.nasa).
-  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     type: forward
     forward: only
     forwarders:
