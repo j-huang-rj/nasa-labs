@@ -26,7 +26,7 @@ bind9_enabled: true
 bind9_mode: authoritative_primary
 bind9_listen_ipv4:
   - 127.0.0.1
-  - 172.16.1.53
+  - "{{ ansible_host }}"
 
 # Cross-host references — derived from inventory so a host's IP change
 # only needs to be made in that host's own host_vars.
