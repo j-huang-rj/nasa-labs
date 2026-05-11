@@ -18,6 +18,11 @@ bind9_soa_admin: "admin"
 bind9_dmz_cidr: "172.16.0.0/24"
 bind9_internal_cidr: "172.16.1.0/24"
 
+# Course-root server IP. Used by dns_configure.yml's pre_tasks to fetch
+# DNSSEC trust anchors (KSK DNSKEY records). The lab topology pins this
+# at 192.168.255.1; override only if the lab spec changes.
+bind9_course_root_ip: "192.168.255.1"
+
 # VPN host IP offsets
 bind9_vpn_router_offset: 1
 bind9_vpn_client_offset: 2

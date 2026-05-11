@@ -7,11 +7,6 @@
   gather_facts: true
   become: true
   vars:
-    # Lab identity is encoded in the WireGuard /28 subnet shared by all
-    # WG-enabled hosts (router, secondary-ns, dmz-agent). Any of them
-    # would yield the same derived lab ID, but the router is the WG hub
-    # and the canonical source of truth for subnet assignment. The
-    # cross-host assertion below catches inventory drift across peers.
     bind9_identity_source_host: "{{ groups['router'] | first }}"
   pre_tasks:
     # ──────────────────────────────────────────────────────────
@@ -111,7 +106,7 @@
         - bind9_mode | default('') == 'resolver'
       block:
         - name: "PRE [dns : Query nasa. DNSKEY from Course Root]"
-          ansible.builtin.command: dig @192.168.255.1 nasa. DNSKEY +noall +answer
+          ansible.builtin.command: dig @{{ bind9_course_root_ip }} nasa. DNSKEY +noall +answer
           register: _bind9_nasa_dnskey
           changed_when: false
           until: _bind9_nasa_dnskey.rc == 0 and _bind9_nasa_dnskey.stdout | length > 0
@@ -119,7 +114,7 @@
           delay: 2
 
         - name: "PRE [dns : Query 168.192.in-addr.arpa. DNSKEY from Course Root]"
-          ansible.builtin.command: dig @192.168.255.1 168.192.in-addr.arpa. DNSKEY +noall +answer
+          ansible.builtin.command: dig @{{ bind9_course_root_ip }} 168.192.in-addr.arpa. DNSKEY +noall +answer
           register: _bind9_reverse_dnskey
           changed_when: false
           until: _bind9_reverse_dnskey.rc == 0 and _bind9_reverse_dnskey.stdout | length > 0
@@ -130,7 +125,7 @@
           ansible.builtin.fail:
             msg: >-
               No KSK (flags 257) found in nasa. DNSKEY response from
-              192.168.255.1. Ensure the course root server is reachable
+              {{ bind9_course_root_ip }}. Ensure the course root server is reachable
               and serving DNSKEY records for nasa.
           when: >-
             _bind9_nasa_dnskey.stdout_lines |
@@ -141,7 +136,7 @@
           ansible.builtin.fail:
             msg: >-
               No KSK (flags 257) found in 168.192.in-addr.arpa. DNSKEY response
-              from 192.168.255.1. Ensure the course root server is reachable
+              from {{ bind9_course_root_ip }}. Ensure the course root server is reachable
               and serving DNSKEY records for 168.192.in-addr.arpa.
           when: >-
             _bind9_reverse_dnskey.stdout_lines |
