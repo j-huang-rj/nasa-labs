@@ -11,25 +11,15 @@ network_interfaces:
     conn_name: dmz-static
     default_conn_name: "cloud-init eth0"
 
-# WireGuard Config
-wireguard_enabled: true
-
 # Firewall Config
-firewall_custom_zones:
-  - vpn
-
-firewall_bindings:
-  - ifname: wg0
-    zone: vpn
-
+# WireGuard is intentionally NOT enabled on this agent. If it were, return
+# traffic for connections received via the router DNAT (VPN:10001 →
+# 172.16.0.123:2222) would route out via this host's own wg0 instead of
+# the gateway, breaking conntrack and causing OJ sshdig to fail.
 firewall_zone_ports:
   - zone: dmz
     port: 2222
     proto: tcp
-
-firewall_rich_rules:
-  - zone: vpn
-    rule: 'rule service name="ssh" reject'
 
 # Docker Workload Config
 docker_enabled: true
