@@ -52,11 +52,6 @@ bind9_listen_ipv4:
   - "{{ ansible_host }}"
   - "{{ wireguard_address.split('/')[0] }}"
 
-bind9_primary_ns_ip: "{{ hostvars['primary-ns-01'].ansible_host }}"
-
-# View policy is inherited from the role default (canonical split-view).
-# Override bind9_views here only if this host needs a non-standard policy.
-
 # Read-only zone data: mirror every zone the primary serves
 bind9_zones:
   # --- Private forward zone ---

@@ -69,13 +69,13 @@
 {{ indent }}    };
 {% endif %}
 {% if zone.dynamic_update_scope is defined %}
-{% if zone.dynamic_update_scope == 'forward_a_hosts' %}
+{% if zone.dynamic_update_scope == 'dynamic_hosts_A' %}
 {{ indent }}    update-policy {
 {% for _host in bind9_dynamic_hosts %}
 {{ indent }}        grant {{ bind9_tsig_key.name }} name {{ _host }}.{{ zone.name }}. A;
 {% endfor %}
 {{ indent }}    };
-{% elif zone.dynamic_update_scope == 'ptr_zonesub' %}
+{% elif zone.dynamic_update_scope == 'zonesub_PTR' %}
 {{ indent }}    update-policy {
 {{ indent }}        grant {{ bind9_tsig_key.name }} zonesub PTR;
 {{ indent }}    };
