@@ -12,9 +12,6 @@ network_interfaces:
     default_conn_name: "cloud-init eth0"
 
 # WireGuard Config
-# DMZ client is a VPN endpoint advertised as client.${ID}.nasa A
-# (192.168.0.226 for lab ID 14). It exists primarily to be reachable
-# at its VPN address from the grader.
 wireguard_enabled: true
 
 # Firewall Config
