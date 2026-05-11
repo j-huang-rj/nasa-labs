@@ -5,7 +5,7 @@ bind9_enabled: false
 docker_enabled: false
 wireguard_enabled: false
 
-# firewalld built-in zones (used by firewall and network role asserts)
+# firewalld built-in zones
 firewall_builtin_zones:
   - block
   - dmz
@@ -17,8 +17,7 @@ firewall_builtin_zones:
   - trusted
   - work
 
-# Lab identity (lazy, derived from router's WireGuard address).
-# Lifted here so hostvars[X].bind9_* lookups re-template correctly on every host.
+# BIND9 lab identity
 bind9_identity_source_host: "{{ groups['router'] | first }}"
 
 _bind9_source_wg_address: "{{ hostvars[bind9_identity_source_host].wireguard_address | default('') }}"

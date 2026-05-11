@@ -137,14 +137,9 @@
   ansible.builtin.file:
     path: "{{ bind9_dnssec_policy.key_directory }}"
     state: directory
-    # named user must own the directory: BIND 9.18 dnssec-policy keymgr
-    # writes/updates `.state` sidecar files alongside the distributed
-    # `.key`/`.private` material. Without write access keymgr fails with
-    # "error occurred writing key to disk" and zones never publish DNSKEY/RRSIG.
     owner: named
     group: named
     mode: "0750"
-    # named_zone_t (read-write zone data) rather than named_conf_t (read-only).
     setype: "named_zone_t"
 
 # Enumerate key-directory contents so we can prune stale `K*` material

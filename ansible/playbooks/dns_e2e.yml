@@ -1,13 +1,9 @@
 ---
-# Cross-host grading-readiness playbook for the resolver, authoritative
-# DNSSEC artifacts, dynamic-update propagation, and full-stack idempotency.
-# Imports dns_configure.yml first to converge all DNS hosts, then exercises the
-# resolver from real client perspectives, rechecks propagation and DS
-# extraction, and enforces consecutive-run idempotency.
+# Cross-host playbook for the resolver, authoritative,
+# DNSSEC artifacts, and dynamic-update propagation.
 #
 # Prerequisites:
-#   - site.yml or bootstrap.yml already applied
-#   - WireGuard up on secondary-ns-01 / router-01
+#   - site.yml or bootstrap.yml
 
 - name: DNS Services
   ansible.builtin.import_playbook: dns_configure.yml
@@ -26,7 +22,7 @@
       ansible.builtin.debug:
         msg: "E2E resolver verification from DMZ Agent"
 
-    # RES-03: Private-NS A lookup through resolver (private-view answer)
+    # Private-NS A lookup through resolver
     - name: "PHASE [e2e-dmz : Resolver Private-NS Forward Lookup]"
       ansible.builtin.command:
         cmd: >-
@@ -43,7 +39,7 @@
           DMZ agent private-ns forward lookup did not return 172.16.1.53 via resolver.
           Got: {{ _e2e_dmz_private_ns.stdout | default('') }}
 
-    # RES-03: Reverse lookup through resolver (private-view answer)
+    # Reverse lookup through resolver
     - name: "PHASE [e2e-dmz : Resolver Reverse Lookup For 172.16.1.53]"
       ansible.builtin.command:
         cmd: "dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
@@ -61,7 +57,7 @@
           DMZ agent reverse lookup for 172.16.1.53 did not return private-ns.{{ _e2e_forward_zone }}.
           Got: {{ _e2e_dmz_reverse.stdout | default('') }}
 
-    # RES-04: Cloudflare forwarding — non-lab domains resolve
+    # Cloudflare forwarding
     - name: "PHASE [e2e-dmz : Resolver Recursive Google Lookup]"
       ansible.builtin.command:
         cmd: "dig @{{ _e2e_resolver }} google.com A"
@@ -87,7 +83,7 @@
           stdout={{ _e2e_dmz_google.stdout | default('') }},
           stderr={{ _e2e_dmz_google.stderr | default('') }}
 
-    # RES-05: AD-bit DNSSEC validation — forward zone SOA
+    # AD-bit DNSSEC validation — forward zone SOA
     - name: "PHASE [e2e-dmz : Forward Zone SOA AD-bit Check]"
       ansible.builtin.command:
         cmd: >-
@@ -105,11 +101,6 @@
           DMZ agent forward zone SOA response from resolver missing AD flag or has empty answer.
           DNSSEC validation may not be working for {{ _e2e_forward_zone }}.
           stdout={{ _e2e_dmz_fwd_ad.stdout | default('') }}
-
-    # The VPN child reverse zone is public-view-only on primary-ns-01 and
-    # is therefore unreachable from DMZ vantage by design. AD-bit validation
-    # for that zone is grading-time-only (TA queries from VPN subnet). The
-    # forward-zone AD-bit check above already proves the validator is wired.
 
     - name: "PHASE [e2e-dmz : END]"
       ansible.builtin.debug:
@@ -129,7 +120,7 @@
       ansible.builtin.debug:
         msg: "E2E resolver verification from Private Agent"
 
-    # RES-03: Private-NS A lookup through resolver (private-view answer)
+    # Private-NS A lookup through resolver
     - name: "PHASE [e2e-private : Resolver Private-NS Forward Lookup]"
       ansible.builtin.command:
         cmd: >-
@@ -146,7 +137,7 @@
           Private agent private-ns forward lookup did not return 172.16.1.53 via resolver.
           Got: {{ _e2e_private_private_ns.stdout | default('') }}
 
-    # RES-03: Reverse lookup through resolver (private-view answer)
+    # Reverse lookup through resolver
     - name: "PHASE [e2e-private : Resolver Reverse Lookup For 172.16.1.53]"
       ansible.builtin.command:
         cmd: "dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
@@ -164,7 +155,7 @@
           Private agent reverse lookup for 172.16.1.53 did not return private-ns.{{ _e2e_forward_zone }}.
           Got: {{ _e2e_private_reverse.stdout | default('') }}
 
-    # RES-04: Cloudflare forwarding — non-lab domains resolve
+    # Cloudflare forwarding
     - name: "PHASE [e2e-private : Resolver Recursive Google Lookup]"
       ansible.builtin.command:
         cmd: "dig @{{ _e2e_resolver }} google.com A"
@@ -190,7 +181,7 @@
           stdout={{ _e2e_private_google.stdout | default('') }},
           stderr={{ _e2e_private_google.stderr | default('') }}
 
-    # RES-05: AD-bit DNSSEC validation — forward zone SOA
+    # AD-bit DNSSEC validation — forward zone SOA
     - name: "PHASE [e2e-private : Forward Zone SOA AD-bit Check]"
       ansible.builtin.command:
         cmd: >-
@@ -209,18 +200,12 @@
           DNSSEC validation may not be working for {{ _e2e_forward_zone }}.
           stdout={{ _e2e_private_fwd_ad.stdout | default('') }}
 
-    # The VPN child reverse zone is public-view-only on primary-ns-01 and
-    # is therefore unreachable from Private vantage by design. AD-bit
-    # validation for that zone is grading-time-only (TA queries from VPN
-    # subnet). The forward-zone AD-bit check above already proves the
-    # validator is wired.
-
     - name: "PHASE [e2e-private : END]"
       ansible.builtin.debug:
         msg: "E2E Private agent resolver verification complete"
 
 # ──────────────────────────────────────────────────────────
-# E2E: Blocked-client probe from VPN subnet (RES-06)
+# E2E: Blocked-client probe from VPN subnet
 # ──────────────────────────────────────────────────────────
 - name: "E2E Blocked Client Verification"
   hosts: router-01
@@ -232,10 +217,6 @@
       ansible.builtin.debug:
         msg: "E2E blocked-client probe from VPN subnet"
 
-    # RES-06: Queries from source IPs outside DMZ/Private CIDRs must be
-    # refused. The router's WireGuard IP is in the VPN subnet — outside
-    # both allowed CIDRs — so a dig -b from that IP must return REFUSED,
-    # time out, or report no servers reachable.
     - name: "PHASE [e2e-blocked : Resolver Blocked Client Probe From VPN Subnet]"
       ansible.builtin.command:
         cmd: >-
@@ -269,10 +250,6 @@
 - name: "E2E Propagation Through Resolver"
   hosts: primary-ns-01
   gather_facts: false
-  # become required: tsig_setup.yml writes a keyfile owned by named (mode 0600)
-  # so DDNS secrets do not appear on the nsupdate command line; chown'ing to
-  # named requires root. tsig_teardown.yml removes that named-owned file at
-  # cleanup, also requiring root.
   become: true
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
@@ -284,9 +261,7 @@
       ansible.builtin.debug:
         msg: "E2E dynamic4 propagation test through resolver"
 
-    # Render a single-key keyfile so nsupdate gets the DDNS TSIG key in
-    # isolation. Avoids depending on key ordering inside the multi-key
-    # /etc/named/named.keys.conf.
+    # Render a single-key keyfile so nsupdate gets the DDNS TSIG key in isolation.
     - name: "PHASE [e2e-prop : Render Scoped TSIG Keyfile]"
       ansible.builtin.include_tasks: roles/bind9/tasks/tsig_setup.yml
       vars:
@@ -368,8 +343,6 @@
           delay: 1
 
       always:
-        # Safety-net cleanup: always revert dynamic4 and PTR even if poll
-        # exhausted retries. `nsupdate update delete` is idempotent.
         - name: "PHASE [e2e-prop : Cleanup - Delete dynamic4 A Record]"
           ansible.builtin.command:
             cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
@@ -399,18 +372,9 @@
 - name: "E2E DS Extraction"
   hosts: primary-ns-01
   gather_facts: false
-  # become required: tsig_setup.yml writes a keyfile owned by named (mode 0600).
   become: true
   vars:
     _e2e_primary: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
-    # Each spec carries `view` so we know whether dig must be AXFR-keyed to
-    # force public-view selection. From primary-ns-01's source IP (172.16.1.53),
-    # bare dig matches !internal_clients in the public-view match-clients and
-    # falls through to private view. The VPN child reverse zone is declared
-    # only in the public view (lab/dns.md:117-120 says private-ns must be
-    # untouchable from outside, so reverse-zone delegation lives public-side).
-    # Forcing public view via `-k {{ _bind9_axfr_keyfile.path }}` matches the
-    # first match-clients clause `key {{ bind9_axfr_key.name }};`.
     _e2e_zone_specs:
       - name: "{{ bind9_forward_zone_name }}"
         view: private
@@ -434,11 +398,6 @@
       block:
         - name: "PHASE [e2e-ds : Extract DS Records For Each Zone]"
           ansible.builtin.shell:
-            # `+noall +answer` suppresses dig sections (status, opt, authority,
-            # additional) so dnssec-dsfromkey only sees DNSKEY answer RRs.
-            # Without this, keyed dig responses include a TSIG meta-RR in the
-            # additional section (class ANY), which dnssec-dsfromkey rejects
-            # with "class 'ANY' != zone class 'IN'".
             cmd: >-
               set -o pipefail &&
               dig @{{ _e2e_primary }} {% if item.view == 'public' %}-k {{ _bind9_axfr_keyfile.path }} {% endif %}{{ item.name }} DNSKEY +noall +answer
