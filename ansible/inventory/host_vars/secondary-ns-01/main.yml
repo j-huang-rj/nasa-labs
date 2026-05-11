@@ -48,11 +48,9 @@ bind9_enabled: true
 bind9_mode: authoritative_secondary
 bind9_listen_ipv4:
   - 127.0.0.1
-  - 172.16.0.53
+  - "{{ ansible_host }}"
   - "{{ wireguard_address.split('/')[0] }}"
 
-# Cross-host references — derived from inventory so a host's IP change
-# only needs to be made in that host's own host_vars.
 bind9_primary_ns_ip: "{{ hostvars['primary-ns-01'].ansible_host }}"
 
 # View policy: mirror the primary's split-view structure
