@@ -56,7 +56,8 @@ bind9_dynamic_hosts:
 # Upstream forwarders for resolver mode
 bind9_forwarders: []
 
-# Trust anchors for DNSSEC validation in resolver mode
+# Trust anchors for DNSSEC validation in resolver mode. Each item is a dict
+# with keys: zone, flags, protocol, algorithm, key.
 bind9_trust_anchors: []
 
 # TSIG key configuration
@@ -88,8 +89,6 @@ bind9_dnssec_policy:
 # The .state file pins the key's role (KSK + ZSK = CSK) so dnssec-policy's
 # keymgr accepts the pre-distributed key instead of retiring it and minting
 # a fresh one on every restart.
-# Populated from secrets.yml on the control node; the empty default means
-# no keys are distributed when the variable is omitted.
 bind9_dnssec_key_material: []
 
 # Runtime metadata that BIND 9.18 keymgr writes into key files at runtime.
@@ -103,8 +102,9 @@ bind9_keymgr_runtime_strip:
   key: '(?m)^;\s*SyncPublish:.*\n?'
   private: '(?m)^SyncPublish:.*\n?'
   state: '(?m)^(PublishCDS|DNSKEYChange|ZRRSIGChange|KRRSIGChange|DSChange|DNSKEYState|ZRRSIGState|KRRSIGState|DSState|GoalState):.*\n?'
-
-# SOA serial: computed per-zone via the bind9_zone_serial filter plugin
+# ──────────────────────────────────────────────────────────
+# ------------------------------ SOA serial ------------------------------
+# Computed per-zone via the bind9_zone_serial filter plugin
 # using a read-and-bump strategy.
 #
 # On each playbook run, the bind9_zone_state module reads the current serial
