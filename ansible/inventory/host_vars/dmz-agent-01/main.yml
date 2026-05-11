@@ -19,7 +19,6 @@ firewall_zone_ports:
 
 # Docker Workload Config
 docker_enabled: true
-docker_binfmt_enabled: false
 
 docker_image_archives:
   - name: nap-agent

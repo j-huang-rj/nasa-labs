@@ -9,8 +9,7 @@ argument_specs:
         required: false
         default: false
         description: >-
-          Register QEMU emulators via binfmt for cross-architecture container execution (required when container images
-          target a different CPU architecture than the host).
+          Register QEMU emulators via binfmt for cross-architecture container execution.
 
       docker_binfmt_image:
         type: str
