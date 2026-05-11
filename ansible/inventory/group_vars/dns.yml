@@ -1,11 +1,5 @@
 ---
 # Cross-host topology vars shared by all members of the `dns` group
-# (primary-ns-01, secondary-ns-01, dns-01).
-#
-# These derive from inventory rather than literal IPs so the role and
-# zone data files have a single source of truth for each lab host.
-# When a host's address changes, only its own host_vars (or interface
-# definition) needs editing — every consumer follows the indirection.
 
 # Authoritative pair
 bind9_primary_ns_ip: "{{ hostvars['primary-ns-01'].ansible_host }}"
@@ -18,15 +12,10 @@ bind9_dns_resolver_ip: "{{ hostvars['dns-01'].ansible_host }}"
 bind9_dmz_agent_ip: "{{ hostvars['dmz-agent-01'].ansible_host }}"
 bind9_internal_agent_ip: "{{ hostvars['internal-agent-01'].ansible_host }}"
 
-# Router gateway IPs are derived from the router's interface declarations
-# so the LAN-side IPs stay in sync with router-01/main.yml.
-# `ansible_host` for router-01 is the SSH proxy-jump endpoint, not a LAN IP,
-# which is why we look up the interface zone instead.
+# Router gateway IPs
 bind9_router_dmz_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'dmz') | first).ip4.split('/')[0] }}"
 bind9_router_internal_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'internal') | first).ip4.split('/')[0] }}"
 
-# Reverse zone names derived from the role's bind9_dmz_cidr / bind9_internal_cidr.
-# Assumes /24 prefix (which lab/dns.md:159-165 specifies); a different prefix
-# would need a different derivation.
+# Reverse zone names
 bind9_dmz_reverse_zone: "{{ (bind9_dmz_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
 bind9_internal_reverse_zone: "{{ (bind9_internal_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"

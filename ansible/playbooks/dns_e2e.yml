@@ -316,7 +316,7 @@
             cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
               server {{ _e2e_primary }}
-              zone 1.16.172.in-addr.arpa
+              zone {{ bind9_internal_reverse_zone }}
               update add {{ _e2e_prop_ip_rev }}. 300 PTR dynamic4.{{ _e2e_forward_zone }}.
               send
           changed_when: false
@@ -378,7 +378,7 @@
               zone {{ _e2e_forward_zone }}
               update delete dynamic4.{{ _e2e_forward_zone }}. A
               send
-              zone 1.16.172.in-addr.arpa
+              zone {{ bind9_internal_reverse_zone }}
               update delete {{ _e2e_prop_ip_rev }}. PTR
               send
           changed_when: false
@@ -416,9 +416,9 @@
         view: private
       - name: "{{ bind9_vpn_child_reverse_zone_name }}"
         view: public
-      - name: "0.16.172.in-addr.arpa"
+      - name: "{{ bind9_dmz_reverse_zone }}"
         view: private
-      - name: "1.16.172.in-addr.arpa"
+      - name: "{{ bind9_internal_reverse_zone }}"
         view: private
   tasks:
     - name: "PHASE [e2e-ds : START]"

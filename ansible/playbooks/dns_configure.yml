@@ -97,24 +97,24 @@
 
     # ──────────────────────────────────────────────────────────
     # Trust-anchor fetch — resolver mode only
-    # Queries the course root server for KSK DNSKEY records and
+    # Queries the NASA root server for KSK DNSKEY records and
     # builds the bind9_trust_anchors fact for DNSSEC validation.
     # ──────────────────────────────────────────────────────────
-    - name: "PRE [dns : Fetch Course-Root Trust Anchors for Resolver Mode]"
+    - name: "PRE [dns : Fetch NASA-Root Trust Anchors for Resolver Mode]"
       when:
         - bind9_enabled | default(false) | bool
         - bind9_mode | default('') == 'resolver'
       block:
-        - name: "PRE [dns : Query nasa. DNSKEY from Course Root]"
-          ansible.builtin.command: dig @{{ bind9_course_root_ip }} nasa. DNSKEY +noall +answer
+        - name: "PRE [dns : Query nasa. DNSKEY from NASA Root]"
+          ansible.builtin.command: dig @{{ bind9_nasa_root_ip }} nasa. DNSKEY +noall +answer
           register: _bind9_nasa_dnskey
           changed_when: false
           until: _bind9_nasa_dnskey.rc == 0 and _bind9_nasa_dnskey.stdout | length > 0
           retries: 3
           delay: 2
 
-        - name: "PRE [dns : Query 168.192.in-addr.arpa. DNSKEY from Course Root]"
-          ansible.builtin.command: dig @{{ bind9_course_root_ip }} 168.192.in-addr.arpa. DNSKEY +noall +answer
+        - name: "PRE [dns : Query 168.192.in-addr.arpa. DNSKEY from NASA Root]"
+          ansible.builtin.command: dig @{{ bind9_nasa_root_ip }} 168.192.in-addr.arpa. DNSKEY +noall +answer
           register: _bind9_reverse_dnskey
           changed_when: false
           until: _bind9_reverse_dnskey.rc == 0 and _bind9_reverse_dnskey.stdout | length > 0
@@ -125,7 +125,7 @@
           ansible.builtin.fail:
             msg: >-
               No KSK (flags 257) found in nasa. DNSKEY response from
-              {{ bind9_course_root_ip }}. Ensure the course root server is reachable
+              {{ bind9_nasa_root_ip }}. Ensure the NASA root server is reachable
               and serving DNSKEY records for nasa.
           when: >-
             _bind9_nasa_dnskey.stdout_lines |
@@ -136,7 +136,7 @@
           ansible.builtin.fail:
             msg: >-
               No KSK (flags 257) found in 168.192.in-addr.arpa. DNSKEY response
-              from {{ bind9_course_root_ip }}. Ensure the course root server is reachable
+              from {{ bind9_nasa_root_ip }}. Ensure the NASA root server is reachable
               and serving DNSKEY records for 168.192.in-addr.arpa.
           when: >-
             _bind9_reverse_dnskey.stdout_lines |

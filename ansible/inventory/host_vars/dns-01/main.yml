@@ -32,21 +32,18 @@ bind9_listen_ipv4:
 bind9_forwarders:
   - 1.1.1.1
 
-# bind9_primary_ns_ip and bind9_course_root_ip come from
-# inventory/group_vars/dns.yml and the bind9 role defaults respectively.
-
 bind9_zones:
   - name: nasa
     type: forward
     forward: only
     forwarders:
-      - "{{ bind9_course_root_ip }}"
+      - "{{ bind9_nasa_root_ip }}"
 
   - name: 168.192.in-addr.arpa
     type: forward
     forward: only
     forwarders:
-      - "{{ bind9_course_root_ip }}"
+      - "{{ bind9_nasa_root_ip }}"
 
   - name: "{{ bind9_forward_zone_name }}"
     type: forward
