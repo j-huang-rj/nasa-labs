@@ -1,7 +1,5 @@
 ---
-# Role-internal constants. Higher precedence than defaults/main.yml.
-# These are implementation details of the role, not user-tunable knobs;
-# overriding them at the inventory level is not supported.
+# Role-internal constants
 
 # Runtime metadata that BIND 9.18 keymgr writes into key files at runtime.
 # These lines are CDS-rollover and last-rotation timestamps — irrelevant

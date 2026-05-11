@@ -1,5 +1,6 @@
 ---
 # Cross-host topology vars shared by all members of the `dns` group
+# (Lab identity derivation is in group_vars/all.yml; see comment there.)
 
 # Topology CIDRs
 bind9_dmz_cidr: "172.16.0.0/24"
