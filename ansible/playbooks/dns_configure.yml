@@ -9,11 +9,6 @@
   pre_tasks:
     # ──────────────────────────────────────────────────────────
     # Lab identity coherence
-    # Identity facts (forward zone, MNAME, VPN host IPs) are derived
-    # lazily in group_vars/dns.yml from the WireGuard address of
-    # bind9_identity_source_host (the router). Here we only assert
-    # that all WG-enabled peers share the same /28 subnet, so the
-    # derived lab ID is unambiguous across the inventory.
     # ──────────────────────────────────────────────────────────
     - name: "PRE [dns : Validate Lab Identity Coherence]"
       when:
@@ -64,62 +59,44 @@
         - bind9_enabled | default(false) | bool
         - bind9_mode | default('') == 'resolver'
       block:
-        - name: "PRE [dns : Query nasa. DNSKEY from NASA Root]"
-          ansible.builtin.command: dig @{{ bind9_nasa_root_ip }} nasa. DNSKEY +noall +answer
-          register: _bind9_nasa_dnskey
+        - name: "PRE [dns : Query KSK DNSKEYs from NASA Root]"
+          ansible.builtin.command: dig @{{ bind9_nasa_root_ip }} {{ item }}. DNSKEY +noall +answer
+          register: _bind9_trust_anchor_digs
           changed_when: false
-          until: _bind9_nasa_dnskey.rc == 0 and _bind9_nasa_dnskey.stdout | length > 0
+          until: _bind9_trust_anchor_digs.rc == 0 and _bind9_trust_anchor_digs.stdout | length > 0
           retries: 3
           delay: 2
+          loop: "{{ bind9_nasa_root_zones }}"
+          loop_control:
+            label: "{{ item }}"
 
-        - name: "PRE [dns : Query 168.192.in-addr.arpa. DNSKEY from NASA Root]"
-          ansible.builtin.command: dig @{{ bind9_nasa_root_ip }} 168.192.in-addr.arpa. DNSKEY +noall +answer
-          register: _bind9_reverse_dnskey
-          changed_when: false
-          until: _bind9_reverse_dnskey.rc == 0 and _bind9_reverse_dnskey.stdout | length > 0
-          retries: 3
-          delay: 2
-
-        - name: "PRE [dns : Fail If No nasa. KSK Records Found]"
+        - name: "PRE [dns : Fail If Any Zone Has No KSK Records]"
           ansible.builtin.fail:
             msg: >-
-              No KSK (flags 257) found in nasa. DNSKEY response from
+              No KSK (flags 257) found in {{ item.item }}. DNSKEY response from
               {{ bind9_nasa_root_ip }}. Ensure the NASA root server is reachable
-              and serving DNSKEY records for nasa.
+              and serving DNSKEY records for {{ item.item }}.
+          loop: "{{ _bind9_trust_anchor_digs.results }}"
+          loop_control:
+            label: "{{ item.item }}"
           when: >-
-            _bind9_nasa_dnskey.stdout_lines |
-              select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
-              list | length == 0
-
-        - name: "PRE [dns : Fail If No 168.192.in-addr.arpa. KSK Records Found]"
-          ansible.builtin.fail:
-            msg: >-
-              No KSK (flags 257) found in 168.192.in-addr.arpa. DNSKEY response
-              from {{ bind9_nasa_root_ip }}. Ensure the NASA root server is reachable
-              and serving DNSKEY records for 168.192.in-addr.arpa.
-          when: >-
-            _bind9_reverse_dnskey.stdout_lines |
+            item.stdout_lines |
               select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
               list | length == 0
 
         - name: "PRE [dns : Parse Trust Anchors from DNSKEY Responses]"
           ansible.builtin.set_fact:
             bind9_trust_anchors: >-
-              {{ (
-                  _bind9_nasa_dnskey.stdout_lines |
+              {{ bind9_trust_anchors | default([]) +
+                 (item.stdout_lines |
                   select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
                   map('regex_replace',
                     '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$',
-                    '{"zone":"nasa.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
-                  map('from_json') | list
-                ) + (
-                  _bind9_reverse_dnskey.stdout_lines |
-                  select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
-                  map('regex_replace',
-                    '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$',
-                    '{"zone":"168.192.in-addr.arpa.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
-                  map('from_json') | list
-                ) }}
+                    '{"zone":"' ~ item.item ~ '.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
+                  map('from_json') | list) }}
+          loop: "{{ _bind9_trust_anchor_digs.results }}"
+          loop_control:
+            label: "{{ item.item }}"
 
   roles:
     - role: bind9

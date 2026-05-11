@@ -33,25 +33,25 @@ bind9_forwarders:
   - 1.1.1.1
 
 bind9_zones:
-  - name: nasa
+  - name: "{{ bind9_nasa_root_zones[0] }}"
     type: forward
     forward: only
     forwarders:
       - "{{ bind9_nasa_root_ip }}"
 
-  - name: 168.192.in-addr.arpa
+  - name: "{{ bind9_nasa_root_zones[1] }}"
     type: forward
     forward: only
     forwarders:
       - "{{ bind9_nasa_root_ip }}"
 
-  - name: "{{ bind9_forward_zone_name }}"
+  - name: "{{ bind9_lab_primary_zones[0] }}"
     type: forward
     forward: only
     forwarders:
       - "{{ bind9_primary_ns_ip }}"
 
-  - name: 16.172.in-addr.arpa
+  - name: "{{ bind9_lab_primary_zones[1] }}"
     type: forward
     forward: only
     forwarders:
