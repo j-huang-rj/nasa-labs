@@ -12,10 +12,6 @@ network_interfaces:
     default_conn_name: "cloud-init eth0"
 
 # Firewall Config
-# WireGuard is intentionally NOT enabled on this agent. If it were, return
-# traffic for connections received via the router DNAT (VPN:10001 →
-# 172.16.0.123:2222) would route out via this host's own wg0 instead of
-# the gateway, breaking conntrack and causing OJ sshdig to fail.
 firewall_zone_ports:
   - zone: dmz
     port: 2222
