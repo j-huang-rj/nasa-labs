@@ -200,6 +200,21 @@
       Used for public-view AXFR connection discrimination and DNSSEC verification.
       Ensure host_vars/*/secrets.yml provides the AXFR key.
 
+- name: "PHASE [assert : Check WireGuard Address Of Identity Source Host Is Available]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _bind9_source_wg_address is defined
+      - _bind9_source_wg_address | length > 0
+    fail_msg: >-
+      bind9 role requires a WireGuard address from
+      '{{ bind9_identity_source_host | default("(undefined)") }}' to derive lab identity
+      (forward zone, MNAME, VPN host IPs), but wireguard_address is undefined or empty.
+      Ensure WireGuard is configured on
+      '{{ bind9_identity_source_host | default("(undefined)") }}' and the host is reachable
+      from the play (run bootstrap.yml first if needed).
+
 - name: "PHASE [assert : Check Derived Identity Facts Are Defined For Non-Resolver Modes]"
   when: bind9_mode != 'resolver'
   ansible.builtin.assert:
@@ -211,8 +226,9 @@
       - bind9_vpn_child_reverse_zone_name | length > 0
     fail_msg: >-
       bind9_forward_zone_name and bind9_vpn_child_reverse_zone_name must be defined for
-      authoritative modes. These facts are normally derived by dns_configure.yml pre_tasks
-      from wireguard_address; ensure that pre_tasks block has run before invoking this role.
+      authoritative modes. These facts are derived lazily in group_vars/dns.yml from
+      hostvars[bind9_identity_source_host].wireguard_address; ensure WireGuard is
+      configured on the source host before invoking this role.
 
 - name: "PHASE [assert : Check Primary Identity Facts Are Defined For authoritative_primary]"
   when: bind9_mode == 'authoritative_primary'

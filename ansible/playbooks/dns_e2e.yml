@@ -20,7 +20,7 @@
   gather_facts: false
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
-    _e2e_forward_zone: "{{ hostvars['primary-ns-01'].bind9_forward_zone_name }}"
+    _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
   tasks:
     - name: "PHASE [e2e-dmz : START]"
       ansible.builtin.debug:
@@ -123,7 +123,7 @@
   gather_facts: false
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
-    _e2e_forward_zone: "{{ hostvars['primary-ns-01'].bind9_forward_zone_name }}"
+    _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
   tasks:
     - name: "PHASE [e2e-private : START]"
       ansible.builtin.debug:
