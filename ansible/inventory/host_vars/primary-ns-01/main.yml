@@ -29,12 +29,6 @@ bind9_listen_ipv4:
   - 127.0.0.1
   - "{{ ansible_host }}"
 
-# View policy is inherited from the role default (canonical split-view).
-# Override bind9_views here only if this host needs a non-standard policy.
-# Cross-host topology vars (bind9_primary_ns_ip, bind9_secondary_ns_ip,
-# bind9_dns_resolver_ip, bind9_router_*, bind9_*_agent_ip) come from
-# inventory/group_vars/dns.yml.
-
 # Zone data — forward zones for private and public views
 bind9_zones:
   # --- Private forward zone ---
@@ -116,11 +110,11 @@ bind9_zones:
         type: "A"
         value: "{{ bind9_vpn_client_ip }}"
 
-  # --- Private reverse zone: 172.16.0/24 ---
-  - name: "0.16.172.in-addr.arpa"
+  # --- Private reverse zone ---
+  - name: "{{ bind9_dmz_reverse_zone }}"
     view: private
     type: master
-    file: "private/db.0.16.172.in-addr.arpa"
+    file: "private/db.{{ bind9_dmz_reverse_zone }}"
     dnssec_policy: "{{ bind9_dnssec_policy.name }}"
     dynamic_update_scope: zonesub_PTR
     allow_transfer:
@@ -147,11 +141,11 @@ bind9_zones:
         type: "PTR"
         value: "agent.{{ bind9_forward_zone_name }}."
 
-  # --- Private reverse zone: 172.16.1/24 ---
-  - name: "1.16.172.in-addr.arpa"
+  # --- Private reverse zone ---
+  - name: "{{ bind9_internal_reverse_zone }}"
     view: private
     type: master
-    file: "private/db.1.16.172.in-addr.arpa"
+    file: "private/db.{{ bind9_internal_reverse_zone }}"
     dnssec_policy: "{{ bind9_dnssec_policy.name }}"
     dynamic_update_scope: zonesub_PTR
     allow_transfer:
@@ -181,7 +175,7 @@ bind9_zones:
         type: "PTR"
         value: "internal-agent.{{ bind9_forward_zone_name }}."
 
-  # --- Public RFC 2317 child zone (delegated /28 reverse) ---
+  # --- Public RFC 2317 child zone (delegated) ---
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     view: public
     type: master

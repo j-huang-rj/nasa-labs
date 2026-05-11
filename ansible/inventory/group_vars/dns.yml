@@ -24,3 +24,9 @@ bind9_internal_agent_ip: "{{ hostvars['internal-agent-01'].ansible_host }}"
 # which is why we look up the interface zone instead.
 bind9_router_dmz_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'dmz') | first).ip4.split('/')[0] }}"
 bind9_router_internal_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'internal') | first).ip4.split('/')[0] }}"
+
+# Reverse zone names derived from the role's bind9_dmz_cidr / bind9_internal_cidr.
+# Assumes /24 prefix (which lab/dns.md:159-165 specifies); a different prefix
+# would need a different derivation.
+bind9_dmz_reverse_zone: "{{ (bind9_dmz_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
+bind9_internal_reverse_zone: "{{ (bind9_internal_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"

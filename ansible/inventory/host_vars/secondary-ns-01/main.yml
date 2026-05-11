@@ -75,27 +75,27 @@ bind9_zones:
       - "none"
     file: "slaves/public/db.{{ bind9_forward_zone_name }}"
 
-  # --- Private reverse zone: 172.16.0/24 ---
-  - name: "0.16.172.in-addr.arpa"
+  # --- Private reverse zone ---
+  - name: "{{ bind9_dmz_reverse_zone }}"
     view: private
     type: slave
     masters:
       - "{{ bind9_primary_ns_ip }}"
     allow_transfer:
       - "none"
-    file: "slaves/private/db.0.16.172.in-addr.arpa"
+    file: "slaves/private/db.{{ bind9_dmz_reverse_zone }}"
 
-  # --- Private reverse zone: 172.16.1/24 ---
-  - name: "1.16.172.in-addr.arpa"
+  # --- Private reverse zone ---
+  - name: "{{ bind9_internal_reverse_zone }}"
     view: private
     type: slave
     masters:
       - "{{ bind9_primary_ns_ip }}"
     allow_transfer:
       - "none"
-    file: "slaves/private/db.1.16.172.in-addr.arpa"
+    file: "slaves/private/db.{{ bind9_internal_reverse_zone }}"
 
-  # --- Public RFC 2317 child zone (delegated /28 reverse) ---
+  # --- Public RFC 2317 child zone (delegated) ---
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"
     view: public
     type: slave
