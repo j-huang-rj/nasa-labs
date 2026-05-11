@@ -26,9 +26,9 @@ include "/etc/named.rfc1912.zones";
 
 {% if bind9_trust_anchors | default([]) | length > 0 %}
 {#
-  Trust anchors for DNSSEC validation. Fetched at runtime from the course
-  root server (192.168.255.1) and rendered as static-key entries. Only
-  present in resolver mode where dnssec-validation is active.
+  Trust anchors for DNSSEC validation.
+  Fetched at runtime and rendered as static-key entries.
+  Only present in resolver mode where dnssec-validation is active.
 #}
 include "{{ bind9_conf_dir }}/named.trust-anchors.conf";
 {% endif %}

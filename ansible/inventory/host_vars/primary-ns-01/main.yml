@@ -28,6 +28,10 @@ bind9_listen_ipv4:
   - 127.0.0.1
   - 172.16.1.53
 
+# Cross-host references — derived from inventory so a host's IP change
+# only needs to be made in that host's own host_vars.
+bind9_secondary_ns_ip: "{{ hostvars['secondary-ns-01'].ansible_host }}"
+
 # View policy: public view evaluated first to capture keyed AXFR before
 # IP-based negation; private view catches everything that falls through.
 bind9_views:
@@ -56,9 +60,9 @@ bind9_zones:
     dnssec_policy: nasa-lab
     dynamic_update_scope: forward_a_hosts
     allow_transfer:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     also_notify:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       refresh: 3600
@@ -71,7 +75,7 @@ bind9_zones:
     records:
       - name: "ns"
         type: "A"
-        value: "172.16.0.53"
+        value: "{{ bind9_secondary_ns_ip }}"
       - name: "private-ns"
         type: "A"
         value: "172.16.1.53"
@@ -98,9 +102,9 @@ bind9_zones:
     file: "public/db.{{ bind9_forward_zone_name }}"
     dnssec_policy: nasa-lab
     allow_transfer:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     also_notify:
-      - address: "172.16.0.53"
+      - address: "{{ bind9_secondary_ns_ip }}"
         key: "{{ bind9_axfr_key.name }}"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
@@ -135,9 +139,9 @@ bind9_zones:
     dnssec_policy: nasa-lab
     dynamic_update_scope: ptr_zonesub
     allow_transfer:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     also_notify:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       refresh: 3600
@@ -166,9 +170,9 @@ bind9_zones:
     dnssec_policy: nasa-lab
     dynamic_update_scope: ptr_zonesub
     allow_transfer:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     also_notify:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
       refresh: 3600
@@ -199,9 +203,9 @@ bind9_zones:
     file: "public/db.{{ bind9_vpn_child_reverse_zone_name }}"
     dnssec_policy: nasa-lab
     allow_transfer:
-      - "172.16.0.53"
+      - "{{ bind9_secondary_ns_ip }}"
     also_notify:
-      - address: "172.16.0.53"
+      - address: "{{ bind9_secondary_ns_ip }}"
         key: "{{ bind9_axfr_key.name }}"
     soa:
       admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."

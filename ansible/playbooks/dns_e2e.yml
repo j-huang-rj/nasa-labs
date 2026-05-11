@@ -276,6 +276,7 @@
   become: true
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
+    _e2e_primary: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
     _e2e_prop_ip: "172.16.1.204"
   tasks:
@@ -304,7 +305,7 @@
           ansible.builtin.command:
             cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
-              server 172.16.1.53
+              server {{ _e2e_primary }}
               zone {{ _e2e_forward_zone }}
               update add dynamic4.{{ _e2e_forward_zone }}. 300 A {{ _e2e_prop_ip }}
               send
@@ -314,7 +315,7 @@
           ansible.builtin.command:
             cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
-              server 172.16.1.53
+              server {{ _e2e_primary }}
               zone 1.16.172.in-addr.arpa
               update add {{ _e2e_prop_ip_rev }}. 300 PTR dynamic4.{{ _e2e_forward_zone }}.
               send
@@ -373,7 +374,7 @@
           ansible.builtin.command:
             cmd: nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
-              server 172.16.1.53
+              server {{ _e2e_primary }}
               zone {{ _e2e_forward_zone }}
               update delete dynamic4.{{ _e2e_forward_zone }}. A
               send
@@ -401,6 +402,7 @@
   # become required: tsig_setup.yml writes a keyfile owned by named (mode 0600).
   become: true
   vars:
+    _e2e_primary: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     # Each spec carries `view` so we know whether dig must be AXFR-keyed to
     # force public-view selection. From primary-ns-01's source IP (172.16.1.53),
     # bare dig matches !internal_clients in the public-view match-clients and
@@ -439,7 +441,7 @@
             # with "class 'ANY' != zone class 'IN'".
             cmd: >-
               set -o pipefail &&
-              dig @172.16.1.53 {% if item.view == 'public' %}-k {{ _bind9_axfr_keyfile.path }} {% endif %}{{ item.name }} DNSKEY +noall +answer
+              dig @{{ _e2e_primary }} {% if item.view == 'public' %}-k {{ _bind9_axfr_keyfile.path }} {% endif %}{{ item.name }} DNSKEY +noall +answer
               | dnssec-dsfromkey -f - {{ item.name }}
           changed_when: false
           register: _e2e_ds_extract
