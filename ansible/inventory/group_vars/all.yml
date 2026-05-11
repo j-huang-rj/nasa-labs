@@ -4,13 +4,6 @@ wireguard_enabled: false
 docker_enabled: false
 bind9_enabled: false
 
-# Topology CIDRs (universal, used by bind9 role + group_vars/dns.yml derivations
-# such as bind9_dmz_reverse_zone / bind9_internal_reverse_zone). Lifted from
-# the bind9 role defaults so non-role-using playbooks (e.g. dns_e2e.yml) can
-# resolve CIDR-derived facts.
-bind9_dmz_cidr: "172.16.0.0/24"
-bind9_internal_cidr: "172.16.1.0/24"
-
 firewall_builtin_zones:
   - public
   - trusted
