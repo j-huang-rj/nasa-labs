@@ -213,8 +213,8 @@
               nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
               server {{ _bind9_private_source }}
-              zone 1.16.172.in-addr.arpa
-              update add 200.1.16.172.in-addr.arpa. 300 PTR dynamic1.{{ bind9_forward_zone_name }}.
+              zone {{ bind9_internal_reverse_zone }}
+              update add 200.{{ bind9_internal_reverse_zone }}. 300 PTR dynamic1.{{ bind9_forward_zone_name }}.
               send
           changed_when: false
 
@@ -247,8 +247,8 @@
               zone {{ bind9_forward_zone_name }}
               update delete dynamic1.{{ bind9_forward_zone_name }}. A
               send
-              zone 1.16.172.in-addr.arpa
-              update delete 200.1.16.172.in-addr.arpa. PTR
+              zone {{ bind9_internal_reverse_zone }}
+              update delete 200.{{ bind9_internal_reverse_zone }}. PTR
               send
           changed_when: false
 
@@ -293,8 +293,8 @@
               zone {{ bind9_forward_zone_name }}
               update delete dynamic1.{{ bind9_forward_zone_name }}. A
               send
-              zone 1.16.172.in-addr.arpa
-              update delete 200.1.16.172.in-addr.arpa. PTR
+              zone {{ bind9_internal_reverse_zone }}
+              update delete 200.{{ bind9_internal_reverse_zone }}. PTR
               send
           changed_when: false
           failed_when: false
@@ -702,7 +702,7 @@
               nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
               server 172.16.1.53
-              zone 1.16.172.in-addr.arpa
+              zone {{ bind9_internal_reverse_zone }}
               update add {{ _bind9_prop_test_ip_rev }}. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
               send
           changed_when: false
@@ -743,7 +743,7 @@
               zone {{ bind9_forward_zone_name }}
               update delete dynamic2.{{ bind9_forward_zone_name }}. A
               send
-              zone 1.16.172.in-addr.arpa
+              zone {{ bind9_internal_reverse_zone }}
               update delete {{ _bind9_prop_test_ip_rev }}. PTR
               send
           changed_when: false
@@ -904,9 +904,9 @@
           stdout={{ _bind9_verify_resolver_recursive.stdout | default('') }},
           stderr={{ _bind9_verify_resolver_recursive.stderr | default('') }}
 
-    # --- RES-02: Course-root recursive resolution (nasa. and
+    # --- RES-02: NASA-root recursive resolution (nasa. and
     #     168.192.in-addr.arpa. forward zones must resolve) ---
-    - name: "PHASE [verify : Resolver - Course-Root nasa SOA]"
+    - name: "PHASE [verify : Resolver - NASA-Root nasa SOA]"
       ansible.builtin.command:
         cmd: "dig @127.0.0.1 nasa SOA +dnssec"
       changed_when: false
@@ -919,10 +919,10 @@
           - "'status: NOERROR' in _bind9_verify_resolver_nasa_soa.stdout"
           - "'ANSWER: 0' not in _bind9_verify_resolver_nasa_soa.stdout"
         fail_msg: >-
-          Resolver cannot resolve nasa. SOA via course-root forward zone.
+          Resolver cannot resolve nasa. SOA via NASA-root forward zone.
           stdout={{ _bind9_verify_resolver_nasa_soa.stdout | default('') }}
 
-    - name: "PHASE [verify : Resolver - Course-Root 168.192.in-addr.arpa SOA]"
+    - name: "PHASE [verify : Resolver - NASA-Root 168.192.in-addr.arpa SOA]"
       ansible.builtin.command:
         cmd: "dig @127.0.0.1 168.192.in-addr.arpa SOA +dnssec"
       changed_when: false
@@ -935,7 +935,7 @@
           - "'status: NOERROR' in _bind9_verify_resolver_reverse_soa.stdout"
           - "'ANSWER: 0' not in _bind9_verify_resolver_reverse_soa.stdout"
         fail_msg: >-
-          Resolver cannot resolve 168.192.in-addr.arpa. SOA via course-root forward zone.
+          Resolver cannot resolve 168.192.in-addr.arpa. SOA via NASA-root forward zone.
           stdout={{ _bind9_verify_resolver_reverse_soa.stdout | default('') }}
 
     # --- RES-03: Private-view routing — queries for the lab forward zone
@@ -979,9 +979,9 @@
 
     # --- RES-05: DNSSEC AD-bit validation. The resolver must set the AD
     #     flag on answers for signed zones when DNSSEC validation succeeds.
-    #     Course-root trust anchors (fetched in dns_configure.yml pre_tasks) enable
+    #     NASA-root trust anchors (fetched in dns_configure.yml pre_tasks) enable
     #     validation for nasa. and 168.192.in-addr.arpa.; the lab-zone
-    #     CSK chains back through the course root via DS records.
+    #     CSK chains back through the NASA root via DS records.
     #     The +dnssec flag forces EDNS with DO bit so the resolver
     #     returns RRSIG records alongside the answer. ---
     - name: "PHASE [verify : Resolver - Forward Zone SOA AD-bit Check]"

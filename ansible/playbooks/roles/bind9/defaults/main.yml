@@ -15,33 +15,18 @@ bind9_dynamic_zone_dir: /var/named/dynamic
 bind9_soa_admin: "admin"
 
 # ACL definitions
-# Names are used both in named.acl.conf (definition) and bind9_views match_clients
-# (reference). Keeping them as variables means an ACL rename touches one place.
 bind9_acl_dmz: "dmz_clients"
 bind9_acl_internal: "internal_clients"
-bind9_dmz_cidr: "172.16.0.0/24"
-bind9_internal_cidr: "172.16.1.0/24"
 
-# Course-root server IP. Used by dns_configure.yml's pre_tasks to fetch
-# DNSSEC trust anchors (KSK DNSKEY records). The lab topology pins this
-# at 192.168.255.1; override only if the lab spec changes.
-bind9_course_root_ip: "192.168.255.1"
+# NASA-root server IP
+bind9_nasa_root_ip: "192.168.255.1"
 
 # VPN host IP offsets
 bind9_vpn_router_offset: 1
 bind9_vpn_client_offset: 2
 bind9_vpn_ns_offset: 3
 
-# Canonical split-view policy for authoritative modes. Both managed
-# authoritative hosts (primary, secondary) share this exact structure;
-# override only if a host genuinely deviates from the standard policy.
-# Resolver mode ignores bind9_views (template gates view rendering by mode).
-#
-# Public view: AXFR key holders go in (server-to-server transfers), then
-# IP-based exclusion of internal/DMZ subnets, then any. Private view:
-# localhost + DMZ + internal subnets. Zone data still lives in host_vars
-# bind9_zones since it is per-host (primary owns master records, secondary
-# mirrors slave zones).
+# Canonical split-view policy for authoritative modes
 bind9_views:
   - name: public
     order: 10
@@ -50,6 +35,7 @@ bind9_views:
       - "!{{ bind9_acl_internal }}"
       - "!{{ bind9_acl_dmz }}"
       - "any"
+
   - name: private
     order: 99
     match_clients:
@@ -57,24 +43,20 @@ bind9_views:
       - "{{ bind9_acl_dmz }}"
       - "{{ bind9_acl_internal }}"
 
+# Zones to be configured on the server
 bind9_zones: []
 
-# Dynamic update hosts. The role's update-policy template binds these names
-# (e.g. "dynamic1.<zone>") to the bind9_tsig_key.
+# Dynamic update allowed hosts
 bind9_dynamic_hosts:
   - "dynamic1"
   - "dynamic2"
   - "dynamic3"
   - "dynamic4"
 
-# Upstream forwarders for resolver mode. When non-empty, resolver config
-# emits `forwarders { ... }; forward only;` and skips root-based recursion.
+# Upstream forwarders for resolver mode
 bind9_forwarders: []
 
-# Trust anchors for DNSSEC validation in resolver mode. Each item is a dict
-# with keys: zone, flags, protocol, algorithm, key. Populated by the dns_configure.yml
-# play's pre_tasks from upstream KSK records (flags 257); not stored in
-# secrets.yml because trust anchors are public key material, not secrets.
+# Trust anchors for DNSSEC validation in resolver mode
 bind9_trust_anchors: []
 
 # TSIG key configuration
@@ -84,9 +66,7 @@ bind9_tsig_key:
   secret: ""
 
 # Optional second TSIG key, used to discriminate public-view AXFR
-# connections from IP-based view selection on the primary. When the
-# secret is empty (default) the key block is not rendered into
-# named.keys.conf and is treated as absent.
+# connections from IP-based view selection on the primary.
 bind9_axfr_key:
   name: lab_axfr_public
   algorithm: hmac-sha256
@@ -95,9 +75,7 @@ bind9_axfr_key:
 # Path for the rendered TSIG key
 bind9_keys_conf_path: /etc/named/named.keys.conf
 
-# DNSSEC signing policy for authoritative zones.
-# When at least one zone declares dnssec_policy,
-# BIND signs that zone using this policy's algorithm and digest settings.
+# DNSSEC signing policy for authoritative zones
 bind9_dnssec_policy:
   name: nasa-lab
   key_directory: /etc/named/keys
