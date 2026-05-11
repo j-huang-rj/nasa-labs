@@ -56,3 +56,13 @@ bind9_zones:
     forward: only
     forwarders:
       - "{{ bind9_primary_ns_ip }}"
+
+  # RFC 2317 child reverse zone for VPN /28. Longest-prefix forward overrides
+  # the parent 168.192.in-addr.arpa zone (which goes to NASA-root and fails
+  # with non-improving referral because dns-01 is forward-only and cannot
+  # follow the delegation chain back to ns.<id>.nasa).
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    type: forward
+    forward: only
+    forwarders:
+      - "{{ bind9_primary_ns_ip }}"

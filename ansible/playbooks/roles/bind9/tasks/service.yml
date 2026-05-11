@@ -13,7 +13,7 @@
   when: bind9_mode == 'authoritative_primary'
   ansible.builtin.command:
     cmd: named-checkzone {{ item.name }} {{ bind9_zone_dir }}/{{ item.file }}
-  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
   loop_control:
     label: "{{ item.name }} ({{ item.view | default('global') }})"
   changed_when: false

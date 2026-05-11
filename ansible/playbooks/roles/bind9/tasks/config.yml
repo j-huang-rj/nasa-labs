@@ -351,7 +351,7 @@
   when: bind9_mode == 'authoritative_primary'
   bind9_zone_state:
     zone_dir: "{{ bind9_zone_dir }}"
-    zone_files: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | map(attribute='file') | list }}"
+    zone_files: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | map(attribute='file') | list }}"
   register: bind9_zone_state_raw
 
 - name: "PHASE [config : Set Zone Current State Fact]"
@@ -377,7 +377,7 @@
           current_hash=bind9_zone_current_state[item.file].hash
         )
       }) }}
-  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
   loop_control:
     label: "{{ item.name }}"
 
@@ -392,7 +392,7 @@
   ansible.builtin.file:
     path: "{{ bind9_zone_dir }}/{{ item.file }}.jnl"
     state: absent
-  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
   loop_control:
     label: "{{ item.name }} ({{ item.view }})"
   notify: "PHASE [handler : Restart named]"
@@ -412,7 +412,7 @@
     group: named
     mode: "0640"
     setype: "{{ 'named_cache_t' if (item.dynamic_update_scope is defined) else 'named_zone_t' }}"
-  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
   loop_control:
     label: "{{ item.name }}"
   notify: "PHASE [handler : Restart named]"
@@ -432,7 +432,7 @@
     owner: root
     group: named
     mode: "0640"
-  loop: "{{ bind9_zones | selectattr('type', 'equalto', 'master') | list }}"
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
   loop_control:
     label: "{{ item.name }}"
 

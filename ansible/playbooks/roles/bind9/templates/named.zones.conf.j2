@@ -8,10 +8,16 @@
   Supported zone `type` values: master, slave, static-stub, forward, hint.
 
   Optional zone fields: file, masters, server_addresses, forwarders, forward,
-  allow_transfer, also_notify, dynamic_update_scope, dnssec_policy.
+  allow_transfer, also_notify, dynamic_update_scope, dnssec_policy, in_view.
 
   When dnssec_policy is set on a master zone, the template emits
   `dnssec-policy "<policy_name>";` and `inline-signing yes;` directives.
+
+  When `in_view` is set, the zone renders as a view-scoped alias of the named
+  source view (BIND `in-view` directive). All other zone options are ignored;
+  the alias inherits the source zone's type, data, and signing state. Use
+  this to expose a master zone defined in one view to another view without
+  duplicating keymgr/inline-signing state.
 
   `masters` items may be either a plain IP string or a dict
   `{address: <ip>, key: <tsig-key-name>}` to sign the AXFR with a TSIG key.
@@ -30,6 +36,9 @@
 #}
 {% macro render_zone(zone, indent='') -%}
 {{ indent }}zone "{{ zone.name }}" {
+{% if zone.in_view is defined %}
+{{ indent }}    in-view "{{ zone.in_view }}";
+{% else %}
 {{ indent }}    type {{ zone.type }};
 {% if zone.file is defined %}
 {{ indent }}    file "{{ zone.file }}";
@@ -84,6 +93,7 @@
 {% if zone.dnssec_policy is defined %}
 {{ indent }}    dnssec-policy "{{ zone.dnssec_policy }}";
 {{ indent }}    inline-signing yes;
+{% endif %}
 {% endif %}
 {{ indent }}};
 {%- endmacro %}
