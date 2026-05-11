@@ -37,10 +37,6 @@
     label: "{{ item }}:53"
 
 # --- TSIG key precondition ---
-# Asserted up front so missing keys fail with a clear message before any
-# block below tries to use them. Without this, the first dig/nsupdate that
-# references an undefined key writes an empty `secret` to a temp keyfile and
-# fails with cryptic BIND parse errors instead.
 - name: "PHASE [verify : TSIG Key Precondition]"
   when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
   block:
@@ -113,8 +109,6 @@
           {{ result }}
 
     # --- Private-view forward A lookups ---
-    # `+comments` retained so the `flags: qr aa` header line stays in
-    # stdout for the authoritative-flag assertion below.
     - name: "PHASE [verify : Private View - Forward A Lookups]"
       ansible.builtin.command:
         cmd: >-
@@ -131,8 +125,6 @@
         quiet: true
         that:
           - item.value in _bind9_verify_private_fwd.results[idx].stdout
-          # Authoritative-flag check folded in here so every private-view
-          # forward answer is asserted authoritative, not just the first.
           - "'flags: qr aa' in _bind9_verify_private_fwd.results[idx].stdout"
         fail_msg: >-
           {{ item.name }}.{{ bind9_forward_zone_name }} A → {{ item.value }}
@@ -166,16 +158,7 @@
         index_var: idx
         label: "{{ item.ip }} → {{ item.fqdn }}"
 
-    # --- Dynamic update lifecycle: each step is followed by a dig+assert
-    #     so a silent rc=0 from nsupdate (e.g. policy-rejected with no error)
-    #     can't pass through unnoticed. The redundant 'modify' step from
-    #     earlier revisions was dropped: create + delete on a fresh name
-    #     already exercises the same allow-add and allow-delete paths.
-    #     The whole exercise is wrapped in block/always so a half-failed
-    #     run (e.g. an assert fails between the create and the delete)
-    #     still reverts dynamic1 and its PTR. Without this safety net the
-    #     primary's zone would carry leaked records into the next run and
-    #     drift from the playbook's declared state. ---
+    # --- Dynamic update lifecycle ---
     - name: "PHASE [verify : Dynamic Update Exercise]"
       block:
         - name: "PHASE [verify : Dynamic Update - Create dynamic1 A Record]"
@@ -279,11 +262,6 @@
               A_stdout={{ _bind9_verify_dyn_del_a_dig.stdout | default('') }}
               PTR_stdout={{ _bind9_verify_dyn_del_ptr_dig.stdout | default('') }}
       always:
-        # Safety-net cleanup: runs even when the block above failed mid-way.
-        # `nsupdate update delete` is idempotent — it succeeds whether or
-        # not the record exists, so this is a no-op on the happy path
-        # (the block's own delete already ran). `failed_when: false`
-        # ensures a hiccup in cleanup never masks the original failure.
         - name: "PHASE [verify : Dynamic Update - Cleanup Safety Net]"
           ansible.builtin.command:
             cmd: >-
@@ -369,12 +347,7 @@
           stdout={{ _bind9_verify_axfr_reject.stdout | default('') }}
 
     # --- DNSSEC verification: confirm that all signed zones emit DNSKEY
-    #     and RRSIG records, and extract DS records. Per-view zone lists
-    #     are computed once here and reused below.
-    #     `_bind9_dnssec_unique_zones` covers zones reachable via the
-    #     unkeyed private-source path (private-view names). Public-only
-    #     zones (e.g. `14-sub28...`) live only in the keyed public path
-    #     and are extracted separately. ---
+    #     and RRSIG records, and extract DS records. ---
     - name: "PHASE [verify : DNSSEC - Build Signed Zone Lists]"
       ansible.builtin.set_fact:
         _bind9_dnssec_private_zones: >-
@@ -424,8 +397,7 @@
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
 
-    # --- DS record extraction: dedup by zone name (some zones live in
-    #     both views and yield the same DS) so we don't display twice. ---
+    # --- DS record extraction ---
     - name: "PHASE [verify : DNSSEC - Extract DS Records For Each Zone]"
       ansible.builtin.shell:
         cmd: >-
@@ -460,11 +432,7 @@
         index_var: idx
         label: "{{ item }}"
 
-    # --- Public-view DNSSEC verification: confirms public-view signed zones
-    #     also emit DNSKEY/RRSIG/algorithm 13. Queries must use the AXFR TSIG
-    #     key to match the public view (queried from the private source IP,
-    #     which would otherwise route to the private view and REFUSE
-    #     public-only zones). ---
+    # --- Public-view DNSSEC verification ---
     - name: "PHASE [verify : DNSSEC - Query DNSKEY For Public-View Signed Zones]"
       ansible.builtin.command:
         cmd: >-
@@ -495,17 +463,9 @@
         index_var: idx
         label: "{{ item.name }} ({{ item.view }})"
 
-    # --- Public-view DS extraction: cross-checks that the DS computed via
-    #     the keyed/public path equals the one extracted via the private path
-    #     above. They share the same CSK so the values must match; this
-    #     guards against accidental view-divergent signing. ---
+    # --- Public-view DS extraction ---
     - name: "PHASE [verify : DNSSEC - Extract DS Records For Public-View Zones]"
       ansible.builtin.shell:
-        # `+noall +answer` restricts output to ANSWER-section records only.
-        # Without it, the TSIG pseudo-record appended by `-k <keyfile>`
-        # (class ANY) and the OPT pseudo-record from EDNS get piped into
-        # `dnssec-dsfromkey -f -`, which fails with:
-        #   "class 'ANY' != zone class 'IN' ... bad class".
         cmd: >-
           set -o pipefail &&
           dig -b {{ _bind9_private_source }} @{{ _bind9_private_source }}
@@ -524,11 +484,6 @@
         that:
           - "' IN DS ' in _bind9_verify_ds_extract_public.results[idx].stdout"
           - "' 13 2 ' in _bind9_verify_ds_extract_public.results[idx].stdout"
-          # Cross-view consistency: when a zone exists in both views, the
-          # same CSK signs both copies, so DS lines extracted via the keyed
-          # public path must be a subset of the DS lines extracted via the
-          # private path. Public-only zones (no private counterpart) skip
-          # the cross-view check.
           - >-
             item.name not in _bind9_dnssec_unique_zones
             or _bind9_verify_ds_extract_public.results[idx].stdout.strip()
@@ -545,10 +500,6 @@
         index_var: idx
         label: "{{ item.name }}"
 
-    # Display DS for public-only zones (those without a private-view
-    # counterpart). Zones present in both views are already displayed by
-    # the private-view task above, so we skip them here to
-    # avoid duplicate output.
     - name: "PHASE [verify : DNSSEC - Display DS Records For Public-Only Zones]"
       ansible.builtin.debug:
         msg: "{{ _bind9_verify_ds_extract_public.results[idx].stdout }}"
@@ -611,13 +562,6 @@
           ns.{{ bind9_forward_zone_name }}.
           stdout={{ _bind9_verify_secondary_private_fwd.stdout | default('') }}
 
-    # Same answer queried with the kernel's default source binding (no -b)
-    # rather than the explicit 172.16.0.53 above. Both land in secondary's
-    # DMZ-side private view (source 172.16.0.53 is in dmz_clients, no TSIG
-    # presented, so public view's `!dmz_clients` rejects and we fall
-    # through to private). Documents the implicit-source path; '172.16'
-    # substring match covers either DMZ or VPN-side answer in case the
-    # default source ever binds differently.
     - name: "PHASE [verify : Secondary - Default-Source Forward A Lookup (DMZ Private View)]"
       ansible.builtin.command:
         cmd: >-
@@ -639,10 +583,7 @@
           ns.{{ bind9_forward_zone_name }} via the default-source path.
           stdout={{ _bind9_verify_secondary_default_src_fwd.stdout | default('') }}
 
-    # --- Public-only zone propagation: this zone exists ONLY in primary's
-    #     public view. Reaching it on the secondary proves keyed AXFR view
-    #     selection is working (without it the AXFR would land in primary's
-    #     private view, which has no such zone, and return REFUSED). ---
+    # --- Public-only zone propagation ---
     - name: "PHASE [verify : Secondary - Public-Only Reverse Zone SOA Lookup]"
       ansible.builtin.command:
         cmd: >-
@@ -667,11 +608,7 @@
           to broken keyed view-selection.
           stdout={{ _bind9_verify_secondary_public_only_soa.stdout | default('') }}
 
-    # --- Propagation test: update on primary, poll secondary until
-    #     convergence. Capped at 10 seconds via retries/delay.
-    #     The mutating tasks (create/PTR-add/poll) are wrapped in
-    #     block/always so the cleanup-delete runs even if poll exhausts
-    #     its retries, keeping the primary's zone idempotent at rest. ---
+    # --- Propagation test ---
     - name: "PHASE [verify : Propagation - Set Test Address]"
       ansible.builtin.set_fact:
         _bind9_prop_test_ip: "172.16.1.202"
@@ -729,11 +666,6 @@
           retries: 10
           delay: 1
       always:
-        # Safety-net cleanup: the previous shape ran two delete tasks at
-        # the end of the block; if poll exhausted retries those deletes
-        # were skipped and dynamic2 / its PTR leaked into the next run.
-        # `nsupdate update delete` is idempotent (succeeds whether or
-        # not the record exists) so this is also safe on the happy path.
         - name: "PHASE [verify : Propagation - Cleanup Safety Net]"
           ansible.builtin.command:
             cmd: >-
@@ -800,13 +732,7 @@
 
     # --- DNSSEC verification on the secondary: confirm that signed data
     #     transferred via AXFR includes DNSKEY and RRSIG material, proving
-    #     the external publication path carries DNSSEC records. The dig is
-    #     keyed with bind9_axfr_key so the secondary's public-view
-    #     match-clients selects the public view (the public view's
-    #     `key {{ bind9_axfr_key.name }};` clause matches before the
-    #     IP-based exclusions); without the key this query lands in the
-    #     private view and would not exercise the externally-published
-    #     DNSKEY/RRSIG path. ---
+    #     the external publication path carries DNSSEC records. ---
     - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For Forward Zone]"
       ansible.builtin.command:
         cmd: >-
@@ -875,10 +801,6 @@
 - name: "PHASE [verify : Resolver Verification]"
   when: bind9_mode == 'resolver'
   block:
-    # Default dig output (not +short) so the retry's stdout carries both
-    # the answer record on success AND the SERVFAIL/REFUSED status on
-    # failure. This replaced a separate 'diagnostic dig' task that ran
-    # only in the failure path and was strictly redundant.
     - name: "PHASE [verify : Resolver - Test Recursive Resolution]"
       ansible.builtin.command:
         cmd: "dig @127.0.0.1 google.com A"
@@ -904,8 +826,7 @@
           stdout={{ _bind9_verify_resolver_recursive.stdout | default('') }},
           stderr={{ _bind9_verify_resolver_recursive.stderr | default('') }}
 
-    # --- RES-02: NASA-root recursive resolution (nasa. and
-    #     168.192.in-addr.arpa. forward zones must resolve) ---
+    # --- NASA-root recursive resolution ---
     - name: "PHASE [verify : Resolver - NASA-Root nasa SOA]"
       ansible.builtin.command:
         cmd: "dig @127.0.0.1 nasa SOA +dnssec"
@@ -938,12 +859,7 @@
           Resolver cannot resolve 168.192.in-addr.arpa. SOA via NASA-root forward zone.
           stdout={{ _bind9_verify_resolver_reverse_soa.stdout | default('') }}
 
-    # --- RES-03: Private-view routing — queries for the lab forward zone
-    #     and 16.172.in-addr.arpa. must return private-view answers
-    #     (172.16.x.x addresses, not VPN-side addresses). The resolver's
-    #     source IP 127.0.0.1 matches the primary's internal_clients ACL
-    #     indirectly (localhost → allow-query → allow-recursion), and the
-    #     forward target 172.16.1.53 selects the private view. ---
+    # --- Private-view routing ---
     - name: "PHASE [verify : Resolver - Private-NS Forward Lookup]"
       ansible.builtin.command:
         cmd: >-
@@ -977,13 +893,7 @@
           Resolver reverse lookup for 172.16.1.53 did not return private-ns.{{ bind9_forward_zone_name }}.
           Got: {{ _bind9_verify_resolver_private_ns_rev.stdout | default('') }}
 
-    # --- RES-05: DNSSEC AD-bit validation. The resolver must set the AD
-    #     flag on answers for signed zones when DNSSEC validation succeeds.
-    #     NASA-root trust anchors (fetched in dns_configure.yml pre_tasks) enable
-    #     validation for nasa. and 168.192.in-addr.arpa.; the lab-zone
-    #     CSK chains back through the NASA root via DS records.
-    #     The +dnssec flag forces EDNS with DO bit so the resolver
-    #     returns RRSIG records alongside the answer. ---
+    # --- DNSSEC AD-bit validation ---
     - name: "PHASE [verify : Resolver - Forward Zone SOA AD-bit Check]"
       ansible.builtin.command:
         cmd: >-
@@ -1002,24 +912,7 @@
           AD-bit validation may not be working for {{ bind9_forward_zone_name }}.
           stdout={{ _bind9_verify_resolver_fwd_ad.stdout | default('') }}
 
-    # NOTE: The VPN child reverse zone (bind9_vpn_child_reverse_zone_name)
-    # is intentionally declared only in the public view on primary-ns-01,
-    # and that view excludes internal_clients/dmz_clients. Internal vantage
-    # points (dns-01 itself, DMZ agent, Private agent) are therefore unable
-    # to retrieve a signed SOA for that zone from the lab authoritative
-    # servers — primary-ns-01 returns REFUSED. The TA grader queries from
-    # the VPN side (192.168.255.x), where the public view is reachable and
-    # AD-bit validation succeeds. We therefore do not assert AD-bit on the
-    # VPN child reverse zone from internal vantage; the forward zone AD-bit
-    # check above already proves DNSSEC validation is wired correctly.
-
-    # --- RES-06: Blocked-client probe. Queries from source IPs outside
-    #     the DMZ (172.16.0.0/24) and Private (172.16.1.0/24) CIDRs must
-    #     be refused. We delegate to the router and use its WireGuard
-    #     source IP which is in the VPN subnet — outside both allowed
-    #     CIDRs. Expected outcomes: REFUSED, connection timed out, or
-    #     no servers could be reached (if the firewall drops the packet
-    #     entirely before it reaches named). ---
+    # --- Blocked-client probe ---
     - name: "PHASE [verify : Resolver - Blocked Client Probe From VPN Subnet]"
       ansible.builtin.command:
         cmd: >-
