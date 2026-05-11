@@ -1,12 +1,7 @@
 ---
-# Shared keyfile cleanup for verify.yml's primary and secondary blocks.
-# Removes the tempfiles created by tsig_setup.yml.
-#
-# Caller must pass `_keyfiles_label_prefix` (string, e.g. "" or "Secondary").
-#
-# `changed_when: false` because these are paired with the run-scoped scratch
-# tempfiles in the setup file; together they're a no-op on the host's
-# resting state.
+# Removes the tempfiles created by tsig_setup.yml. Caller passes
+# `_keyfiles_label_prefix` matching the setup call. `changed_when: false`
+# because these are paired with run-scoped scratch tempfiles.
 
 - name: "PHASE [verify : Remove TSIG Key Temp File] {{ _keyfiles_label_prefix }}"
   ansible.builtin.file:
