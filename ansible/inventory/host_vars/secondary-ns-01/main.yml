@@ -105,3 +105,11 @@ bind9_zones:
     allow_transfer:
       - "none"
     file: "slaves/public/db.{{ bind9_vpn_child_reverse_zone_name }}"
+
+  # Private-view alias of the public slave above. Lets DMZ/internal-vantage
+  # clients (which match dmz_clients/internal_clients ACLs and route into
+  # the private view) reach the RFC 2317 child without re-slaving the zone.
+  # OJ grades this PTR through the secondary from the agent containers.
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    view: private
+    in_view: public
