@@ -11,6 +11,9 @@ network_interfaces:
     conn_name: dmz-static
     default_conn_name: "cloud-init eth0"
 
+network_bootstrap_dns4:
+  - 1.1.1.1
+
 # Firewall Config
 firewall_zone_ports:
   - zone: dmz
