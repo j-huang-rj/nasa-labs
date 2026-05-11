@@ -24,31 +24,15 @@ firewall_zone_ports:
 # BIND9 Config
 bind9_enabled: true
 bind9_mode: authoritative_primary
+
 bind9_listen_ipv4:
   - 127.0.0.1
   - "{{ ansible_host }}"
 
-# Cross-host references — derived from inventory so a host's IP change
-# only needs to be made in that host's own host_vars.
 bind9_secondary_ns_ip: "{{ hostvars['secondary-ns-01'].ansible_host }}"
 
-# View policy: public view evaluated first to capture keyed AXFR before
-# IP-based negation; private view catches everything that falls through.
-bind9_views:
-  - name: public
-    order: 10
-    match_clients:
-      - "key {{ bind9_axfr_key.name }}"
-      - "!internal_clients"
-      - "!dmz_clients"
-      - "any"
-
-  - name: private
-    order: 99
-    match_clients:
-      - "localhost"
-      - "dmz_clients"
-      - "internal_clients"
+# View policy is inherited from the role default (canonical split-view).
+# Override bind9_views here only if this host needs a non-standard policy.
 
 # Zone data — forward zones for private and public views
 bind9_zones:

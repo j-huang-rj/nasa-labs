@@ -96,8 +96,9 @@
 {% endfor %}
 {% endif %}
 {% set _views = bind9_views | sort(attribute='order') %}
-{% if _views | length > 0 %}
-{# View-scoped zones, ordered by `order` #}
+{% if _views | length > 0 and bind9_mode != 'resolver' %}
+{# View-scoped zones, ordered by `order`. Skipped in resolver mode because
+   BIND forbids mixing top-level zones with view declarations. #}
 {% for _view in _views %}
 
 view "{{ _view.name }}" {

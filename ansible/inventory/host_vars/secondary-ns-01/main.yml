@@ -46,6 +46,7 @@ firewall_rich_rules:
 # BIND9 Config
 bind9_enabled: true
 bind9_mode: authoritative_secondary
+
 bind9_listen_ipv4:
   - 127.0.0.1
   - "{{ ansible_host }}"
@@ -53,22 +54,8 @@ bind9_listen_ipv4:
 
 bind9_primary_ns_ip: "{{ hostvars['primary-ns-01'].ansible_host }}"
 
-# View policy: mirror the primary's split-view structure
-bind9_views:
-  - name: public
-    order: 10
-    match_clients:
-      - "key {{ bind9_axfr_key.name }}"
-      - "!internal_clients"
-      - "!dmz_clients"
-      - "any"
-
-  - name: private
-    order: 99
-    match_clients:
-      - "localhost"
-      - "dmz_clients"
-      - "internal_clients"
+# View policy is inherited from the role default (canonical split-view).
+# Override bind9_views here only if this host needs a non-standard policy.
 
 # Read-only zone data: mirror every zone the primary serves
 bind9_zones:
