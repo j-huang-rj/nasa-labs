@@ -1,0 +1,16 @@
+---
+# Role-internal constants. Higher precedence than defaults/main.yml.
+# These are implementation details of the role, not user-tunable knobs;
+# overriding them at the inventory level is not supported.
+
+# Runtime metadata that BIND 9.18 keymgr writes into key files at runtime.
+# These lines are CDS-rollover and last-rotation timestamps — irrelevant
+# under our pinned-CSK + unlimited-lifetime model. We strip them from both
+# desired and on-disk content before comparing, so distribution tasks only
+# report `changed` when the actual key material drifts (e.g., on rotation),
+# not when keymgr merely annotates its own state.
+# Patterns are POSIX ERE compatible with Jinja2 regex_replace (`(?m)` inline).
+bind9_keymgr_runtime_strip:
+  key: '(?m)^;\s*SyncPublish:.*\n?'
+  private: '(?m)^SyncPublish:.*\n?'
+  state: '(?m)^(PublishCDS|DNSKEYChange|ZRRSIGChange|KRRSIGChange|DSChange|DNSKEYState|ZRRSIGState|KRRSIGState|DSState|GoalState):.*\n?'

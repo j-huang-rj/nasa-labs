@@ -18,9 +18,6 @@ bind9_soa_admin: "admin"
 bind9_acl_dmz: "dmz_clients"
 bind9_acl_internal: "internal_clients"
 
-# NASA-root server IP
-bind9_nasa_root_ip: "192.168.255.1"
-
 # VPN host IP offsets
 bind9_vpn_router_offset: 1
 bind9_vpn_client_offset: 2
@@ -91,19 +88,7 @@ bind9_dnssec_policy:
 # a fresh one on every restart.
 bind9_dnssec_key_material: []
 
-# Runtime metadata that BIND 9.18 keymgr writes into key files at runtime.
-# These lines are CDS-rollover and last-rotation timestamps — irrelevant
-# under our pinned-CSK + unlimited-lifetime model. We strip them from both
-# desired and on-disk content before comparing, so distribution tasks only
-# report `changed` when the actual key material drifts (e.g., on rotation),
-# not when keymgr merely annotates its own state.
-# Patterns are POSIX ERE compatible with Jinja2 regex_replace (`(?m)` inline).
-bind9_keymgr_runtime_strip:
-  key: '(?m)^;\s*SyncPublish:.*\n?'
-  private: '(?m)^SyncPublish:.*\n?'
-  state: '(?m)^(PublishCDS|DNSKEYChange|ZRRSIGChange|KRRSIGChange|DSChange|DNSKEYState|ZRRSIGState|KRRSIGState|DSState|GoalState):.*\n?'
-# ──────────────────────────────────────────────────────────
-# ------------------------------ SOA serial ------------------------------
+# ───────────────────────────── SOA serial ─────────────────────────────
 # Computed per-zone via the bind9_zone_serial filter plugin
 # using a read-and-bump strategy.
 #
