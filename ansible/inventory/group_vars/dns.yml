@@ -1,6 +1,5 @@
 ---
 # Cross-host topology vars shared by all members of the `dns` group
-# (Lab identity derivation is in group_vars/all.yml; see comment there.)
 
 # Topology CIDRs
 bind9_dmz_cidr: "172.16.0.0/24"
@@ -27,3 +26,12 @@ bind9_router_internal_ip: "{{ (hostvars['router-01'].network_interfaces | select
 # Reverse zone names
 bind9_dmz_reverse_zone: "{{ (bind9_dmz_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
 bind9_internal_reverse_zone: "{{ (bind9_internal_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
+
+# Resolver routing groups
+bind9_nasa_root_zones:
+  - nasa
+  - 168.192.in-addr.arpa
+
+bind9_lab_primary_zones:
+  - "{{ bind9_forward_zone_name }}"
+  - 16.172.in-addr.arpa
