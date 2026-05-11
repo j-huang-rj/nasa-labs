@@ -14,7 +14,11 @@ bind9_dynamic_zone_dir: /var/named/dynamic
 # SOA admin contact
 bind9_soa_admin: "admin"
 
-# ACL CIDR defaults
+# ACL definitions
+# Names are used both in named.acl.conf (definition) and bind9_views match_clients
+# (reference). Keeping them as variables means an ACL rename touches one place.
+bind9_acl_dmz: "dmz_clients"
+bind9_acl_internal: "internal_clients"
 bind9_dmz_cidr: "172.16.0.0/24"
 bind9_internal_cidr: "172.16.1.0/24"
 
@@ -28,8 +32,31 @@ bind9_vpn_router_offset: 1
 bind9_vpn_client_offset: 2
 bind9_vpn_ns_offset: 3
 
-# View and zone data for authoritative_primary mode
-bind9_views: []
+# Canonical split-view policy for authoritative modes. Both managed
+# authoritative hosts (primary, secondary) share this exact structure;
+# override only if a host genuinely deviates from the standard policy.
+# Resolver mode ignores bind9_views (template gates view rendering by mode).
+#
+# Public view: AXFR key holders go in (server-to-server transfers), then
+# IP-based exclusion of internal/DMZ subnets, then any. Private view:
+# localhost + DMZ + internal subnets. Zone data still lives in host_vars
+# bind9_zones since it is per-host (primary owns master records, secondary
+# mirrors slave zones).
+bind9_views:
+  - name: public
+    order: 10
+    match_clients:
+      - "key {{ bind9_axfr_key.name }}"
+      - "!{{ bind9_acl_internal }}"
+      - "!{{ bind9_acl_dmz }}"
+      - "any"
+  - name: private
+    order: 99
+    match_clients:
+      - "localhost"
+      - "{{ bind9_acl_dmz }}"
+      - "{{ bind9_acl_internal }}"
+
 bind9_zones: []
 
 # Dynamic update hosts. The role's update-policy template binds these names

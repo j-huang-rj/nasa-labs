@@ -90,13 +90,28 @@ argument_specs:
         required: false
         description: CIDR for the internal (private) network, used in ACL definitions
 
+      bind9_acl_dmz:
+        type: str
+        required: false
+        description: >-
+          Name of the DMZ ACL. Defined once in named.acl.conf and referenced from bind9_views match_clients.
+          Override only if a name collision forces a rename.
+
+      bind9_acl_internal:
+        type: str
+        required: false
+        description: >-
+          Name of the internal (private) ACL. Defined once in named.acl.conf and referenced from bind9_views
+          match_clients. Override only if a name collision forces a rename.
+
       bind9_views:
         type: list
         elements: dict
         required: false
         description: >-
-          View definitions for authoritative_primary mode. The role expects exactly two entries named private and
-          public; each entry must define name, order, and match_clients.
+          View definitions for authoritative modes. Defaults to the canonical split-view (public + private)
+          using bind9_acl_dmz / bind9_acl_internal references. Override only if a host needs a non-standard
+          policy. Each entry must define name, order, and match_clients.
 
       bind9_zones:
         type: list
