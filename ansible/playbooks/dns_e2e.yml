@@ -14,6 +14,7 @@
 - name: "E2E DMZ Agent Resolver Verification"
   hosts: dmz-agent-01
   gather_facts: false
+  become: true
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
@@ -26,7 +27,7 @@
     - name: "PHASE [e2e-dmz : Resolver Private-NS Forward Lookup]"
       ansible.builtin.command:
         cmd: >-
-          dig @{{ _e2e_resolver }} private-ns.{{ _e2e_forward_zone }} A +short
+          docker exec nap-agent dig @{{ _e2e_resolver }} private-ns.{{ _e2e_forward_zone }} A +short
       changed_when: false
       register: _e2e_dmz_private_ns
 
@@ -42,7 +43,7 @@
     # Reverse lookup through resolver
     - name: "PHASE [e2e-dmz : Resolver Reverse Lookup For 172.16.1.53]"
       ansible.builtin.command:
-        cmd: "dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
+        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
       changed_when: false
       register: _e2e_dmz_reverse
 
@@ -60,7 +61,7 @@
     # Cloudflare forwarding
     - name: "PHASE [e2e-dmz : Resolver Recursive Google Lookup]"
       ansible.builtin.command:
-        cmd: "dig @{{ _e2e_resolver }} google.com A"
+        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} google.com A"
       changed_when: false
       register: _e2e_dmz_google
       until: >-
@@ -87,7 +88,7 @@
     - name: "PHASE [e2e-dmz : Forward Zone SOA AD-bit Check]"
       ansible.builtin.command:
         cmd: >-
-          dig @{{ _e2e_resolver }} {{ _e2e_forward_zone }} SOA +dnssec
+          docker exec nap-agent dig @{{ _e2e_resolver }} {{ _e2e_forward_zone }} SOA +dnssec
       changed_when: false
       register: _e2e_dmz_fwd_ad
 
@@ -112,19 +113,20 @@
 - name: "E2E Private Agent Resolver Verification"
   hosts: internal-agent-01
   gather_facts: false
+  become: true
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
   tasks:
     - name: "PHASE [e2e-private : START]"
       ansible.builtin.debug:
-        msg: "E2E resolver verification from Private Agent"
+        msg: "E2E Private agent resolver verification"
 
     # Private-NS A lookup through resolver
     - name: "PHASE [e2e-private : Resolver Private-NS Forward Lookup]"
       ansible.builtin.command:
         cmd: >-
-          dig @{{ _e2e_resolver }} private-ns.{{ _e2e_forward_zone }} A +short
+          docker exec nap-agent dig @{{ _e2e_resolver }} private-ns.{{ _e2e_forward_zone }} A +short
       changed_when: false
       register: _e2e_private_private_ns
 
@@ -140,7 +142,7 @@
     # Reverse lookup through resolver
     - name: "PHASE [e2e-private : Resolver Reverse Lookup For 172.16.1.53]"
       ansible.builtin.command:
-        cmd: "dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
+        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
       changed_when: false
       register: _e2e_private_reverse
 
@@ -158,7 +160,7 @@
     # Cloudflare forwarding
     - name: "PHASE [e2e-private : Resolver Recursive Google Lookup]"
       ansible.builtin.command:
-        cmd: "dig @{{ _e2e_resolver }} google.com A"
+        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} google.com A"
       changed_when: false
       register: _e2e_private_google
       until: >-
@@ -185,7 +187,7 @@
     - name: "PHASE [e2e-private : Forward Zone SOA AD-bit Check]"
       ansible.builtin.command:
         cmd: >-
-          dig @{{ _e2e_resolver }} {{ _e2e_forward_zone }} SOA +dnssec
+          docker exec nap-agent dig @{{ _e2e_resolver }} {{ _e2e_forward_zone }} SOA +dnssec
       changed_when: false
       register: _e2e_private_fwd_ad
 
@@ -219,9 +221,51 @@
 
     - name: "PHASE [e2e-blocked : Resolver Blocked Client Probe From VPN Subnet]"
       ansible.builtin.command:
-        cmd: >-
-          dig -b {{ wireguard_address.split('/')[0] }}
-          @{{ _e2e_resolver }} google.com A
+        argv:
+          - python3
+          - "-"
+          - "{{ wireguard_address.split('/')[0] }}"
+          - "{{ _e2e_resolver }}"
+        stdin: |
+          import random
+          import socket
+          import struct
+          import sys
+
+          source_ip = sys.argv[1]
+          resolver_ip = sys.argv[2]
+          query_id = random.randrange(0, 65536)
+          qname = b''.join(
+              bytes([len(label)]) + label.encode('ascii')
+              for label in 'google.com'.split('.')
+          ) + b'\0'
+          packet = (
+              struct.pack('!HHHHHH', query_id, 0x0100, 1, 0, 0, 0)
+              + qname
+              + struct.pack('!HH', 1, 1)
+          )
+          rcodes = {
+              0: 'NOERROR',
+              1: 'FORMERR',
+              2: 'SERVFAIL',
+              3: 'NXDOMAIN',
+              4: 'NOTIMP',
+              5: 'REFUSED',
+          }
+
+          sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          sock.settimeout(2)
+          sock.bind((source_ip, 0))
+          try:
+              sock.sendto(packet, (resolver_ip, 53))
+              response, _ = sock.recvfrom(512)
+          except socket.timeout:
+              print('status=TIMEOUT')
+          except OSError as exc:
+              print(f'status=UNREACHABLE error={exc}')
+          else:
+              flags = struct.unpack('!H', response[2:4])[0]
+              print(f'status={rcodes.get(flags & 0x000F, flags & 0x000F)}')
       changed_when: false
       register: _e2e_blocked_probe
       failed_when: false
@@ -231,9 +275,9 @@
         quiet: true
         that:
           - >-
-            'REFUSED' in _e2e_blocked_probe.stdout
-            or 'connection timed out' in _e2e_blocked_probe.stdout
-            or 'no servers could be reached' in _e2e_blocked_probe.stdout
+            'status=REFUSED' in _e2e_blocked_probe.stdout
+            or 'status=TIMEOUT' in _e2e_blocked_probe.stdout
+            or 'status=UNREACHABLE' in _e2e_blocked_probe.stdout
         fail_msg: >-
           Blocked-client probe from VPN subnet did not return REFUSED or timeout.
           The resolver accepted a query from a source IP outside DMZ/Private CIDRs.
@@ -300,7 +344,7 @@
         - name: "PHASE [e2e-prop : Poll dynamic4 A From DMZ Agent Through Resolver]"
           ansible.builtin.command:
             cmd: >-
-              dig @{{ _e2e_resolver }} dynamic4.{{ _e2e_forward_zone }} A +short
+              docker exec nap-agent dig @{{ _e2e_resolver }} dynamic4.{{ _e2e_forward_zone }} A +short
           changed_when: false
           register: _e2e_prop_dmz_a
           delegate_to: dmz-agent-01
@@ -311,7 +355,7 @@
         - name: "PHASE [e2e-prop : Poll dynamic4 PTR From DMZ Agent Through Resolver]"
           ansible.builtin.command:
             cmd: >-
-              dig @{{ _e2e_resolver }} -x {{ _e2e_prop_ip }} +short
+              docker exec nap-agent dig @{{ _e2e_resolver }} -x {{ _e2e_prop_ip }} +short
           changed_when: false
           register: _e2e_prop_dmz_ptr
           delegate_to: dmz-agent-01
@@ -323,7 +367,7 @@
         - name: "PHASE [e2e-prop : Poll dynamic4 A From Private Agent Through Resolver]"
           ansible.builtin.command:
             cmd: >-
-              dig @{{ _e2e_resolver }} dynamic4.{{ _e2e_forward_zone }} A +short
+              docker exec nap-agent dig @{{ _e2e_resolver }} dynamic4.{{ _e2e_forward_zone }} A +short
           changed_when: false
           register: _e2e_prop_internal_a
           delegate_to: internal-agent-01
@@ -334,7 +378,7 @@
         - name: "PHASE [e2e-prop : Poll dynamic4 PTR From Private Agent Through Resolver]"
           ansible.builtin.command:
             cmd: >-
-              dig @{{ _e2e_resolver }} -x {{ _e2e_prop_ip }} +short
+              docker exec nap-agent dig @{{ _e2e_resolver }} -x {{ _e2e_prop_ip }} +short
           changed_when: false
           register: _e2e_prop_internal_ptr
           delegate_to: internal-agent-01

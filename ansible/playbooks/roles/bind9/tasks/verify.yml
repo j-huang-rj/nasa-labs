@@ -917,9 +917,51 @@
     # --- Blocked-client probe ---
     - name: "PHASE [verify : Resolver - Blocked Client Probe From VPN Subnet]"
       ansible.builtin.command:
-        cmd: >-
-          dig -b {{ hostvars[groups['router'] | first].wireguard_address.split('/')[0] }}
-          @172.16.1.153 google.com A
+        argv:
+          - python3
+          - "-"
+          - "{{ hostvars[groups['router'] | first].wireguard_address.split('/')[0] }}"
+          - "172.16.1.153"
+        stdin: |
+          import random
+          import socket
+          import struct
+          import sys
+
+          source_ip = sys.argv[1]
+          resolver_ip = sys.argv[2]
+          query_id = random.randrange(0, 65536)
+          qname = b''.join(
+              bytes([len(label)]) + label.encode('ascii')
+              for label in 'google.com'.split('.')
+          ) + b'\0'
+          packet = (
+              struct.pack('!HHHHHH', query_id, 0x0100, 1, 0, 0, 0)
+              + qname
+              + struct.pack('!HH', 1, 1)
+          )
+          rcodes = {
+              0: 'NOERROR',
+              1: 'FORMERR',
+              2: 'SERVFAIL',
+              3: 'NXDOMAIN',
+              4: 'NOTIMP',
+              5: 'REFUSED',
+          }
+
+          sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          sock.settimeout(2)
+          sock.bind((source_ip, 0))
+          try:
+              sock.sendto(packet, (resolver_ip, 53))
+              response, _ = sock.recvfrom(512)
+          except socket.timeout:
+              print('status=TIMEOUT')
+          except OSError as exc:
+              print(f'status=UNREACHABLE error={exc}')
+          else:
+              flags = struct.unpack('!H', response[2:4])[0]
+              print(f'status={rcodes.get(flags & 0x000F, flags & 0x000F)}')
       changed_when: false
       register: _bind9_verify_resolver_blocked
       failed_when: false
@@ -930,9 +972,9 @@
         quiet: true
         that:
           - >-
-            'REFUSED' in _bind9_verify_resolver_blocked.stdout
-            or 'connection timed out' in _bind9_verify_resolver_blocked.stdout
-            or 'no servers could be reached' in _bind9_verify_resolver_blocked.stdout
+            'status=REFUSED' in _bind9_verify_resolver_blocked.stdout
+            or 'status=TIMEOUT' in _bind9_verify_resolver_blocked.stdout
+            or 'status=UNREACHABLE' in _bind9_verify_resolver_blocked.stdout
         fail_msg: >-
           Blocked-client probe from VPN subnet did not return REFUSED or timeout.
           The resolver accepted a query from a source IP outside DMZ/Private CIDRs.
