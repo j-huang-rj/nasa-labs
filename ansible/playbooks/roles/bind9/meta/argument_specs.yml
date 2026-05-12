@@ -222,5 +222,5 @@ argument_specs:
           Trust anchors for DNSSEC validation in resolver mode. Each item is a dict with keys: zone (str,
           the anchor zone name), flags (int, expected 257 for KSK), protocol (int, typically 3), algorithm
           (int, e.g. 13 for ECDSAP256SHA256), and key (str, base64 key data). Populated at runtime by the
-          dns_configure.yml play's pre_tasks from upstream DNSKEY records; empty default means no trust anchors are
-          rendered when the variable is omitted.
+          bind9 role after package installation from upstream DNSKEY records; empty default means no trust
+          anchors are rendered when the variable is omitted.

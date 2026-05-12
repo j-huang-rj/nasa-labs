@@ -7,6 +7,9 @@
 - name: "PHASE [setup : Install bind9 Packages]"
   ansible.builtin.import_tasks: install.yml
 
+- name: "PHASE [setup : Fetch Resolver Trust Anchors]"
+  ansible.builtin.import_tasks: trust_anchors.yml
+
 - name: "PHASE [setup : Generate bind9 Configuration]"
   ansible.builtin.import_tasks: config.yml
 

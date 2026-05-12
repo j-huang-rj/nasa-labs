@@ -217,6 +217,51 @@
       '{{ bind9_identity_source_host | default("(undefined)") }}' and the host is reachable
       from the play (run bootstrap.yml first if needed).
 
+- name: "PHASE [assert : Validate Lab Identity Coherence]"
+  become: false
+  block:
+    - name: "PHASE [assert : Initialize WireGuard Peer Lab IDs]"
+      ansible.builtin.set_fact:
+        _bind9_peer_lab_ids: []
+      changed_when: false
+
+    - name: "PHASE [assert : Compute Lab IDs From All WireGuard-Enabled Peers]"
+      ansible.builtin.set_fact:
+        _bind9_peer_lab_ids: >-
+          {{ _bind9_peer_lab_ids
+             + [(item.split('/')[0].split('.')[2] | int * 16)
+                + (item.split('/')[0].split('.')[3] | int // 16)] }}
+      loop: >-
+        {{ groups['all']
+           | map('extract', hostvars)
+           | selectattr('wireguard_address', 'defined')
+           | rejectattr('wireguard_address', 'equalto', '')
+           | map(attribute='wireguard_address')
+           | list }}
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+
+    - name: "PHASE [assert : Assert WireGuard-Enabled Peers Agree On Lab ID]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_peer_lab_ids | length > 0
+          - _bind9_peer_lab_ids | unique | length == 1
+          - (_bind9_peer_lab_ids | first) == (bind9_derived_lab_id | int)
+        fail_msg: >-
+          WireGuard-enabled peers disagree on derived lab ID
+          (got {{ _bind9_peer_lab_ids | unique }} from
+          {{ groups['all']
+             | map('extract', hostvars)
+             | selectattr('wireguard_address', 'defined')
+             | rejectattr('wireguard_address', 'equalto', '')
+             | map(attribute='inventory_hostname')
+             | list }}).
+          All WG-enabled hosts must share the same /28 subnet so that
+          lab identity is unambiguous. Check wireguard_address values
+          in inventory.
+
 - name: "PHASE [assert : Check Derived Identity Facts Are Defined For Non-Resolver Modes]"
   when: bind9_mode != 'resolver'
   ansible.builtin.assert:
@@ -243,8 +288,8 @@
       - bind9_soa_serial_date | length > 0
     fail_msg: >-
       bind9_primary_mname and bind9_soa_serial_date must be defined for authoritative_primary
-      mode. These facts are normally derived by dns_configure.yml pre_tasks; ensure that block
-      has run before invoking this role.
+      mode. These facts are derived from group_vars/all.yml and ansible_facts; ensure facts are
+      gathered before invoking this role.
 
 - name: "PHASE [assert : Check bind9_dnssec_key_material Is Populated For authoritative_primary]"
   when: bind9_mode == 'authoritative_primary'
