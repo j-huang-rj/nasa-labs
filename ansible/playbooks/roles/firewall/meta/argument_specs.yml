@@ -34,12 +34,36 @@ argument_specs:
           masquerade-enabled zone. When set, the role replaces zone-level
           masquerade with a rich rule per zone of the form
           `rule family=ipv4 destination not address=<cidr> masquerade`,
-          preserving source IPs for matching destinations (typical use:
-          inter-LAN traffic so BIND NOTIFY/AXFR and similar IP-based ACLs
-          continue to work) while Internet/VPN egress remains masqueraded.
-          firewalld rich-rule grammar permits only one destination match per
-          rule, so the role supports a single exempt CIDR. Use a supernet
-          covering every LAN you need to exempt rather than listing each.
+          preserving source IPs for matching destinations while Internet/VPN
+          egress remains masqueraded. firewalld rich-rule grammar permits only
+          one destination match per rule, so the role supports a single exempt CIDR.
+          Use a supernet covering every LAN you need to exempt rather than listing each.
+
+      firewall_masquerade_preserve_source_pairs:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        description: >-
+          Source/destination host pairs that should keep their original source
+          address even when routed through a masquerade-enabled zone. The role
+          installs direct no-op SNAT rules before firewalld zone masquerade so
+          narrow IP-based ACL flows, such as BIND primary/secondary traffic,
+          can avoid broad inter-LAN masquerade exemptions.
+        options:
+          source:
+            type: str
+            required: true
+            description: Original source IPv4 address to preserve
+          destination:
+            type: str
+            required: true
+            description: Destination IPv4 address for the preserve-source rule
+          priority:
+            type: int
+            required: false
+            default: -1
+            description: firewalld direct rule priority, lower runs first
 
       firewall_bindings:
         type: list

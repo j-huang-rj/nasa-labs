@@ -457,6 +457,93 @@
         label: "{{ item.0 }} (exempt {{ item.1 }})"
       notify: "PHASE [handler : Reload firewalld]"
 
+    - name: "PHASE [policy : Query Conditional Masquerade Rich Rules]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--zone={{ item }}"
+          - --list-rich-rules
+      register: firewall_conditional_masquerade_rich_rules
+      loop: "{{ firewall_masquerade_zones }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Remove Stale Conditional Masquerade Rich Rules]"
+      ansible.posix.firewalld:
+        zone: "{{ item.0.item }}"
+        rich_rule: "{{ item.1 }}"
+        state: disabled
+        permanent: true
+        immediate: false
+      loop: "{{ firewall_conditional_masquerade_rich_rules.results | subelements('stdout_lines', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.item }} -> {{ item.1 }}"
+      vars:
+        _rule_exempt_cidr: >-
+          {{ item.1 | regex_replace('^rule family="ipv4" destination (?:NOT|not) address="([^"]+)" masquerade$', '\1') }}
+      when:
+        - item.1 is match('^rule family="ipv4" destination (?:NOT|not) address="[^"]+" masquerade$')
+        - _rule_exempt_cidr not in _exempt_cidrs
+      notify: "PHASE [handler : Reload firewalld]"
+
+- name: "PHASE [policy : Configure Preserve-Source Masquerade Direct Rules]"
+  vars:
+    _preserve_source_pairs: "{{ firewall_masquerade_preserve_source_pairs | default([]) }}"
+  block:
+    - name: "PHASE [policy : Initialize Preserve-Source Direct Rule List]"
+      ansible.builtin.set_fact:
+        firewall_preserve_source_direct_rules: []
+      changed_when: false
+
+    - name: "PHASE [policy : Build Preserve-Source Direct Rule List]"
+      ansible.builtin.set_fact:
+        firewall_preserve_source_direct_rules: >-
+          {{ firewall_preserve_source_direct_rules + [
+            'ipv4 nat POSTROUTING '
+            ~ (item.priority | default(-1) | string)
+            ~ ' -s ' ~ item.source
+            ~ ' -d ' ~ item.destination
+            ~ ' -j SNAT --to-source ' ~ item.source
+          ] }}
+      loop: "{{ _preserve_source_pairs }}"
+      loop_control:
+        label: "{{ item.source }} -> {{ item.destination }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Query Direct Firewall Rules]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - --direct
+          - --get-all-rules
+      register: firewall_direct_rule_state
+      changed_when: false
+
+    - name: "PHASE [policy : Remove Stale Preserve-Source Direct Rules]"
+      ansible.builtin.command:
+        argv: "{{ ['firewall-cmd', '--permanent', '--direct', '--remove-rule'] + item.split() }}"
+      loop: "{{ firewall_direct_rule_state.stdout_lines | default([]) }}"
+      loop_control:
+        label: "{{ item }}"
+      when:
+        - item is match('^ipv4 nat POSTROUTING -?\d+ -s (\S+) -d \S+ -j SNAT --to-source \1$')
+        - item not in firewall_preserve_source_direct_rules
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Ensure Preserve-Source Direct Rules]"
+      ansible.builtin.command:
+        argv: "{{ ['firewall-cmd', '--permanent', '--direct', '--add-rule'] + item.split() }}"
+      loop: "{{ firewall_preserve_source_direct_rules }}"
+      loop_control:
+        label: "{{ item }}"
+      when: item not in (firewall_direct_rule_state.stdout_lines | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
 - name: "PHASE [policy : Configure Port Forwarding]"
   ansible.posix.firewalld:
     zone: "{{ item.zone }}"
