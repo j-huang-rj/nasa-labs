@@ -1,0 +1,35 @@
+// Managed by Ansible -- do not edit manually.
+
+include "{{ bind9_conf_dir }}/named.acl.conf";
+include "{{ bind9_conf_dir }}/named.options.conf";
+{#
+  Zone declarations render for ALL modes — resolver uses bind9_zones for
+  per-zone forward entries that direct lab-zone queries to authoritative
+  servers, while authoritative modes use bind9_zones for view-scoped zone
+  data.
+#}
+include "{{ bind9_conf_dir }}/named.zones.conf";
+
+{% if bind9_mode != 'resolver' %}
+{#
+  TSIG keys are only meaningful in authoritative modes; resolver mode has
+  no DDNS scope and no keys to declare.
+#}
+include "{{ bind9_keys_conf_path }}";
+{% else %}
+{#
+  Keep loopback and RFC 1912 zones local so they don't hit forwarders or roots.
+  Skipped in authoritative modes since view-based configs require all zones
+  inside a view; mixing top-level zones with views is rejected by named.
+#}
+include "/etc/named.rfc1912.zones";
+
+{% if bind9_trust_anchors | default([]) | length > 0 %}
+{#
+  Trust anchors for DNSSEC validation.
+  Fetched at runtime and rendered as static-key entries.
+  Only present in resolver mode where dnssec-validation is active.
+#}
+include "{{ bind9_conf_dir }}/named.trust-anchors.conf";
+{% endif %}
+{% endif %}

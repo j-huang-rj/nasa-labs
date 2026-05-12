@@ -1,0 +1,30 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: dmz
+    ip4: 172.16.0.1/24
+    gw4: 172.16.0.254
+    dns4:
+      - 172.16.1.153
+      - 1.1.1.1
+    conn_name: dmz-static
+    default_conn_name: "cloud-init eth0"
+
+network_bootstrap_dns4:
+  - 1.1.1.1
+
+# WireGuard Config
+wireguard_enabled: true
+
+# Firewall Config
+firewall_custom_zones:
+  - vpn
+
+firewall_bindings:
+  - ifname: wg0
+    zone: vpn
+
+firewall_rich_rules:
+  - zone: vpn
+    rule: 'rule service name="ssh" reject'

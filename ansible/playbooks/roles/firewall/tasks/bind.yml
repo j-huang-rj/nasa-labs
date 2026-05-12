@@ -3,6 +3,7 @@
   become: false
   ansible.builtin.debug:
     msg: "Apply firewalld bindings"
+
 - name: "PHASE [bind : Apply Firewall Bindings]"
   ansible.posix.firewalld:
     zone: "{{ item.zone }}"

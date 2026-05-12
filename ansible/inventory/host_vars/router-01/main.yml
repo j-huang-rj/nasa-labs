@@ -65,6 +65,34 @@ firewall_policies:
     ports:
       - port: 55688
         proto: tcp
+      - port: 53
+        proto: udp
+      - port: 53
+        proto: tcp
+
+  - name: internal-to-vpn
+    priority: -40
+    target: REJECT
+    ingress_zones:
+      - internal
+    egress_zones:
+      - vpn
+    protocols: []
+    ports:
+      - port: 53
+        proto: udp
+      - port: 53
+        proto: tcp
+
+  - name: internal-to-dmz
+    priority: -30
+    target: ACCEPT
+    ingress_zones:
+      - internal
+    egress_zones:
+      - dmz
+    protocols: []
+    ports: []
 
   - name: lan-to-wan
     priority: -10
@@ -81,6 +109,19 @@ firewall_masquerade_zones:
   - dmz
   - internal
   - vpn
+
+# Preserve resolver client source IPs
+firewall_masquerade_exempt_destinations:
+  - 172.16.1.153/32
+
+# Preserve source IPs for authoritative DNS transfers/NOTIFY between primary
+# and secondary NS hosts even though general inter-LAN traffic is masqueraded
+firewall_masquerade_preserve_source_pairs:
+  - source: 172.16.0.53
+    destination: 172.16.1.53
+
+  - source: 172.16.1.53
+    destination: 172.16.0.53
 
 firewall_forward_ports:
   - zone: vpn

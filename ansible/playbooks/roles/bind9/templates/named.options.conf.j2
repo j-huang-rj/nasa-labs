@@ -1,0 +1,71 @@
+// Managed by Ansible -- do not edit manually.
+
+options {
+    // ---- Paths ----
+    directory              "{{ bind9_zone_dir }}";
+    managed-keys-directory "{{ bind9_dynamic_zone_dir }}";
+
+    // Operational dumps (rndc dumpdb / stats / secroots / recursing)
+    dump-file          "{{ bind9_zone_dir }}/data/cache_dump.db";
+    statistics-file    "{{ bind9_zone_dir }}/data/named_stats.txt";
+    memstatistics-file "{{ bind9_zone_dir }}/data/named_mem_stats.txt";
+    secroots-file      "{{ bind9_zone_dir }}/data/named.secroots";
+    recursing-file     "{{ bind9_zone_dir }}/data/named.recursing";
+
+    // Key used by `nsupdate -l` for local dynamic updates
+    session-keyfile    "/run/named/session.key";
+
+    // ---- Listen ----
+    listen-on port 53 {
+{% for addr in bind9_listen_ipv4 %}
+        {{ addr }};
+{% endfor %}
+    };
+    listen-on-v6 { none; };
+
+    // ---- Recursion & client ACLs ----
+{% if bind9_mode == 'resolver' %}
+    recursion yes;
+{% if bind9_forwarders | length > 0 %}
+    forwarders {
+{% for fwd in bind9_forwarders %}
+        {{ fwd }};
+{% endfor %}
+    };
+    forward only;
+{% endif %}
+    allow-query {
+        localhost;
+        dmz_clients;
+        internal_clients;
+    };
+    allow-recursion {
+        localhost;
+        dmz_clients;
+        internal_clients;
+    };
+{% else %}
+    recursion no;
+    allow-query { any; };
+{% endif %}
+
+    // ---- DNSSEC ----
+    dnssec-validation yes;
+{% if bind9_mode == 'authoritative_primary' and bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0 %}
+
+    // DNSSEC key storage directory
+    key-directory "{{ bind9_dnssec_policy.key_directory }}";
+{% endif %}
+
+    // Apply the RHEL's crypto policy
+    include "/etc/crypto-policies/back-ends/bind.config";
+};
+{% if bind9_mode == 'authoritative_primary' and bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0 %}
+
+// DNSSEC signing policy
+dnssec-policy "{{ bind9_dnssec_policy.name }}" {
+    keys {
+        csk lifetime {{ bind9_dnssec_policy.csk.lifetime }} algorithm {{ bind9_dnssec_policy.csk.algorithm }};
+    };
+};
+{% endif %}

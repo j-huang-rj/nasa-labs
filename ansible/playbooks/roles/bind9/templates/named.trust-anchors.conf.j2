@@ -1,0 +1,14 @@
+// Managed by Ansible -- do not edit manually.
+{#
+  Trust anchors for DNSSEC validation in resolver mode.
+  Sourced from the NASA root server's KSK records at runtime by the
+  dns_configure.yml play's pre_tasks (see bind9_nasa_root_ip in
+  group_vars/dns.yml). These are public key material (not secrets) and
+  are rendered as static-key entries per BIND 9.18+ trust-anchors syntax.
+#}
+
+trust-anchors {
+{% for _anchor in bind9_trust_anchors %}
+    {{ _anchor.zone }} static-key {{ _anchor.flags }} {{ _anchor.protocol }} {{ _anchor.algorithm }} "{{ _anchor.key }}";
+{% endfor %}
+};

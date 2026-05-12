@@ -1,0 +1,126 @@
+// Managed by Ansible -- do not edit manually.
+{#
+  Zone layout:
+    * Entries in `bind9_zones` with a `view` field render inside that view.
+    * Entries without a `view` field render at global scope (static-stub,
+      forward, hint, and any other non-view-scoped zones).
+
+  Supported zone `type` values: master, slave, static-stub, forward, hint.
+
+  Optional zone fields: file, masters, server_addresses, forwarders, forward,
+  allow_transfer, also_notify, dynamic_update_scope, dnssec_policy, in_view.
+
+  When dnssec_policy is set on a master zone, the template emits
+  `dnssec-policy "<policy_name>";` and `inline-signing yes;` directives.
+
+  When `in_view` is set, the zone renders as a view-scoped alias of the named
+  source view (BIND `in-view` directive). All other zone options are ignored;
+  the alias inherits the source zone's type, data, and signing state. Use
+  this to expose a master zone defined in one view to another view without
+  duplicating keymgr/inline-signing state.
+
+  `masters` items may be either a plain IP string or a dict
+  `{address: <ip>, key: <tsig-key-name>}` to sign the AXFR with a TSIG key.
+
+  `also_notify` items may likewise be either a plain IP string or a dict
+  `{address: <ip>, key: <tsig-key-name>}`. When `key` is supplied the NOTIFY
+  is signed with that TSIG key so the receiving side can match the message
+  against a view selected by `match-clients { key <name>; ... }` rather than
+  by source IP. This is required for public-view-only zones whose master
+  is itself an internal_clients address.
+
+  Key constraints:
+    * dynamic_update_scope is only valid on private-view master zones.
+    * allow-update must never appear; update-policy is the correct directive.
+    * bind9_dynamic_hosts list is exact: dynamic1, dynamic2, dynamic3, dynamic4.
+#}
+{% macro render_zone(zone, indent='') -%}
+{{ indent }}zone "{{ zone.name }}" {
+{% if zone.in_view is defined %}
+{{ indent }}    in-view "{{ zone.in_view }}";
+{% else %}
+{{ indent }}    type {{ zone.type }};
+{% if zone.file is defined %}
+{{ indent }}    file "{{ zone.file }}";
+{% endif %}
+{% if zone.masters is defined %}
+{{ indent }}    masters {
+{% for _m in zone.masters %}
+{% if _m is mapping %}
+{{ indent }}        {{ _m.address }} key {{ _m.key }};
+{% else %}
+{{ indent }}        {{ _m }};
+{% endif %}
+{% endfor %}
+{{ indent }}    };
+{% endif %}
+{% if zone.server_addresses is defined %}
+{{ indent }}    server-addresses { {{ zone.server_addresses | join('; ') }}; };
+{% endif %}
+{% if zone.forwarders is defined %}
+{% if zone.forwarders | length == 0 %}
+{{ indent }}    forwarders { };
+{% else %}
+{{ indent }}    forwarders { {{ zone.forwarders | join('; ') }}; };
+{% endif %}
+{% endif %}
+{% if zone.forward is defined %}
+{{ indent }}    forward {{ zone.forward }};
+{% endif %}
+{% if zone.allow_transfer is defined %}
+{{ indent }}    allow-transfer { {{ zone.allow_transfer | join('; ') }}; };
+{% endif %}
+{% if zone.also_notify is defined %}
+{{ indent }}    also-notify {
+{% for _n in zone.also_notify %}
+{% if _n is mapping %}
+{{ indent }}        {{ _n.address }} key {{ _n.key }};
+{% else %}
+{{ indent }}        {{ _n }};
+{% endif %}
+{% endfor %}
+{{ indent }}    };
+{% endif %}
+{% if zone.dynamic_update_scope is defined %}
+{% if zone.dynamic_update_scope == 'dynamic_hosts_A' %}
+{{ indent }}    update-policy {
+{% for _host in bind9_dynamic_hosts %}
+{{ indent }}        grant {{ bind9_tsig_key.name }} name {{ _host }}.{{ zone.name }}. A;
+{% endfor %}
+{{ indent }}    };
+{% elif zone.dynamic_update_scope == 'zonesub_PTR' %}
+{{ indent }}    update-policy {
+{{ indent }}        grant {{ bind9_tsig_key.name }} zonesub PTR;
+{{ indent }}    };
+{% endif %}
+{% endif %}
+{% if zone.dnssec_policy is defined %}
+{{ indent }}    dnssec-policy "{{ zone.dnssec_policy }}";
+{{ indent }}    inline-signing yes;
+{% endif %}
+{% endif %}
+{{ indent }}};
+{%- endmacro %}
+{% set _global_zones = bind9_zones | rejectattr('view', 'defined') | list %}
+{% if _global_zones | length > 0 %}
+{# Global-scope zones #}
+{% for _zone in _global_zones %}
+
+{{ render_zone(_zone) }}
+{% endfor %}
+{% endif %}
+{% set _views = bind9_views | sort(attribute='order') %}
+{% if _views | length > 0 and bind9_mode != 'resolver' %}
+{# View-scoped zones, ordered by `order`. Skipped in resolver mode because
+   BIND forbids mixing top-level zones with view declarations. #}
+{% for _view in _views %}
+
+view "{{ _view.name }}" {
+    match-clients { {{ _view.match_clients | join('; ') }}; };
+{% for _zone in bind9_zones | selectattr('view', 'defined') | selectattr('view', 'equalto', _view.name) %}
+
+{{ render_zone(_zone, indent='    ') }}
+{% endfor %}
+};
+{% endfor %}
+{% endif %}

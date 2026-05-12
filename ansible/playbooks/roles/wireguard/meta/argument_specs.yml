@@ -2,25 +2,39 @@
 argument_specs:
   main:
     short_description: Validate wireguard role variables
+
     options:
       wireguard_address:
         type: str
         required: true
+        description: Tunnel IP address with prefix (e.g. 10.10.10.2/28)
+
       wireguard_private_key:
         type: str
         required: true
+        description: Base64-encoded private key for this peer
+
       wireguard_peer_public_key:
         type: str
         required: true
+        description: Base64-encoded public key of the remote peer
+
       wireguard_preshared_key:
         type: str
         required: true
+        description: Base64-encoded preshared key for extra layer of security
+
       wireguard_allowed_ips:
         type: str
         required: true
+        description: Comma-separated CIDRs routed through the tunnel (e.g. 0.0.0.0/0)
+
       wireguard_peer_endpoint:
         type: str
         required: true
+        description: Remote peer address and port for initial connection (e.g. 1.2.3.4:51820)
+
       wireguard_persistent_keepalive:
         type: int
         required: false
+        description: Seconds between keepalive packets; defaults to 5 when omitted, and 0 disables keepalive

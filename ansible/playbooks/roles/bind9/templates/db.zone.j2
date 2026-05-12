@@ -1,0 +1,21 @@
+; Managed by Ansible -- do not edit manually.
+{% set _serial_result = bind9_zone_render_state[item.file] %}
+
+$TTL 86400
+$ORIGIN {{ item.name }}.
+
+{{ "%-16s" | format("@") }} IN  {{ "%-6s" | format("SOA") }} {{ bind9_primary_mname }} {{ item.soa.admin }} (
+                                {{ "%-10s" | format(_serial_result.serial) }} ; serial
+                                {{ "%-10s" | format(item.soa.refresh) }} ; refresh
+                                {{ "%-10s" | format(item.soa.retry) }} ; retry
+                                {{ "%-10s" | format(item.soa.expire) }} ; expire
+                                {{ "%-10s" | format(item.soa.minimum) }} ; minimum
+                                )
+
+{% for ns in item.ns %}
+{{ "%-16s" | format("") }} IN  {{ "%-6s" | format("NS") }} {{ ns }}
+{% endfor %}
+
+{% for record in item.records %}
+{{ "%-16s" | format(record.name) }} IN  {{ "%-6s" | format(record.type) }} {{ record.value }}
+{% endfor %}

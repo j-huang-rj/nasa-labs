@@ -1,0 +1,63 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: internal
+    ip4: 172.16.1.153/24
+    gw4: 172.16.1.254
+    dns4:
+      - 1.1.1.1
+    conn_name: internal-static
+    default_conn_name: "cloud-init eth0"
+
+# Firewall Config
+firewall_zone_ports:
+  - zone: internal
+    port: 53
+    proto: udp
+
+  - zone: internal
+    port: 53
+    proto: tcp
+
+# BIND9 Config
+bind9_enabled: true
+bind9_mode: resolver
+
+bind9_listen_ipv4:
+  - 127.0.0.1
+  - "{{ ansible_host }}"
+
+bind9_forwarders:
+  - 1.1.1.1
+
+bind9_zones:
+  - name: "{{ bind9_nasa_root_zones[0] }}"
+    type: static-stub
+    forwarders: []
+    server_addresses:
+      - "{{ bind9_nasa_root_ip }}"
+
+  - name: "{{ bind9_nasa_root_zones[1] }}"
+    type: static-stub
+    forwarders: []
+    server_addresses:
+      - "{{ bind9_nasa_root_ip }}"
+
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    type: forward
+    forward: only
+    forwarders:
+      - "{{ bind9_primary_ns_ip }}"
+
+  - name: "{{ bind9_lab_primary_zones[0] }}"
+    type: forward
+    forward: only
+    forwarders:
+      - "{{ bind9_primary_ns_ip }}"
+
+  - name: "{{ bind9_lab_primary_zones[1] }}"
+    type: forward
+    forward: only
+    forwarders:
+      - "{{ bind9_primary_ns_ip }}"

@@ -3,7 +3,7 @@
   become: false
   ansible.builtin.debug:
     msg: "Install wireguard services"
-- name: "PHASE [install : Install Wireguard Services]"
+- name: "PHASE [install : Install WireGuard Services]"
   ansible.builtin.dnf:
     name:
       - wireguard-tools

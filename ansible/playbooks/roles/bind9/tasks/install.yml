@@ -1,0 +1,15 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install bind9 packages"
+
+- name: "PHASE [install : Install bind9 Packages]"
+  ansible.builtin.dnf:
+    name: "{{ bind9_packages }}"
+    state: present
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"

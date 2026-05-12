@@ -6,33 +6,22 @@ network_interfaces:
     ip4: 172.16.0.123/24
     gw4: 172.16.0.254
     dns4:
-      - 8.8.8.8
+      - 172.16.1.153
       - 1.1.1.1
     conn_name: dmz-static
     default_conn_name: "cloud-init eth0"
 
-# WireGuard Config
-wireguard_enabled: true
+network_bootstrap_dns4:
+  - 1.1.1.1
 
 # Firewall Config
-firewall_custom_zones:
-  - vpn
-
-firewall_bindings:
-  - ifname: wg0
-    zone: vpn
-
 firewall_zone_ports:
   - zone: dmz
     port: 2222
     proto: tcp
 
-firewall_rich_rules:
-  - zone: vpn
-    rule: 'rule service name="ssh" reject'
-
 # Docker Workload Config
-docker_binfmt_enabled: true
+docker_enabled: true
 
 docker_image_archives:
   - name: nap-agent
@@ -43,6 +32,9 @@ docker_image_archives:
 docker_containers:
   - name: nap-agent
     image: nap-agent:latest
-    network_mode: host
-    platform: linux/amd64
     restart_policy: unless-stopped
+    network_mode: host
+    hostname: dmz-agent-01
+    etc_hosts:
+      dmz-agent-01: 127.0.1.1
+    dns_servers: "{{ network_interfaces[0].dns4 }}"

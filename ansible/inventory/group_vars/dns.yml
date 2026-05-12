@@ -1,0 +1,37 @@
+---
+# Cross-host topology vars shared by all members of the `dns` group
+
+# Topology CIDRs
+bind9_dmz_cidr: "172.16.0.0/24"
+bind9_internal_cidr: "172.16.1.0/24"
+
+# NASA-root server IP
+bind9_nasa_root_ip: "192.168.255.1"
+
+# Authoritative pair
+bind9_primary_ns_ip: "{{ hostvars['primary-ns-01'].ansible_host }}"
+bind9_secondary_ns_ip: "{{ hostvars['secondary-ns-01'].ansible_host }}"
+
+# Internal recursive resolver
+bind9_dns_resolver_ip: "{{ hostvars['dns-01'].ansible_host }}"
+
+# Lab agents
+bind9_dmz_agent_ip: "{{ hostvars['dmz-agent-01'].ansible_host }}"
+bind9_internal_agent_ip: "{{ hostvars['internal-agent-01'].ansible_host }}"
+
+# Router gateway IPs
+bind9_router_dmz_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'dmz') | first).ip4.split('/')[0] }}"
+bind9_router_internal_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'internal') | first).ip4.split('/')[0] }}"
+
+# Reverse zone names
+bind9_dmz_reverse_zone: "{{ (bind9_dmz_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
+bind9_internal_reverse_zone: "{{ (bind9_internal_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
+
+# Resolver routing groups
+bind9_nasa_root_zones:
+  - nasa
+  - 168.192.in-addr.arpa
+
+bind9_lab_primary_zones:
+  - "{{ bind9_forward_zone_name }}"
+  - 16.172.in-addr.arpa

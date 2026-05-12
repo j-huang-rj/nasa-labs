@@ -15,6 +15,35 @@
   hosts: dmz, internal
   gather_facts: true
   become: true
+  pre_tasks:
+    - name: "PRE [network : Probe Final DNS Resolver]"
+      ansible.builtin.wait_for:
+        host: "{{ network_interfaces[0].dns4[0] }}"
+        port: 53
+        state: started
+        connect_timeout: 1
+        timeout: 1
+      register: _network_final_dns_probe
+      changed_when: false
+      failed_when: false
+      when: network_bootstrap_dns4 is defined
+
+    - name: "PRE [network : Preserve Final DNS Resolver Interfaces]"
+      ansible.builtin.set_fact:
+        _network_final_interfaces: "{{ network_interfaces }}"
+      when:
+        - network_bootstrap_dns4 is defined
+        - _network_final_dns_probe.state | default('') != 'started'
+        - _network_final_interfaces is not defined
+
+    - name: "PRE [network : Use Bootstrap DNS Resolvers]"
+      ansible.builtin.set_fact:
+        network_interfaces: >-
+          {{ (_network_final_interfaces | default(network_interfaces)) | map('combine', {'dns4': network_bootstrap_dns4}) | list }}
+      when:
+        - network_bootstrap_dns4 is defined
+        - _network_final_dns_probe.state | default('') != 'started'
+
   roles:
     - role: base
     - role: firewall
@@ -22,3 +51,4 @@
     - role: wireguard
       when: wireguard_enabled
     - role: docker
+      when: docker_enabled

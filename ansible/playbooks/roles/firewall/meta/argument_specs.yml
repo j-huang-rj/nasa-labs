@@ -2,45 +2,102 @@
 argument_specs:
   main:
     short_description: Validate firewall role variables
+
     options:
       firewall_builtin_zones:
         type: list
         elements: str
         required: true
+        description: Standard firewalld zones to ensure are present
+
       firewall_custom_zones:
         type: list
         elements: str
         required: false
         default: []
+        description: Custom zone names to create beyond built-in zones
+
       firewall_masquerade_zones:
         type: list
         elements: str
         required: false
         default: []
+        description: Zones where masquerading (SNAT) is enabled
+
+      firewall_masquerade_exempt_destinations:
+        type: list
+        elements: str
+        required: false
+        default: []
+        description: >-
+          Destination CIDRs that must NOT be masqueraded even when egressing a
+          masquerade-enabled zone. When set, the role replaces zone-level
+          masquerade with a rich rule per zone of the form
+          `rule family=ipv4 destination not address=<cidr> masquerade`,
+          preserving source IPs for matching destinations while Internet/VPN
+          egress remains masqueraded. firewalld rich-rule grammar permits only
+          one destination match per rule, so the role supports a single exempt CIDR.
+          Use a supernet covering every LAN you need to exempt rather than listing each.
+
+      firewall_masquerade_preserve_source_pairs:
+        type: list
+        elements: dict
+        required: false
+        default: []
+        description: >-
+          Source/destination host pairs that should keep their original source
+          address even when routed through a masquerade-enabled zone. The role
+          installs direct no-op SNAT rules before firewalld zone masquerade so
+          narrow IP-based ACL flows, such as BIND primary/secondary traffic,
+          can avoid broad inter-LAN masquerade exemptions.
+        options:
+          source:
+            type: str
+            required: true
+            description: Original source IPv4 address to preserve
+          destination:
+            type: str
+            required: true
+            description: Destination IPv4 address for the preserve-source rule
+          priority:
+            type: int
+            required: false
+            default: -1
+            description: firewalld direct rule priority, lower runs first
+
       firewall_bindings:
         type: list
         elements: dict
         required: false
         default: []
+        description: >-
+          Static interface-to-zone bindings for interfaces outside NetworkManager control (e.g. wg0).
+          NetworkManager-managed interfaces should declare their zone via network_interfaces[].zone instead.
         options:
           ifname:
             type: str
             required: true
+            description: Interface name to bind (e.g. wg0)
           zone:
             type: str
             required: true
+            description: Firewalld zone to assign the interface to
+
       firewall_forward_ports:
         type: list
         elements: dict
         required: false
         default: []
+        description: DNAT port-forwarding rules between zones
         options:
           zone:
             type: str
             required: true
+            description: Zone the forwarded port arrives on
           port:
             type: raw
             required: true
+            description: Source port or port range to forward (e.g. 2222 or 8000-9000)
           proto:
             type: str
             required: true
@@ -49,24 +106,32 @@ argument_specs:
               - udp
               - sctp
               - dccp
+            description: IP protocol for the forwarded traffic
           toport:
             type: raw
             required: true
+            description: Destination port on the target address
           toaddr:
             type: str
             required: true
+            description: Destination IP address for the forwarded traffic
+
       firewall_zone_ports:
         type: list
         elements: dict
         required: false
         default: []
+        description: >-
+          Desired open-port set for the listed zones; ports not declared here are removed from those zones.
         options:
           zone:
             type: str
             required: true
+            description: Zone to open the port in
           port:
             type: raw
             required: true
+            description: Port or port range to open (e.g. 53 or 8000-9000)
           proto:
             type: str
             required: true
@@ -75,30 +140,39 @@ argument_specs:
               - udp
               - sctp
               - dccp
+            description: IP protocol for the port
+
       firewall_rich_rules:
         type: list
         elements: dict
         required: false
         default: []
+        description: Firewalld rich language rules for complex traffic matching
         options:
           zone:
             type: str
             required: true
+            description: Zone to apply the rich rule in
           rule:
             type: str
             required: true
+            description: Firewalld rich language rule string
+
       firewall_policies:
         type: list
         elements: dict
         required: false
         default: []
+        description: Firewalld policies for inter-zone traffic control
         options:
           name:
             type: str
             required: true
+            description: Policy name
           priority:
             type: int
             required: true
+            description: Policy evaluation priority (lower = evaluated first)
           target:
             type: str
             required: true
@@ -107,30 +181,36 @@ argument_specs:
               - REJECT
               - DROP
               - CONTINUE
+            description: Default verdict when no port/protocol rule matches
           ingress_zones:
             type: list
             elements: str
             required: false
             default: []
+            description: Ingress zones for this policy; may include declared zones and the special firewalld values ANY or HOST
           egress_zones:
             type: list
             elements: str
             required: false
             default: []
+            description: Egress zones for this policy; may include declared zones and the special firewalld values ANY or HOST
           protocols:
             type: list
             elements: str
             required: false
             default: []
+            description: IP protocols allowed by this policy (e.g. icmp)
           ports:
             type: list
             elements: dict
             required: false
             default: []
+            description: Port-specific allow rules within this policy
             options:
               port:
                 type: raw
                 required: true
+                description: Port or port range allowed
               proto:
                 type: str
                 required: true
@@ -139,3 +219,4 @@ argument_specs:
                   - udp
                   - sctp
                   - dccp
+                description: IP protocol for the port
