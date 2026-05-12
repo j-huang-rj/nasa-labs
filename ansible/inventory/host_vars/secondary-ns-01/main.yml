@@ -1,0 +1,111 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: dmz
+    ip4: 172.16.0.53/24
+    gw4: 172.16.0.254
+    dns4:
+      - 1.1.1.1
+    conn_name: dmz-static
+    default_conn_name: "cloud-init eth0"
+
+# WireGuard Config
+wireguard_enabled: true
+
+# Firewall Config
+firewall_custom_zones:
+  - vpn
+
+firewall_bindings:
+  - ifname: wg0
+    zone: vpn
+
+firewall_zone_ports:
+  - zone: dmz
+    port: 53
+    proto: udp
+
+  - zone: dmz
+    port: 53
+    proto: tcp
+
+  - zone: vpn
+    port: 53
+    proto: udp
+
+  - zone: vpn
+    port: 53
+    proto: tcp
+
+firewall_rich_rules:
+  - zone: vpn
+    rule: 'rule service name="ssh" reject'
+
+# BIND9 Config
+bind9_enabled: true
+bind9_mode: authoritative_secondary
+
+bind9_listen_ipv4:
+  - 127.0.0.1
+  - "{{ ansible_host }}"
+  - "{{ wireguard_address.split('/')[0] }}"
+
+# Read-only zone data: mirror every zone the primary serves
+bind9_zones:
+  # --- Private forward zone ---
+  - name: "{{ bind9_forward_zone_name }}"
+    view: private
+    type: slave
+    masters:
+      - "{{ bind9_primary_ns_ip }}"
+    allow_transfer:
+      - "none"
+    file: "slaves/private/db.{{ bind9_forward_zone_name }}"
+
+  # --- Public forward zone ---
+  - name: "{{ bind9_forward_zone_name }}"
+    view: public
+    type: slave
+    masters:
+      - address: "{{ bind9_primary_ns_ip }}"
+        key: "{{ bind9_axfr_key.name }}"
+    allow_transfer:
+      - "none"
+    file: "slaves/public/db.{{ bind9_forward_zone_name }}"
+
+  # --- Private reverse zone ---
+  - name: "{{ bind9_dmz_reverse_zone }}"
+    view: private
+    type: slave
+    masters:
+      - "{{ bind9_primary_ns_ip }}"
+    allow_transfer:
+      - "none"
+    file: "slaves/private/db.{{ bind9_dmz_reverse_zone }}"
+
+  # --- Private reverse zone ---
+  - name: "{{ bind9_internal_reverse_zone }}"
+    view: private
+    type: slave
+    masters:
+      - "{{ bind9_primary_ns_ip }}"
+    allow_transfer:
+      - "none"
+    file: "slaves/private/db.{{ bind9_internal_reverse_zone }}"
+
+  # --- Public RFC 2317 child zone (delegated) ---
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    view: public
+    type: slave
+    masters:
+      - address: "{{ bind9_primary_ns_ip }}"
+        key: "{{ bind9_axfr_key.name }}"
+    allow_transfer:
+      - "none"
+    file: "slaves/public/db.{{ bind9_vpn_child_reverse_zone_name }}"
+
+  # Private-view alias of the public slave above
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    view: private
+    in_view: public

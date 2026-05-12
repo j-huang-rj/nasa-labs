@@ -6,10 +6,13 @@ network_interfaces:
     ip4: 172.16.1.123/24
     gw4: 172.16.1.254
     dns4:
-      - 8.8.8.8
+      - 172.16.1.153
       - 1.1.1.1
     conn_name: internal-static
     default_conn_name: "cloud-init eth0"
+
+network_bootstrap_dns4:
+  - 1.1.1.1
 
 # Firewall Config
 firewall_zone_ports:
@@ -22,7 +25,7 @@ firewall_zone_ports:
     proto: tcp
 
 # Docker Workload Config
-docker_binfmt_enabled: true
+docker_enabled: true
 
 docker_image_archives:
   - name: nap-agent
@@ -33,6 +36,9 @@ docker_image_archives:
 docker_containers:
   - name: nap-agent
     image: nap-agent:latest
-    network_mode: host
-    platform: linux/amd64
     restart_policy: unless-stopped
+    network_mode: host
+    hostname: internal-agent-01
+    etc_hosts:
+      internal-agent-01: 127.0.1.1
+    dns_servers: "{{ network_interfaces[0].dns4 }}"

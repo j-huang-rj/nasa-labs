@@ -1,0 +1,113 @@
+---
+# Package and service defaults
+bind9_packages:
+  - bind
+  - bind-utils
+bind9_service_name: named
+
+# Filesystem paths
+bind9_conf_path: /etc/named.conf
+bind9_conf_dir: /etc/named
+bind9_zone_dir: /var/named
+bind9_dynamic_zone_dir: /var/named/dynamic
+
+# SOA admin contact
+bind9_soa_admin: "admin"
+
+# ACL definitions
+bind9_acl_dmz: "dmz_clients"
+bind9_acl_internal: "internal_clients"
+
+# VPN host IP offsets
+bind9_vpn_router_offset: 1
+bind9_vpn_client_offset: 2
+bind9_vpn_ns_offset: 3
+
+# Canonical split-view policy for authoritative modes
+bind9_views:
+  - name: public
+    order: 10
+    match_clients:
+      - "key {{ bind9_axfr_key.name }}"
+      - "!{{ bind9_acl_internal }}"
+      - "!{{ bind9_acl_dmz }}"
+      - "any"
+
+  - name: private
+    order: 99
+    match_clients:
+      - "localhost"
+      - "{{ bind9_acl_dmz }}"
+      - "{{ bind9_acl_internal }}"
+
+# Zones to be configured on the server
+bind9_zones: []
+
+# Dynamic update allowed hosts
+bind9_dynamic_hosts:
+  - "dynamic1"
+  - "dynamic2"
+  - "dynamic3"
+  - "dynamic4"
+
+# Upstream forwarders for resolver mode
+bind9_forwarders: []
+
+# Trust anchors for DNSSEC validation in resolver mode. Each item is a dict
+# with keys: zone, flags, protocol, algorithm, key.
+bind9_trust_anchors: []
+
+# TSIG key configuration
+bind9_tsig_key:
+  name: lab_ddns_shared
+  algorithm: hmac-sha256
+  secret: ""
+
+# Optional second TSIG key, used to discriminate public-view AXFR
+# connections from IP-based view selection on the primary.
+bind9_axfr_key:
+  name: lab_axfr_public
+  algorithm: hmac-sha256
+  secret: ""
+
+# Path for the rendered TSIG key
+bind9_keys_conf_path: /etc/named/named.keys.conf
+
+# DNSSEC signing policy for authoritative zones
+bind9_dnssec_policy:
+  name: nasa-lab
+  key_directory: /etc/named/keys
+  csk:
+    algorithm: ECDSAP256SHA256
+    lifetime: unlimited
+
+# Pre-generated DNSSEC key material for distribution to the primary NS.
+# Each item is a dict with keys: zone, basename, public, private, state.
+# The .state file pins the key's role (KSK + ZSK = CSK) so dnssec-policy's
+# keymgr accepts the pre-distributed key instead of retiring it and minting
+# a fresh one on every restart.
+bind9_dnssec_key_material: []
+
+# ───────────────────────────── SOA serial ─────────────────────────────
+# Computed per-zone via the bind9_zone_serial filter plugin
+# using a read-and-bump strategy.
+#
+# On each playbook run, the bind9_zone_state module reads the current serial
+# and content hash from each existing zone file. The filter then:
+#   1. Computes a content hash from zone data (name, MNAME, SOA minus serial,
+#      NS records, resource records).
+#   2. If the hash matches the stored hash, the serial is unchanged (idempotent).
+#   3. If the hash differs, the serial is bumped: max(current + 1, YYYYMMDD00).
+#   4. For first deployment, the serial starts at YYYYMMDD00.
+#
+# The content hash is stored in a `<zone_file>.hash` sidecar file alongside
+# each zone so it can be read back on the next playbook run. The sidecar
+# is used because BIND rewrites zones with update-policy in canonical format
+# whenever the journal is merged, which strips embedded comments.
+# The role gates re-render on hash equality, so an idempotent run leaves DDNS
+# zones and their journals untouched.
+#
+# Known limitation: any inventory change to a DDNS-managed zone WILL
+# discard the live journal and overwrite live dynamic records with the
+# static model. DDNS zones should be seeded once and then excluded from
+# ongoing templating, or managed separately.

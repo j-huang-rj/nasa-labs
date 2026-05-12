@@ -1,0 +1,56 @@
+---
+- name: "PHASE [trust_anchors : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Fetch resolver DNSSEC trust anchors"
+
+- name: "PHASE [trust_anchors : Fetch NASA-Root Trust Anchors For Resolver Mode]"
+  when: bind9_mode == 'resolver'
+  block:
+    - name: "PHASE [trust_anchors : Initialize Trust Anchors]"
+      ansible.builtin.set_fact:
+        bind9_trust_anchors: []
+
+    - name: "PHASE [trust_anchors : Query KSK DNSKEYs From NASA Root]"
+      ansible.builtin.command: dig @{{ bind9_nasa_root_ip }} {{ item }}. DNSKEY +noall +answer
+      register: _bind9_trust_anchor_digs
+      changed_when: false
+      until: _bind9_trust_anchor_digs.rc == 0 and _bind9_trust_anchor_digs.stdout | length > 0
+      retries: 3
+      delay: 2
+      loop: "{{ bind9_nasa_root_zones }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "PHASE [trust_anchors : Fail If Any Zone Has No KSK Records]"
+      ansible.builtin.fail:
+        msg: >-
+          No KSK (flags 257) found in {{ item.item }}. DNSKEY response from
+          {{ bind9_nasa_root_ip }}. Ensure the NASA root server is reachable
+          and serving DNSKEY records for {{ item.item }}.
+      loop: "{{ _bind9_trust_anchor_digs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: >-
+        item.stdout_lines |
+          select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
+          list | length == 0
+
+    - name: "PHASE [trust_anchors : Parse Trust Anchors From DNSKEY Responses]"
+      ansible.builtin.set_fact:
+        bind9_trust_anchors: >-
+          {{ bind9_trust_anchors +
+             (item.stdout_lines |
+              select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+\S+') |
+              map('regex_replace',
+                '^\S+\s+\d+\s+\S+\s+DNSKEY\s+(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$',
+                '{"zone":"' ~ item.item ~ '.","flags":\1,"protocol":\2,"algorithm":\3,"key":"\4"}') |
+              map('from_json') | list) }}
+      loop: "{{ _bind9_trust_anchor_digs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+- name: "PHASE [trust_anchors : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed trust anchors phase"

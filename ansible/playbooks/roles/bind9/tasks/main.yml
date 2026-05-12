@@ -1,0 +1,16 @@
+---
+- name: "START"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting execution of bind9 role"
+
+- name: "PHASE [main : Validate Variables]"
+  ansible.builtin.import_tasks: assert.yml
+
+- name: "PHASE [main : Configure Bind9]"
+  ansible.builtin.import_tasks: setup.yml
+
+- name: "END"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed execution of bind9 role"

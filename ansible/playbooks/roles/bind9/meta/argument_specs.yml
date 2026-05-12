@@ -1,0 +1,226 @@
+---
+argument_specs:
+  main:
+    short_description: Validate bind9 role variables
+
+    options:
+      bind9_enabled:
+        type: bool
+        required: true
+        description: Whether the bind9 role should be active on this host
+
+      bind9_mode:
+        type: str
+        required: true
+        choices:
+          - authoritative_primary
+          - authoritative_secondary
+          - resolver
+        description: >-
+          Operational mode. authoritative_primary serves zones with split-horizon views; authoritative_secondary
+          replicates zones from a primary via AXFR/IXFR; resolver provides recursive DNS lookup only.
+
+      bind9_listen_ipv4:
+        type: list
+        elements: str
+        required: true
+        description: >-
+          IPv4 addresses for named to listen on. Verification expects 127.0.0.1 plus at least one non-loopback address;
+          for the public-facing secondary it must also include the WireGuard endpoint that ns.<lab_id>.nasa is advertised on.
+
+      bind9_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for BIND9
+
+      bind9_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the BIND9 service
+
+      bind9_conf_path:
+        type: str
+        required: false
+        description: Absolute path to the main named.conf file
+
+      bind9_conf_dir:
+        type: str
+        required: false
+        description: Directory for named.conf and included config fragments
+
+      bind9_zone_dir:
+        type: str
+        required: false
+        description: Directory for zone data files (db.* files)
+
+      bind9_dynamic_zone_dir:
+        type: str
+        required: false
+        description: Directory for dynamic DNS updates and journal files
+
+      bind9_soa_admin:
+        type: str
+        required: false
+        description: >-
+          Local part of the SOA RNAME; composed with the zone name at render time.
+
+      bind9_vpn_router_offset:
+        type: int
+        required: false
+        description: Host offset within the VPN subnet for the router IP
+
+      bind9_vpn_client_offset:
+        type: int
+        required: false
+        description: Host offset within the VPN subnet for the VPN client IP
+
+      bind9_vpn_ns_offset:
+        type: int
+        required: false
+        description: Host offset within the VPN subnet for the nameserver IP
+
+      bind9_dmz_cidr:
+        type: str
+        required: false
+        description: CIDR for the DMZ network, used in ACL definitions
+
+      bind9_internal_cidr:
+        type: str
+        required: false
+        description: CIDR for the internal network, used in ACL definitions
+
+      bind9_acl_dmz:
+        type: str
+        required: false
+        description: >-
+          Name of the DMZ ACL. Defined once in named.acl.conf and referenced from bind9_views match_clients.
+          Override only if a name collision forces a rename.
+
+      bind9_acl_internal:
+        type: str
+        required: false
+        description: >-
+          Name of the internal ACL. Defined once in named.acl.conf and referenced from bind9_views
+          match_clients. Override only if a name collision forces a rename.
+
+      bind9_views:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          View definitions for authoritative modes. Defaults to the canonical split-view (public + private)
+          using bind9_acl_dmz / bind9_acl_internal references. Override only if a host needs a non-standard
+          policy. Each entry must define name, order, and match_clients.
+
+      bind9_zones:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Zone definitions. For authoritative modes each entry must define name, view, type, and file: primary zones
+          also need soa, ns, and records data for zone-file rendering, while secondary/slave zones must define masters
+          (the masters list accepts either a plain IPv4 string for unkeyed transfers or a {address, key} dict to sign
+          the AXFR/IXFR with a TSIG key). For resolver mode each entry is rendered top-level (no view, no file) and
+          must define name, type (forward), forward (only|first), and forwarders.
+
+      bind9_dynamic_hosts:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Fixed set of dynamic hostnames bound to bind9_tsig_key by the update-policy template
+          on the private forward zone.
+
+      bind9_forward_zone_name:
+        type: str
+        required: false
+        description: >-
+          Authoritative forward zone name (e.g. "<lab_id>.nasa"). Required for both authoritative modes.
+          Computed by the dns_configure.yml play's pre_tasks from the WireGuard subnet of bind9_identity_source_host.
+
+      bind9_vpn_child_reverse_zone_name:
+        type: str
+        required: false
+        description: >-
+          RFC 2317 child reverse zone name (e.g. "<lab_id>-sub28.x.y.z.in-addr.arpa").
+          Required for both authoritative modes. Computed by the dns_configure.yml play's pre_tasks.
+
+      bind9_primary_mname:
+        type: str
+        required: false
+        description: >-
+          SOA MNAME used in rendered zone files.
+          Required for authoritative_primary. Computed by the dns_configure.yml play's pre_tasks.
+
+      bind9_soa_serial_date:
+        type: str
+        required: false
+        description: >-
+          YYYYMMDD floor used by the bind9_zone_serial filter for first-deploy and date-rollover bumps.
+          Required for authoritative_primary. Computed by the dns_configure.yml play's pre_tasks from the controller's date.
+
+      bind9_tsig_key:
+        type: dict
+        required: false
+        description: >-
+          TSIG key definition for dynamic updates and zone transfers. Loaded from gitignored
+          host_vars/*/secrets.yml on authoritative hosts. Contains name, algorithm, and secret fields.
+          The default provides the name and algorithm with an empty secret; the real secret must come
+          from secrets.yml.
+
+      bind9_axfr_key:
+        type: dict
+        required: false
+        description: >-
+          Optional second TSIG key used to discriminate public-view AXFR connections from
+          IP-based view selection. Referenced by the primary's public-view match-clients
+          and by the secondary's public-zone slave masters. When the secret is empty the
+          key block is not rendered into named.keys.conf and the key is treated as absent.
+
+      bind9_keys_conf_path:
+        type: str
+        required: false
+        description: >-
+          Absolute path where the rendered named.keys.conf file is placed on the target host.
+          Included from named.conf in authoritative modes. BIND parses the full configuration
+          before resolving symbols, so include order does not affect update-policy or
+          allow-transfer key references.
+
+      bind9_forwarders:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Upstream IPv4 addresses used as forwarders in resolver mode. When non-empty, the resolver emits a
+          forwarders clause with forward only and does not attempt root-based recursion.
+
+      bind9_dnssec_policy:
+        type: dict
+        required: false
+        description: >-
+          DNSSEC signing policy definition for authoritative_primary mode. Must include 'name' and 'key_directory'.
+          The policy name is referenced by zone-level dnssec_policy fields. The key_directory specifies where
+          BIND stores signing key material on the target host.
+
+      bind9_dnssec_key_material:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Pre-generated DNSSEC key material for distribution to the primary NS. Each item is a dict with
+          keys: zone, basename, public, private, state. The .state file pins the key's role (KSK + ZSK =
+          CSK) so dnssec-policy's keymgr accepts the pre-distributed key instead of retiring it and
+          minting a fresh one on every restart. Populated from secrets.yml; empty default means no keys
+          are distributed when omitted.
+
+      bind9_trust_anchors:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Trust anchors for DNSSEC validation in resolver mode. Each item is a dict with keys: zone (str,
+          the anchor zone name), flags (int, expected 257 for KSK), protocol (int, typically 3), algorithm
+          (int, e.g. 13 for ECDSAP256SHA256), and key (str, base64 key data). Populated at runtime by the
+          bind9 role after package installation from upstream DNSKEY records; empty default means no trust
+          anchors are rendered when the variable is omitted.

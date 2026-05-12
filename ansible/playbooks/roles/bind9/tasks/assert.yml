@@ -1,0 +1,309 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate bind9 role variables"
+
+- name: "PHASE [assert : Check bind9_enabled Is True]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_enabled | bool
+    fail_msg: "bind9_enabled must be true when the bind9 role is invoked"
+
+- name: "PHASE [assert : Check bind9_mode Is Valid]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_mode is defined
+      - bind9_mode in ['authoritative_primary', 'authoritative_secondary', 'resolver']
+    fail_msg: >-
+      bind9_mode must be one of authoritative_primary, authoritative_secondary, or resolver;
+      got '{{ bind9_mode | default("(undefined)") }}'
+
+- name: "PHASE [assert : Check bind9_listen_ipv4 Is Defined And Non-Empty]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_listen_ipv4 is defined
+      - bind9_listen_ipv4 | length > 0
+    fail_msg: "bind9_listen_ipv4 must be defined as a non-empty list of IPv4 addresses"
+
+- name: "PHASE [assert : Validate bind9_views For Authoritative Modes]"
+  when: bind9_mode in ['authoritative_primary', 'authoritative_secondary']
+  block:
+    - name: "PHASE [assert : Check bind9_views Has Exactly Private And Public]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_views is defined
+          - bind9_views | length == 2
+          - bind9_views | map(attribute='name') | list | sort == ['private', 'public']
+        fail_msg: >-
+          bind9_views must contain exactly two views named 'private' and 'public';
+          got {{ bind9_views | default([]) | map(attribute='name') | default(['(missing)']) }}
+
+    - name: "PHASE [assert : Check Each View Has Required Keys]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.name is defined
+          - item.order is defined
+          - item.match_clients is defined
+        fail_msg: >-
+          Each bind9_views entry must have 'name', 'order', and 'match_clients' keys;
+          got {{ item.keys() | default([]) | list }}
+      loop: "{{ bind9_views }}"
+      loop_control:
+        label: "{{ item.name | default('(unnamed)') }}"
+
+    - name: "PHASE [assert : Check Public View Precedes Private View]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            (bind9_views | selectattr('name', 'equalto', 'public') | map(attribute='order') | first)
+            <
+            (bind9_views | selectattr('name', 'equalto', 'private') | map(attribute='order') | first)
+        fail_msg: >-
+          Public view must have a lower order than private view so that
+          keyed AXFR connections are matched before the IP-based negation
+          clauses fall through to the private view.
+
+    - name: "PHASE [assert : Check bind9_zones Reference Only Declared Views]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            bind9_zones | default([]) | selectattr('view', 'defined')
+            | map(attribute='view') | list
+            | difference(bind9_views | map(attribute='name') | list)
+            | length == 0
+        fail_msg: >-
+          Every bind9_zones[].view must reference a view name declared in bind9_views.
+
+    - name: "PHASE [assert : Check Every Declared View Has At Least One Zone]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            bind9_views | map(attribute='name') | list
+            | difference(bind9_zones | default([]) | selectattr('view', 'defined')
+              | map(attribute='view') | list)
+            | length == 0
+        fail_msg: >-
+          Every declared view must have at least one zone assigned.
+          Views without zones: {{ bind9_views | map(attribute='name') | list
+            | difference(bind9_zones | default([]) | selectattr('view', 'defined')
+              | map(attribute='view') | list) }}
+
+- name: "PHASE [assert : Validate bind9_dynamic_hosts Is Exact For Authoritative Primary]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_dynamic_hosts is defined
+      - bind9_dynamic_hosts | sort == ['dynamic1', 'dynamic2', 'dynamic3', 'dynamic4']
+    fail_msg: >-
+      bind9_dynamic_hosts must be exactly ['dynamic1', 'dynamic2', 'dynamic3', 'dynamic4'];
+      got {{ bind9_dynamic_hosts | default([]) | sort }}
+
+- name: "PHASE [assert : Block Dynamic Policy On Non-Private Zones]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        bind9_zones | default([])
+        | selectattr('dynamic_update_scope', 'defined')
+        | rejectattr('view', 'equalto', 'private')
+        | list | length == 0
+    fail_msg: >-
+      dynamic_update_scope is only allowed on private-view zones;
+      the following non-private zones declare it:
+      {{ bind9_zones | default([])
+        | selectattr('dynamic_update_scope', 'defined')
+        | rejectattr('view', 'equalto', 'private')
+        | map(attribute='name') | list }}
+
+- name: "PHASE [assert : Validate DNSSEC Policy For Authoritative Primary]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_zones | default([]) | selectattr('dnssec_policy', 'defined') | list | length > 0
+  block:
+    - name: "PHASE [assert : Check bind9_dnssec_policy.name Is Defined]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_dnssec_policy is defined
+          - bind9_dnssec_policy.name is defined
+          - bind9_dnssec_policy.name | length > 0
+        fail_msg: >-
+          bind9_dnssec_policy.name must be defined and non-empty for authoritative_primary mode;
+          got '{{ bind9_dnssec_policy.name | default("(undefined)") }}'
+
+    - name: "PHASE [assert : Check bind9_dnssec_policy.key_directory Is Defined]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_dnssec_policy.key_directory is defined
+          - bind9_dnssec_policy.key_directory | length > 0
+        fail_msg: >-
+          bind9_dnssec_policy.key_directory must be defined and non-empty for authoritative_primary mode;
+          got '{{ bind9_dnssec_policy.key_directory | default("(undefined)") }}'
+
+    - name: "PHASE [assert : Check bind9_dnssec_policy.csk Is Defined]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - bind9_dnssec_policy.csk is defined
+          - bind9_dnssec_policy.csk.algorithm is defined
+          - bind9_dnssec_policy.csk.algorithm | length > 0
+          - bind9_dnssec_policy.csk.lifetime is defined
+        fail_msg: >-
+          bind9_dnssec_policy.csk must define 'algorithm' and 'lifetime';
+          got {{ bind9_dnssec_policy.csk | default('(undefined)') }}
+
+- name: "PHASE [assert : Check bind9_tsig_key.secret Is Non-Empty For Authoritative Modes]"
+  when: bind9_mode != 'resolver'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_tsig_key is defined
+      - bind9_tsig_key.secret is defined
+      - bind9_tsig_key.secret | length > 0
+    fail_msg: >-
+      bind9_tsig_key.secret must be non-empty for authoritative modes.
+      Ensure host_vars/*/secrets.yml provides the TSIG key.
+  no_log: true
+
+- name: "PHASE [assert : Check bind9_axfr_key.secret Is Non-Empty For Authoritative Modes]"
+  when: bind9_mode != 'resolver'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_axfr_key is defined
+      - bind9_axfr_key.secret is defined
+      - bind9_axfr_key.secret | length > 0
+    fail_msg: >-
+      bind9_axfr_key.secret must be non-empty for authoritative modes.
+      Used for public-view AXFR connection discrimination and DNSSEC verification.
+      Ensure host_vars/*/secrets.yml provides the AXFR key.
+  no_log: true
+
+- name: "PHASE [assert : Check WireGuard Address Of Identity Source Host Is Available]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _bind9_source_wg_address is defined
+      - _bind9_source_wg_address | length > 0
+    fail_msg: >-
+      bind9 role requires a WireGuard address from
+      '{{ bind9_identity_source_host | default("(undefined)") }}' to derive lab identity
+      (forward zone, MNAME, VPN host IPs), but wireguard_address is undefined or empty.
+      Ensure WireGuard is configured on
+      '{{ bind9_identity_source_host | default("(undefined)") }}' and the host is reachable
+      from the play (run bootstrap.yml first if needed).
+
+- name: "PHASE [assert : Validate Lab Identity Coherence]"
+  become: false
+  block:
+    - name: "PHASE [assert : Initialize WireGuard Peer Lab IDs]"
+      ansible.builtin.set_fact:
+        _bind9_peer_lab_ids: []
+      changed_when: false
+
+    - name: "PHASE [assert : Compute Lab IDs From All WireGuard-Enabled Peers]"
+      ansible.builtin.set_fact:
+        _bind9_peer_lab_ids: >-
+          {{ _bind9_peer_lab_ids
+             + [(item.split('/')[0].split('.')[2] | int * 16)
+                + (item.split('/')[0].split('.')[3] | int // 16)] }}
+      loop: >-
+        {{ groups['all']
+           | map('extract', hostvars)
+           | selectattr('wireguard_address', 'defined')
+           | rejectattr('wireguard_address', 'equalto', '')
+           | map(attribute='wireguard_address')
+           | list }}
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+
+    - name: "PHASE [assert : Assert WireGuard-Enabled Peers Agree On Lab ID]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_peer_lab_ids | length > 0
+          - _bind9_peer_lab_ids | unique | length == 1
+          - (_bind9_peer_lab_ids | first) == (bind9_derived_lab_id | int)
+        fail_msg: >-
+          WireGuard-enabled peers disagree on derived lab ID
+          (got {{ _bind9_peer_lab_ids | unique }} from
+          {{ groups['all']
+             | map('extract', hostvars)
+             | selectattr('wireguard_address', 'defined')
+             | rejectattr('wireguard_address', 'equalto', '')
+             | map(attribute='inventory_hostname')
+             | list }}).
+          All WG-enabled hosts must share the same /28 subnet so that
+          lab identity is unambiguous. Check wireguard_address values
+          in inventory.
+
+- name: "PHASE [assert : Check Derived Identity Facts Are Defined For Non-Resolver Modes]"
+  when: bind9_mode != 'resolver'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_forward_zone_name is defined
+      - bind9_forward_zone_name | length > 0
+      - bind9_vpn_child_reverse_zone_name is defined
+      - bind9_vpn_child_reverse_zone_name | length > 0
+    fail_msg: >-
+      bind9_forward_zone_name and bind9_vpn_child_reverse_zone_name must be defined for
+      authoritative modes. These facts are derived lazily in group_vars/dns.yml from
+      hostvars[bind9_identity_source_host].wireguard_address; ensure WireGuard is
+      configured on the source host before invoking this role.
+
+- name: "PHASE [assert : Check Primary Identity Facts Are Defined For authoritative_primary]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_primary_mname is defined
+      - bind9_primary_mname | length > 0
+      - bind9_soa_serial_date is defined
+      - bind9_soa_serial_date | length > 0
+    fail_msg: >-
+      bind9_primary_mname and bind9_soa_serial_date must be defined for authoritative_primary
+      mode. These facts are derived from group_vars/all.yml and ansible_facts; ensure facts are
+      gathered before invoking this role.
+
+- name: "PHASE [assert : Check bind9_dnssec_key_material Is Populated For authoritative_primary]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - bind9_dnssec_key_material is defined
+      - bind9_dnssec_key_material | length > 0
+    fail_msg: >-
+      bind9_dnssec_key_material must be a non-empty list on the primary NS so DS records
+      remain stable across reboots/restarts. Ensure host_vars/primary-ns-01/secrets.yml
+      provides the pre-generated key material.
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

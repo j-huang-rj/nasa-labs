@@ -1,0 +1,210 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: internal
+    ip4: 172.16.1.53/24
+    gw4: 172.16.1.254
+    dns4:
+      - 1.1.1.1
+    conn_name: internal-static
+    default_conn_name: "cloud-init eth0"
+
+# Firewall Config
+firewall_zone_ports:
+  - zone: internal
+    port: 53
+    proto: udp
+
+  - zone: internal
+    port: 53
+    proto: tcp
+
+# BIND9 Config
+bind9_enabled: true
+bind9_mode: authoritative_primary
+
+bind9_listen_ipv4:
+  - 127.0.0.1
+  - "{{ ansible_host }}"
+
+# Zone data — forward zones for private and public views
+bind9_zones:
+  # --- Private forward zone ---
+  - name: "{{ bind9_forward_zone_name }}"
+    view: private
+    type: master
+    file: "private/db.{{ bind9_forward_zone_name }}"
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    dynamic_update_scope: dynamic_hosts_A
+    allow_transfer:
+      - "{{ bind9_secondary_ns_ip }}"
+    also_notify:
+      - "{{ bind9_secondary_ns_ip }}"
+    soa:
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    ns:
+      - "private-ns.{{ bind9_forward_zone_name }}."
+      - "ns.{{ bind9_forward_zone_name }}."
+    records:
+      - name: "ns"
+        type: "A"
+        value: "{{ bind9_secondary_ns_ip }}"
+      - name: "private-ns"
+        type: "A"
+        value: "{{ ansible_host }}"
+      - name: "dns"
+        type: "A"
+        value: "{{ bind9_dns_resolver_ip }}"
+      - name: "router"
+        type: "A"
+        value: "{{ bind9_router_dmz_ip }}"
+      - name: "router"
+        type: "A"
+        value: "{{ bind9_router_internal_ip }}"
+      - name: "agent"
+        type: "A"
+        value: "{{ bind9_dmz_agent_ip }}"
+      - name: "internal-agent"
+        type: "A"
+        value: "{{ bind9_internal_agent_ip }}"
+
+  # --- Public forward zone ---
+  - name: "{{ bind9_forward_zone_name }}"
+    view: public
+    type: master
+    file: "public/db.{{ bind9_forward_zone_name }}"
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    allow_transfer:
+      - "{{ bind9_secondary_ns_ip }}"
+    also_notify:
+      - address: "{{ bind9_secondary_ns_ip }}"
+        key: "{{ bind9_axfr_key.name }}"
+    soa:
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    ns:
+      - "ns.{{ bind9_forward_zone_name }}."
+    records:
+      - name: "ns"
+        type: "A"
+        value: "{{ bind9_vpn_ns_ip }}"
+      - name: "router"
+        type: "A"
+        value: "{{ bind9_vpn_router_ip }}"
+      - name: "agent"
+        type: "A"
+        value: "{{ bind9_vpn_router_ip }}"
+      - name: "internal-agent"
+        type: "A"
+        value: "{{ bind9_vpn_router_ip }}"
+      - name: "client"
+        type: "A"
+        value: "{{ bind9_vpn_client_ip }}"
+
+  # --- Private reverse zone ---
+  - name: "{{ bind9_dmz_reverse_zone }}"
+    view: private
+    type: master
+    file: "private/db.{{ bind9_dmz_reverse_zone }}"
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    dynamic_update_scope: zonesub_PTR
+    allow_transfer:
+      - "{{ bind9_secondary_ns_ip }}"
+    also_notify:
+      - "{{ bind9_secondary_ns_ip }}"
+    soa:
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    ns:
+      - "private-ns.{{ bind9_forward_zone_name }}."
+      - "ns.{{ bind9_forward_zone_name }}."
+    records:
+      - name: "53"
+        type: "PTR"
+        value: "ns.{{ bind9_forward_zone_name }}."
+      - name: "254"
+        type: "PTR"
+        value: "router.{{ bind9_forward_zone_name }}."
+      - name: "123"
+        type: "PTR"
+        value: "agent.{{ bind9_forward_zone_name }}."
+
+  # --- Private reverse zone ---
+  - name: "{{ bind9_internal_reverse_zone }}"
+    view: private
+    type: master
+    file: "private/db.{{ bind9_internal_reverse_zone }}"
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    dynamic_update_scope: zonesub_PTR
+    allow_transfer:
+      - "{{ bind9_secondary_ns_ip }}"
+    also_notify:
+      - "{{ bind9_secondary_ns_ip }}"
+    soa:
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    ns:
+      - "private-ns.{{ bind9_forward_zone_name }}."
+      - "ns.{{ bind9_forward_zone_name }}."
+    records:
+      - name: "53"
+        type: "PTR"
+        value: "private-ns.{{ bind9_forward_zone_name }}."
+      - name: "153"
+        type: "PTR"
+        value: "dns.{{ bind9_forward_zone_name }}."
+      - name: "254"
+        type: "PTR"
+        value: "router.{{ bind9_forward_zone_name }}."
+      - name: "123"
+        type: "PTR"
+        value: "internal-agent.{{ bind9_forward_zone_name }}."
+
+  # --- Public RFC 2317 child zone (delegated) ---
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    view: public
+    type: master
+    file: "public/db.{{ bind9_vpn_child_reverse_zone_name }}"
+    dnssec_policy: "{{ bind9_dnssec_policy.name }}"
+    allow_transfer:
+      - "{{ bind9_secondary_ns_ip }}"
+    also_notify:
+      - address: "{{ bind9_secondary_ns_ip }}"
+        key: "{{ bind9_axfr_key.name }}"
+    soa:
+      admin: "{{ bind9_soa_admin }}.{{ bind9_forward_zone_name }}."
+      refresh: 3600
+      retry: 1800
+      expire: 604800
+      minimum: 86400
+    ns:
+      - "ns.{{ bind9_forward_zone_name }}."
+    records:
+      - name: "{{ bind9_vpn_router_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "router.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_vpn_client_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "client.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "ns.{{ bind9_forward_zone_name }}."
+
+  # Private-view alias of the public master above
+  - name: "{{ bind9_vpn_child_reverse_zone_name }}"
+    view: private
+    in_view: public

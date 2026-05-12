@@ -1,0 +1,465 @@
+---
+- name: "PHASE [config : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Generate bind9 configuration"
+
+- name: "PHASE [config : Create bind9 Configuration Directory]"
+  ansible.builtin.file:
+    path: "{{ bind9_conf_dir }}"
+    state: directory
+    owner: root
+    group: named
+    mode: "0750"
+    setype: "named_conf_t"
+
+- name: "PHASE [config : Create Dynamic Zone Directory]"
+  ansible.builtin.file:
+    path: "{{ bind9_dynamic_zone_dir }}"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_cache_t"
+
+- name: "PHASE [config : Render Main named.conf]"
+  ansible.builtin.template:
+    src: named.conf.j2
+    dest: "{{ bind9_conf_path }}"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Render named Options Conf]"
+  ansible.builtin.template:
+    src: named.options.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.options.conf"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Render ACL Conf]"
+  ansible.builtin.template:
+    src: named.acl.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.acl.conf"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Render TSIG Keys Conf]"
+  when: bind9_mode != 'resolver'
+  ansible.builtin.template:
+    src: named.keys.conf.j2
+    dest: "{{ bind9_keys_conf_path }}"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+  no_log: true
+
+- name: "PHASE [config : Render Zones Conf]"
+  ansible.builtin.template:
+    src: named.zones.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.zones.conf"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Render Trust Anchors Conf]"
+  when:
+    - bind9_mode == 'resolver'
+    - bind9_trust_anchors | default([]) | length > 0
+  ansible.builtin.template:
+    src: named.trust-anchors.conf.j2
+    dest: "{{ bind9_conf_dir }}/named.trust-anchors.conf"
+    owner: root
+    group: named
+    mode: "0640"
+    setype: "named_conf_t"
+  notify: "PHASE [handler : Restart named]"
+
+- name: "PHASE [config : Create Private Zone Directory]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/private"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_zone_t"
+
+- name: "PHASE [config : Create Public Zone Directory]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/public"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_zone_t"
+
+- name: "PHASE [config : Create Slave Zone Directory]"
+  when: bind9_mode == 'authoritative_secondary'
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/slaves"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_cache_t"
+
+- name: "PHASE [config : Create Slave Per-View Subdirectories]"
+  when: bind9_mode == 'authoritative_secondary'
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/slaves/{{ item }}"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_cache_t"
+  loop:
+    - private
+    - public
+
+- name: "PHASE [config : Create DNSSEC Key Directory]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.file:
+    path: "{{ bind9_dnssec_policy.key_directory }}"
+    state: directory
+    owner: named
+    group: named
+    mode: "0750"
+    setype: "named_zone_t"
+
+# Enumerate key-directory contents so we can prune stale `K*` material
+# (old keyids, retired-policy keys, hand-written test files) that would
+# otherwise confuse keymgr when it scans the directory at startup.
+- name: "PHASE [config : List Existing DNSSEC Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.find:
+    paths: "{{ bind9_dnssec_policy.key_directory }}"
+    patterns:
+      - "K*.key"
+      - "K*.private"
+      - "K*.state"
+    file_type: file
+  register: _bind9_dnssec_existing_keys
+
+- name: "PHASE [config : Remove Orphaned DNSSEC Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+    - item.path | basename not in _bind9_expected_key_filenames
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _bind9_dnssec_existing_keys.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  vars:
+    _bind9_expected_key_filenames: >-
+      {{ bind9_dnssec_key_material
+         | map(attribute='basename')
+         | map('regex_replace', '$', '')
+         | product(['.key', '.private', '.state'])
+         | map('join')
+         | list }}
+  notify: "PHASE [handler : Restart named]"
+
+# DNSSEC key file distribution: BIND 9.18 keymgr writes runtime tracking
+# metadata (SyncPublish, PublishCDS, DNSKEYChange, *RRSIGChange) into the
+# .key/.private/.state files at runtime. A naive `copy` would revert those
+# annotations every run, report `changed`, and fire the named restart
+# handler unnecessarily. Instead we slurp the existing file, strip the
+# runtime-mutated lines from both sides via `bind9_keymgr_runtime_strip`,
+# and only copy when the normalized content actually differs. This keeps
+# the playbook idempotent while still distributing real key changes
+# (e.g., a rotation in secrets.yml) on the next run.
+- name: "PHASE [config : Slurp Existing DNSSEC Public Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.slurp:
+    src: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.key"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .key"
+  failed_when: false
+  register: _bind9_dnssec_existing_public
+  no_log: true
+
+- name: "PHASE [config : Validate Public Key Slurp Failures Are ENOENT-Only]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_bind9_dnssec_existing_public.results
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | rejectattr('msg', 'search', '(?i)not found|no such file|does not exist|could not stat')
+         | list | length) == 0
+    fail_msg: >-
+      Slurp of DNSSEC public key files reported a non-ENOENT failure (e.g. permission denied,
+      read error). Investigate before proceeding so real host-state issues are not masked.
+
+- name: "PHASE [config : Distribute DNSSEC Public Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+    - (_bind9_dnssec_existing_public.results[_idx].content | default('') | b64decode
+      | regex_replace(bind9_keymgr_runtime_strip.key, ''))
+      != (item.public | regex_replace(bind9_keymgr_runtime_strip.key, ''))
+  ansible.builtin.copy:
+    content: "{{ item.public }}"
+    dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.key"
+    owner: named
+    group: named
+    mode: "0640"
+    setype: "named_zone_t"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .key"
+    index_var: _idx
+  notify: "PHASE [handler : Restart named]"
+  no_log: true
+
+- name: "PHASE [config : Slurp Existing DNSSEC Private Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.slurp:
+    src: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.private"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .private"
+  failed_when: false
+  register: _bind9_dnssec_existing_private
+  no_log: true
+
+- name: "PHASE [config : Validate Private Key Slurp Failures Are ENOENT-Only]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_bind9_dnssec_existing_private.results
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | rejectattr('msg', 'search', '(?i)not found|no such file|does not exist|could not stat')
+         | list | length) == 0
+    fail_msg: >-
+      Slurp of DNSSEC private key files reported a non-ENOENT failure (e.g. permission denied,
+      read error). Investigate before proceeding so real host-state issues are not masked.
+
+- name: "PHASE [config : Distribute DNSSEC Private Key Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+    - (_bind9_dnssec_existing_private.results[_idx].content | default('') | b64decode
+      | regex_replace(bind9_keymgr_runtime_strip.private, ''))
+      != (item.private | regex_replace(bind9_keymgr_runtime_strip.private, ''))
+  ansible.builtin.copy:
+    content: "{{ item.private }}"
+    dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.private"
+    owner: named
+    group: named
+    mode: "0640"
+    setype: "named_zone_t"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .private"
+    index_var: _idx
+  notify: "PHASE [handler : Restart named]"
+  no_log: true
+
+# `.state` sidecar files record per-key role (KSK/ZSK/CSK) and lifecycle
+# timestamps. dnssec-policy's keymgr consults these on startup; if absent,
+# keymgr infers role from the DNSKEY flag bit alone, which for our keys would
+# be misclassified as pure KSK and trigger an unwanted ZSK rollover.
+# Distributing the .state alongside .key/.private gives keymgr the canonical
+# CSK record and locks the key in place.
+- name: "PHASE [config : Slurp Existing DNSSEC Key State Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.slurp:
+    src: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.state"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .state"
+  failed_when: false
+  register: _bind9_dnssec_existing_state
+  no_log: true
+
+- name: "PHASE [config : Validate Key State Slurp Failures Are ENOENT-Only]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_bind9_dnssec_existing_state.results
+         | selectattr('failed', 'defined')
+         | selectattr('failed')
+         | rejectattr('msg', 'search', '(?i)not found|no such file|does not exist|could not stat')
+         | list | length) == 0
+    fail_msg: >-
+      Slurp of DNSSEC key state files reported a non-ENOENT failure (e.g. permission denied,
+      read error). Investigate before proceeding so real host-state issues are not masked.
+
+- name: "PHASE [config : Distribute DNSSEC Key State Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_key_material | length > 0
+    - (_bind9_dnssec_existing_state.results[_idx].content | default('') | b64decode
+      | regex_replace(bind9_keymgr_runtime_strip.state, ''))
+      != (item.state | regex_replace(bind9_keymgr_runtime_strip.state, ''))
+  ansible.builtin.copy:
+    content: "{{ item.state }}"
+    dest: "{{ bind9_dnssec_policy.key_directory }}/{{ item.basename }}.state"
+    owner: named
+    group: named
+    mode: "0640"
+    setype: "named_zone_t"
+  loop: "{{ bind9_dnssec_key_material }}"
+  loop_control:
+    label: "{{ item.zone }} .state"
+    index_var: _idx
+  notify: "PHASE [handler : Restart named]"
+  no_log: true
+
+- name: "PHASE [config : Read Current Zone State]"
+  when: bind9_mode == 'authoritative_primary'
+  bind9_zone_state:
+    zone_dir: "{{ bind9_zone_dir }}"
+    zone_files: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | map(attribute='file') | list }}"
+  register: bind9_zone_state_raw
+
+- name: "PHASE [config : Set Zone Current State Fact]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.set_fact:
+    bind9_zone_current_state: "{{ bind9_zone_state_raw.zone_state }}"
+
+# Compute the desired serial + hash for every primary zone once.
+# Pre-computing means the template render and the sidecar write share a
+# single source of truth, and downstream tasks can gate on a stable
+# hash-equality check (`render_state.hash != current_state.hash`) instead
+# of relying on file-content diffing — which is unreliable for DDNS zones
+# because BIND rewrites those files in canonical format.
+- name: "PHASE [config : Compute Zone Render State]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.set_fact:
+    bind9_zone_render_state: >-
+      {{ bind9_zone_render_state | default({}) | combine({
+        item.file: item | bind9_zone_serial(
+          primary_mname=bind9_primary_mname,
+          date_prefix=bind9_soa_serial_date,
+          current_serial=bind9_zone_current_state[item.file].serial,
+          current_hash=bind9_zone_current_state[item.file].hash
+        )
+      }) }}
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# DDNS journals are only stale relative to the static template if we are
+# actually about to re-render the zone. Gate on hash-equality so an
+# idempotent run leaves both the static file and the live journal alone.
+- name: "PHASE [config : Remove Stale DDNS Journal Files Before Re-Render]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - item.dynamic_update_scope is defined
+    - bind9_zone_render_state[item.file].hash != bind9_zone_current_state[item.file].hash
+  ansible.builtin.file:
+    path: "{{ bind9_zone_dir }}/{{ item.file }}.jnl"
+    state: absent
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.view }})"
+  notify: "PHASE [handler : Restart named]"
+
+# Skip the render entirely when the inventory hash already matches the
+# on-disk hash. This keeps DDNS zones idempotent: BIND is free to rewrite
+# the file in canonical format and merge journal entries, but as long as
+# the static inventory model hasn't changed, we leave the file alone.
+- name: "PHASE [config : Render Zone Data Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_zone_render_state[item.file].hash != bind9_zone_current_state[item.file].hash
+  ansible.builtin.template:
+    src: db.zone.j2
+    dest: "{{ bind9_zone_dir }}/{{ item.file }}"
+    owner: named
+    group: named
+    mode: "0640"
+    setype: "{{ 'named_cache_t' if (item.dynamic_update_scope is defined) else 'named_zone_t' }}"
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: "PHASE [handler : Restart named]"
+
+# Persist the content hash in a sidecar file alongside each zone. BIND
+# never touches `<zone_file>.hash`, so it survives the canonical rewrite
+# that would otherwise strip an in-zone `; zone-hash:` comment. This is
+# the durable change-detection marker that the next run reads back via
+# the bind9_zone_state module.
+- name: "PHASE [config : Write Zone Hash Sidecar Files]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_zone_render_state[item.file].hash != bind9_zone_current_state[item.file].hash
+  ansible.builtin.copy:
+    content: "{{ bind9_zone_render_state[item.file].hash }}\n"
+    dest: "{{ bind9_zone_dir }}/{{ item.file }}.hash"
+    owner: root
+    group: named
+    mode: "0640"
+  loop: "{{ bind9_zones | selectattr('type', 'defined') | selectattr('type', 'equalto', 'master') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "PHASE [config : Flush Handlers]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [config : Find Legacy managed-keys Files Outside managed-keys-directory]"
+  ansible.builtin.find:
+    paths: "{{ bind9_zone_dir }}"
+    recurse: false
+    patterns:
+      - "managed-keys.bind"
+      - "managed-keys.bind.jnl"
+      - "*.mkeys"
+      - "*.mkeys.jnl"
+    file_type: file
+  register: bind9_legacy_mkeys
+
+- name: "PHASE [config : Remove Legacy managed-keys Files Outside managed-keys-directory]"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ bind9_legacy_mkeys.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: "PHASE [config : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed config phase"

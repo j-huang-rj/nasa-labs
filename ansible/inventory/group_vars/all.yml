@@ -1,14 +1,40 @@
 ---
+# Feature flags
 base_upgrade_enabled: false
+bind9_enabled: false
+docker_enabled: false
 wireguard_enabled: false
 
+# firewalld built-in zones
 firewall_builtin_zones:
+  - block
+  - dmz
+  - drop
+  - external
+  - home
+  - internal
   - public
   - trusted
-  - home
   - work
-  - internal
-  - external
-  - dmz
-  - block
-  - drop
+
+# BIND9 lab identity
+bind9_identity_source_host: "{{ groups['router'] | first }}"
+
+_bind9_source_wg_address: "{{ hostvars[bind9_identity_source_host].wireguard_address | default('') }}"
+_bind9_wg_octets: "{{ _bind9_source_wg_address.split('/')[0].split('.') }}"
+_bind9_wg_prefix: "{{ _bind9_source_wg_address.split('/')[1] | default('28') }}"
+_bind9_vpn_host_prefix: "{{ (_bind9_wg_octets[0] ~ '.' ~ _bind9_wg_octets[1] ~ '.' ~ _bind9_wg_octets[2]) if _bind9_wg_octets | length >= 4 else '' }}"
+
+bind9_vpn_network_base: "{{ (_bind9_wg_octets[3] | int // 16) * 16 if _bind9_wg_octets | length >= 4 else 0 }}"
+bind9_derived_lab_id: "{{ ((_bind9_wg_octets[2] | int * 16) + (_bind9_wg_octets[3] | int // 16)) if _bind9_wg_octets | length >= 4 else 0 }}"
+
+bind9_vpn_router_ip: "{{ _bind9_vpn_host_prefix }}.{{ (bind9_vpn_network_base | int) + (bind9_vpn_router_offset | default(0) | int) }}"
+bind9_vpn_client_ip: "{{ _bind9_vpn_host_prefix }}.{{ (bind9_vpn_network_base | int) + (bind9_vpn_client_offset | default(0) | int) }}"
+bind9_vpn_ns_ip: "{{ _bind9_vpn_host_prefix }}.{{ (bind9_vpn_network_base | int) + (bind9_vpn_ns_offset | default(0) | int) }}"
+
+bind9_forward_zone_name: "{{ bind9_derived_lab_id }}.nasa"
+bind9_vpn_child_reverse_zone_name: >-
+  {{ bind9_derived_lab_id }}-sub{{ _bind9_wg_prefix }}.{{ _bind9_wg_octets[2] | default('0') }}.{{
+  _bind9_wg_octets[1] | default('0') }}.{{ _bind9_wg_octets[0] | default('0') }}.in-addr.arpa
+bind9_primary_mname: "private-ns.{{ bind9_derived_lab_id }}.nasa."
+bind9_soa_serial_date: "{{ ansible_facts['date_time'].date | replace('-', '') if ansible_facts.get('date_time') is defined else '' }}"

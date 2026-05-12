@@ -3,6 +3,7 @@
   become: false
   ansible.builtin.debug:
     msg: "Install and start firewall services"
+
 - name: "PHASE [install : Install Firewall Services]"
   ansible.builtin.dnf:
     name:
@@ -10,7 +11,7 @@
       - python3-firewall
     state: present
 
-- name: "PHASE [install : Enable and Start Firewall Services]"
+- name: "PHASE [install : Enable And Start Firewall Services]"
   ansible.builtin.systemd:
     name: firewalld
     enabled: true

@@ -1,0 +1,48 @@
+---
+# Per-run keyfile setup: writes TSIG (DDNS) and AXFR keys to tempfiles owned
+# by named so secrets stay off the dig/nsupdate command line. Paired with
+# tsig_teardown.yml; `changed_when: false` because the files are run-scoped
+# scratch. Caller passes `_keyfiles_label_prefix` (e.g. "" or "Secondary")
+# which is appended to each PHASE tag for a distinct recap.
+
+- name: "PHASE [verify : Create TSIG Key Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.tempfile:
+    state: file
+    suffix: ".key"
+  register: _bind9_tsig_keyfile
+  changed_when: false
+
+- name: "PHASE [verify : Write TSIG Key To Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.copy:
+    dest: "{{ _bind9_tsig_keyfile.path }}"
+    content: |
+      key "{{ bind9_tsig_key.name }}" {
+              algorithm {{ bind9_tsig_key.algorithm }};
+              secret "{{ bind9_tsig_key.secret }}";
+      };
+    owner: named
+    group: named
+    mode: "0600"
+  no_log: true
+  changed_when: false
+
+- name: "PHASE [verify : Create AXFR Key Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.tempfile:
+    state: file
+    suffix: ".key"
+  register: _bind9_axfr_keyfile
+  changed_when: false
+
+- name: "PHASE [verify : Write AXFR Key To Temp File] {{ _keyfiles_label_prefix }}"
+  ansible.builtin.copy:
+    dest: "{{ _bind9_axfr_keyfile.path }}"
+    content: |
+      key "{{ bind9_axfr_key.name }}" {
+              algorithm {{ bind9_axfr_key.algorithm }};
+              secret "{{ bind9_axfr_key.secret }}";
+      };
+    owner: named
+    group: named
+    mode: "0600"
+  no_log: true
+  changed_when: false

@@ -14,7 +14,7 @@
   register: network_conn_names
   changed_when: false
 
-- name: "PHASE [nmcli : Get UUID of Default Connections]"
+- name: "PHASE [nmcli : Get UUID Of Default Connections]"
   ansible.builtin.command:
     argv:
       - nmcli
@@ -65,7 +65,7 @@
   loop: "{{ network_interfaces }}"
   loop_control:
     label: "{{ item.conn_name }}"
-  notify: "PHASE [handler : Reactivate changed NetworkManager connections]"
+  notify: "PHASE [handler : Reactivate Changed NetworkManager Connections]"
 
 - name: "PHASE [nmcli : Flush Handlers Before Activation]"
   ansible.builtin.meta: flush_handlers

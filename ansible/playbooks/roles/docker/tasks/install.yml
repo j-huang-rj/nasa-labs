@@ -3,7 +3,7 @@
   become: false
   ansible.builtin.debug:
     msg: "Install packages and enable Docker service"
-- name: "PHASE [install : Add Docker CE repository]"
+- name: "PHASE [install : Add Docker CE Repository]"
   ansible.builtin.yum_repository:
     name: docker-ce-stable
     description: Docker CE Stable
@@ -22,19 +22,19 @@
     state: present
     update_cache: true
 
-- name: "PHASE [install : Add user to docker group]"
+- name: "PHASE [install : Add User To Docker Group]"
   ansible.builtin.user:
     name: "{{ ansible_user }}"
     groups: docker
     append: true
 
-- name: "PHASE [install : Enable and start docker service]"
+- name: "PHASE [install : Enable And Start Docker Service]"
   ansible.builtin.systemd:
     name: docker
     enabled: true
     state: started
 
-- name: "PHASE [install : Reset connection for group changes]"
+- name: "PHASE [install : Reset Connection For Group Changes]"
   ansible.builtin.meta: reset_connection
 
 - name: "PHASE [install : END]"

@@ -1,5 +1,5 @@
 ---
-- name: "PHASE [handler : Reactivate changed NetworkManager connections]"
+- name: "PHASE [handler : Reactivate Changed NetworkManager Connections]"
   ansible.builtin.command:
     argv:
       - nmcli

@@ -1,0 +1,4 @@
+// Managed by Ansible -- do not edit manually.
+
+acl "{{ bind9_acl_dmz }}"      { {{ bind9_dmz_cidr }}; };
+acl "{{ bind9_acl_internal }}" { {{ bind9_internal_cidr }}; };
