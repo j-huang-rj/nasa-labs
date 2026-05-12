@@ -78,6 +78,16 @@ argument_specs:
             required: false
             description: >-
               Docker network mode (e.g. host, bridge). Overrides docker_container_network_mode for this container.
+          hostname:
+            type: str
+            required: false
+            description: >-
+              Container hostname. Useful when host-networked containers need sudo to resolve their own hostname.
+          etc_hosts:
+            type: dict
+            required: false
+            description: >-
+              Extra host-to-IP mappings to add to the container's /etc/hosts file.
           restart_policy:
             type: str
             required: false

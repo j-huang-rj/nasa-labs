@@ -146,6 +146,22 @@
           per rule). Use a supernet covering all LAN ranges instead of
           multiple entries.
 
+    - name: "PHASE [assert : Check Masquerade Preserve-Source Pairs]"
+      become: false
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.source is defined
+          - item.source | length > 0
+          - item.destination is defined
+          - item.destination | length > 0
+        fail_msg: >-
+          firewall_masquerade_preserve_source_pairs entries must define
+          non-empty source and destination addresses.
+      loop: "{{ firewall_masquerade_preserve_source_pairs | default([]) }}"
+      loop_control:
+        label: "{{ item.source | default('undefined') }} -> {{ item.destination | default('undefined') }}"
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:

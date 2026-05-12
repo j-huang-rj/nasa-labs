@@ -24,3 +24,7 @@ firewall_custom_zones:
 firewall_bindings:
   - ifname: wg0
     zone: vpn
+
+firewall_rich_rules:
+  - zone: vpn
+    rule: 'rule service name="ssh" reject'

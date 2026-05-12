@@ -32,6 +32,9 @@ docker_image_archives:
 docker_containers:
   - name: nap-agent
     image: nap-agent:latest
-    network_mode: host
     restart_policy: unless-stopped
+    network_mode: host
+    hostname: dmz-agent-01
+    etc_hosts:
+      dmz-agent-01: 127.0.1.1
     dns_servers: "{{ network_interfaces[0].dns4 }}"
