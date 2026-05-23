@@ -506,23 +506,51 @@
       changed_when: false
       register: _e2e_idempotency_run
 
-    - name: "PHASE [e2e-idempotency : Parse Play Recap For DNS Hosts]"
+    - name: "PHASE [e2e-idempotency : Extract Changed Counts Per DNS Host]"
+      ansible.builtin.set_fact:
+        _e2e_idempotency_changed: >-
+          {{ _e2e_idempotency_changed | default({}) | combine({
+            item: (_e2e_idempotency_run.stdout | regex_search(item ~ '\s*:\s*ok=\d+\s+changed=(\d+)', '\1') | first | default('0') | int)
+          }) }}
+      loop:
+        - primary-ns-01
+        - secondary-ns-01
+        - dns-01
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+
+    - name: "PHASE [e2e-idempotency : Extract Failed Counts Per DNS Host]"
+      ansible.builtin.set_fact:
+        _e2e_idempotency_failed: >-
+          {{ _e2e_idempotency_failed | default({}) | combine({
+            item: (_e2e_idempotency_run.stdout | regex_search(item ~ '\s*:\s*.*failed=(\d+)', '\1') | first | default('0') | int)
+          }) }}
+      loop:
+        - primary-ns-01
+        - secondary-ns-01
+        - dns-01
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+
+    - name: "PHASE [e2e-idempotency : Assert Zero Changes And Zero Failures For Each DNS Host]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - >-
-            _e2e_idempotency_run.stdout is regex(
-              'primary-ns-01\s*:\s*ok=.*changed=0.*failed=0')
-          - >-
-            _e2e_idempotency_run.stdout is regex(
-              'secondary-ns-01\s*:\s*ok=.*changed=0.*failed=0')
-          - >-
-            _e2e_idempotency_run.stdout is regex(
-              'dns-01\s*:\s*ok=.*changed=0.*failed=0')
+          - _e2e_idempotency_changed[item] == 0
+          - _e2e_idempotency_failed[item] == 0
         fail_msg: >-
-          Idempotency check failed — dns_configure.yml rerun reported changes or failures.
-          Verify the output above for changed>0 or failed>0 on DNS hosts.
-          stdout={{ _e2e_idempotency_run.stdout | default('') }}
+          Idempotency check failed — {{ item }} reported
+          changed={{ _e2e_idempotency_changed[item] | default('?') }},
+          failed={{ _e2e_idempotency_failed[item] | default('?') }}
+          in dns_configure.yml rerun (expected 0 changes, 0 failures).
+      loop:
+        - primary-ns-01
+        - secondary-ns-01
+        - dns-01
+      loop_control:
+        label: "{{ item }}"
 
     - name: "PHASE [e2e-idempotency : END]"
       ansible.builtin.debug:
