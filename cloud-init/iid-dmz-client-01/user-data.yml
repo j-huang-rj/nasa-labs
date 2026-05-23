@@ -15,9 +15,7 @@ users:
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     shell: /bin/bash
     ssh_authorized_keys:
-      # WARNING: This is a placeholder key for local/dev testing ONLY.
-      # It MUST be replaced with a real public key before any production
-      # or graded deployment. The key below has no corresponding private key.
+      # WARNING: This is only a placeholder key
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEPLACEHOLDERKEYFORLOCALUSEONLY student@example.invalid
 
 # SSH key for auth only
