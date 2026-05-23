@@ -25,6 +25,20 @@ firewall_bindings:
   - ifname: wg0
     zone: vpn
 
+firewall_zone_ports:
+  - zone: vpn
+    port: 25
+    proto: tcp
+  - zone: vpn
+    port: 587
+    proto: tcp
+  - zone: vpn
+    port: 143
+    proto: tcp
+  - zone: vpn
+    port: 8000
+    proto: tcp
+
 firewall_rich_rules:
   - zone: vpn
     rule: 'rule service name="ssh" reject'
