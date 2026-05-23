@@ -50,5 +50,9 @@
     - role: network
     - role: wireguard
       when: wireguard_enabled
-    - role: docker
-      when: docker_enabled
+
+  tasks:
+    - name: Run Docker Role
+      ansible.builtin.include_role:
+        name: docker
+      when: docker_enabled | default(false) | bool

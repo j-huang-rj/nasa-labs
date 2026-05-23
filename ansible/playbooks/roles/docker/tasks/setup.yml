@@ -7,11 +7,11 @@
   ansible.builtin.import_tasks: install.yml
 
 - name: "PHASE [setup : Configure Multiarch Emulation]"
-  ansible.builtin.import_tasks: multiarch.yml
+  ansible.builtin.include_tasks: multiarch.yml
   when: docker_binfmt_enabled | default(false)
 
 - name: "PHASE [setup : Configure Docker Workloads]"
-  ansible.builtin.import_tasks: workloads.yml
+  ansible.builtin.include_tasks: workloads.yml
   when: >-
     (docker_image_archives | default([]) | length > 0)
     or

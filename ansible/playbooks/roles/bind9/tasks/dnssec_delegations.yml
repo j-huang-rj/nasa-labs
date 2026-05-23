@@ -1,0 +1,134 @@
+---
+- name: "PHASE [dnssec_delegations : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Derive DNSSEC delegation records"
+
+- name: "PHASE [dnssec_delegations : Initialize Delegation DS Values]"
+  when: bind9_mode == 'authoritative_primary'
+  ansible.builtin.set_fact:
+    bind9_dnssec_delegation_ds_values: {}
+
+- name: "PHASE [dnssec_delegations : Derive Child Zone DS Values]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_dnssec_delegated_child_zones | default([]) | length > 0
+  block:
+    - name: "PHASE [dnssec_delegations : Collect Public DNSKEY Lines]"
+      ansible.builtin.set_fact:
+        _bind9_delegation_public_dnskey_lines: >-
+          {{ bind9_dnssec_key_material
+             | map(attribute='public')
+             | map('regex_findall', '[^\n]+')
+             | flatten
+             | select('regex', '\sDNSKEY\s+257\s+\d+\s+\d+\s+')
+             | list }}
+      no_log: true
+
+    - name: "PHASE [dnssec_delegations : Initialize Public DNSKEY Line Map]"
+      ansible.builtin.set_fact:
+        _bind9_delegation_dnskey_by_zone: {}
+
+    - name: "PHASE [dnssec_delegations : Index Public DNSKEY Lines By Owner]"
+      ansible.builtin.set_fact:
+        _bind9_delegation_dnskey_by_zone: >-
+          {{ _bind9_delegation_dnskey_by_zone | combine({
+            (item.split()[0][:-1] if item.split()[0].endswith('.') else item.split()[0]): (item | trim)
+          }) }}
+      loop: "{{ _bind9_delegation_public_dnskey_lines }}"
+      loop_control:
+        label: "{{ item.split()[0][:-1] if item.split()[0].endswith('.') else item.split()[0] }}"
+      no_log: true
+
+    - name: "PHASE [dnssec_delegations : Validate Delegated Child DNSKEY Exists]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_delegation_zone in _bind9_delegation_dnskey_by_zone
+          - _bind9_delegation_dnskey_by_zone[_bind9_delegation_zone] | length > 0
+        fail_msg: >-
+          Delegated child zone {{ item }} must have a matching KSK/CSK DNSKEY
+          owner line in bind9_dnssec_key_material.public so the parent DS can
+          be derived from authoritative key material. Available DNSKEY owners:
+          {{ _bind9_delegation_dnskey_by_zone.keys() | list | sort }}
+      vars:
+        _bind9_delegation_zone: "{{ item[:-1] if item.endswith('.') else item }}"
+      loop: "{{ bind9_dnssec_delegated_child_zones }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "PHASE [dnssec_delegations : Extract Delegated Child DS Records]"
+      ansible.builtin.command:
+        argv:
+          - dnssec-dsfromkey
+          - -f
+          - "-"
+          - "{{ item[:-1] if item.endswith('.') else item }}"
+        stdin: "{{ _bind9_delegation_dnskey_line }}"
+      changed_when: false
+      register: _bind9_delegation_ds_extract
+      vars:
+        _bind9_delegation_zone: "{{ item[:-1] if item.endswith('.') else item }}"
+        _bind9_delegation_dnskey_line: "{{ _bind9_delegation_dnskey_by_zone[_bind9_delegation_zone] }}"
+      loop: "{{ bind9_dnssec_delegated_child_zones }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "PHASE [dnssec_delegations : Validate Derived DS Records]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _bind9_delegation_ds_line | length > 0
+          - "' 13 2 ' in _bind9_delegation_ds_line"
+        fail_msg: >-
+          Derived DS record for {{ item.item }} must contain algorithm 13 and
+          digest type 2. stdout={{ item.stdout | default('') }}
+      vars:
+        _bind9_delegation_ds_line: >-
+          {{ item.stdout_lines
+             | select('search', ' IN DS ')
+             | select('search', ' 13 2 ')
+             | first | default('') }}
+      loop: "{{ _bind9_delegation_ds_extract.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "PHASE [dnssec_delegations : Store Delegated Child DS RDATA]"
+      ansible.builtin.set_fact:
+        bind9_dnssec_delegation_ds_values: >-
+          {{ bind9_dnssec_delegation_ds_values | combine({
+            (item.item[:-1] if item.item.endswith('.') else item.item):
+              (_bind9_delegation_ds_line
+               | split(' IN DS ') | last)
+          }) }}
+      vars:
+        _bind9_delegation_ds_line: >-
+          {{ item.stdout_lines
+             | select('search', ' IN DS ')
+             | select('search', ' 13 2 ')
+             | first }}
+      loop: "{{ _bind9_delegation_ds_extract.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "PHASE [dnssec_delegations : Validate Delegated Child DS Values Were Stored]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            bind9_dnssec_delegated_child_zones
+            | map('regex_replace', '\\.$', '')
+            | difference(bind9_dnssec_delegation_ds_values.keys() | list)
+            | length == 0
+          - >-
+            bind9_dnssec_delegation_ds_values.values()
+            | select('match', '^\\d+\\s+13\\s+2\\s+[A-Fa-f0-9]+$')
+            | list | length == bind9_dnssec_delegated_child_zones | length
+        fail_msg: >-
+          Every bind9_dnssec_delegated_child_zones entry must have a stored
+          algorithm 13 digest type 2 DS RDATA value before zone rendering.
+
+- name: "PHASE [dnssec_delegations : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed DNSSEC delegation record derivation"

@@ -288,7 +288,7 @@
       - bind9_soa_serial_date | length > 0
     fail_msg: >-
       bind9_primary_mname and bind9_soa_serial_date must be defined for authoritative_primary
-      mode. These facts are derived from group_vars/all.yml and ansible_facts; ensure facts are
+      mode. These facts are derived from group_vars/all/dns_identity.yml and ansible_facts; ensure facts are
       gathered before invoking this role.
 
 - name: "PHASE [assert : Check bind9_dnssec_key_material Is Populated For authoritative_primary]"
@@ -306,21 +306,21 @@
 - name: "PHASE [assert : Validate Mail Zone Record Variables When Referenced]"
   when:
     - bind9_mode == 'authoritative_primary'
-    - hostvars['dmz-client-01'].mail_mx_value is defined
+    - mail_mx_value is defined
   ansible.builtin.assert:
     quiet: true
     that:
-      - hostvars['dmz-client-01'].mail_endpoint_dmz_ip is defined and hostvars['dmz-client-01'].mail_endpoint_dmz_ip | length > 0
-      - hostvars['dmz-client-01'].mail_endpoint_vpn_ip is defined and hostvars['dmz-client-01'].mail_endpoint_vpn_ip | length > 0
-      - hostvars['dmz-client-01'].mail_mx_value is defined and hostvars['dmz-client-01'].mail_mx_value | length > 0
-      - hostvars['dmz-client-01'].mail_spf_value is defined and hostvars['dmz-client-01'].mail_spf_value | length > 0
-      - hostvars['dmz-client-01'].mail_dkim_selector is defined and hostvars['dmz-client-01'].mail_dkim_selector | length > 0
-      - hostvars['dmz-client-01'].mail_dkim_txt_value is defined and hostvars['dmz-client-01'].mail_dkim_txt_value | length > 0
-      - hostvars['dmz-client-01'].mail_dmarc_value is defined and hostvars['dmz-client-01'].mail_dmarc_value | length > 0
+      - mail_endpoint_dmz_ip is defined and mail_endpoint_dmz_ip | length > 0
+      - mail_endpoint_vpn_ip is defined and mail_endpoint_vpn_ip | length > 0
+      - mail_mx_value is defined and mail_mx_value | length > 0
+      - mail_spf_value is defined and mail_spf_value | length > 0
+      - mail_dkim_selector is defined and mail_dkim_selector | length > 0
+      - mail_dkim_txt_value is defined and mail_dkim_txt_value | length > 0
+      - mail_dmarc_value is defined and mail_dmarc_value | length > 0
     fail_msg: >-
-      Mail zone records reference hostvars['dmz-client-01'] variables that must be defined
-      and non-empty. Ensure group_vars/mail.yml is loaded (dmz-client-01 is in the 'mail' group)
-      and host_vars/dmz-client-01/secrets.yml provides dkim_txt_value.
+      Mail zone record variables must be defined and non-empty. Ensure
+      group_vars/all/mail_dns.yml is loaded and host_vars/primary-ns-01/secrets.yml
+      provides mail_dkim_txt_value.
   no_log: true
 
 - name: "PHASE [assert : END]"

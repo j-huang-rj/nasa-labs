@@ -1,0 +1,12 @@
+---
+# firewalld built-in zones
+firewall_builtin_zones:
+  - block
+  - dmz
+  - drop
+  - external
+  - home
+  - internal
+  - public
+  - trusted
+  - work

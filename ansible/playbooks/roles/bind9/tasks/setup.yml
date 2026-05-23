@@ -7,6 +7,9 @@
 - name: "PHASE [setup : Install bind9 Packages]"
   ansible.builtin.import_tasks: install.yml
 
+- name: "PHASE [setup : Derive DNSSEC Delegation Records]"
+  ansible.builtin.import_tasks: dnssec_delegations.yml
+
 - name: "PHASE [setup : Fetch Resolver Trust Anchors]"
   ansible.builtin.import_tasks: trust_anchors.yml
 

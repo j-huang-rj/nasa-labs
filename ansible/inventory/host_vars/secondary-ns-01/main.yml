@@ -74,6 +74,27 @@ bind9_zones:
       - "none"
     file: "slaves/public/db.{{ bind9_forward_zone_name }}"
 
+  # --- Private mail domain zone ---
+  - name: "mail.{{ bind9_forward_zone_name }}"
+    view: private
+    type: slave
+    masters:
+      - "{{ bind9_primary_ns_ip }}"
+    allow_transfer:
+      - "none"
+    file: "slaves/private/db.mail.{{ bind9_forward_zone_name }}"
+
+  # --- Public mail domain zone ---
+  - name: "mail.{{ bind9_forward_zone_name }}"
+    view: public
+    type: slave
+    masters:
+      - address: "{{ bind9_primary_ns_ip }}"
+        key: "{{ bind9_axfr_key.name }}"
+    allow_transfer:
+      - "none"
+    file: "slaves/public/db.mail.{{ bind9_forward_zone_name }}"
+
   # --- Private reverse zone ---
   - name: "{{ bind9_dmz_reverse_zone }}"
     view: private

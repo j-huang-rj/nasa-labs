@@ -207,6 +207,315 @@
         msg: "E2E Private agent resolver verification complete"
 
 # ──────────────────────────────────────────────────────────
+# E2E: Mail DNS records and secondary mail-zone mirroring
+# ──────────────────────────────────────────────────────────
+- name: "E2E Mail DNS Verification"
+  hosts: primary-ns-01
+  gather_facts: false
+  become: true
+  vars:
+    _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
+    _e2e_primary: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
+    _e2e_secondary: "{{ bind9_secondary_ns_ip }}"
+    _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
+    _e2e_mail_domain: "{{ mail_domain_name }}"
+    _e2e_mail_fqdn: "smtp.{{ bind9_forward_zone_name }}."
+    _e2e_mail_private_ip: "{{ mail_endpoint_dmz_ip }}"
+    _e2e_public_client_reverse_label: >-
+      {{ (bind9_vpn_network_base | int) + (bind9_vpn_client_offset | int) }}
+    _e2e_mail_private_a_checks:
+      - label: smtp
+        qname: "smtp.{{ bind9_forward_zone_name }}"
+      - label: imap
+        qname: "imap.{{ bind9_forward_zone_name }}"
+    _e2e_mail_mx_checks:
+      - label: primary domain
+        qname: "{{ bind9_forward_zone_name }}"
+      - label: mail domain
+        qname: "{{ mail_domain_name }}"
+    _e2e_mail_txt_checks:
+      - label: primary SPF
+        qname: "{{ bind9_forward_zone_name }}"
+        token: "{{ mail_spf_value }}"
+      - label: primary DKIM
+        qname: "{{ mail_dkim_selector }}._domainkey.{{ bind9_forward_zone_name }}"
+        token: "v=DKIM1"
+      - label: primary DMARC
+        qname: "_dmarc.{{ bind9_forward_zone_name }}"
+        token: "{{ mail_dmarc_value }}"
+      - label: mail-domain SPF
+        qname: "{{ mail_domain_name }}"
+        token: "{{ mail_spf_value }}"
+      - label: mail-domain DKIM
+        qname: >-
+          {{ mail_dkim_selector }}._domainkey.{{ mail_domain_name }}
+        token: "v=DKIM1"
+      - label: mail-domain DMARC
+        qname: "_dmarc.{{ mail_domain_name }}"
+        token: "{{ mail_dmarc_value }}"
+  tasks:
+    - name: "PHASE [e2e-mail : START]"
+      ansible.builtin.debug:
+        msg: "E2E mail DNS record and secondary mirror verification"
+
+    - name: "PHASE [e2e-mail : Render Scoped TSIG Keyfile]"
+      ansible.builtin.include_tasks: roles/bind9/tasks/tsig_setup.yml
+      vars:
+        _keyfiles_label_prefix: "E2E Mail - "
+
+    - name: "PHASE [e2e-mail : Mail DNS Exercise]"
+      block:
+        - name: "PHASE [e2e-mail : Resolver Mail A Lookups]"
+          ansible.builtin.command:
+            cmd: >-
+              docker exec nap-agent dig @{{ _e2e_resolver }} {{ item.qname }} A +short
+          changed_when: false
+          register: _e2e_mail_a
+          delegate_to: dmz-agent-01
+          loop: "{{ _e2e_mail_private_a_checks }}"
+          loop_control:
+            label: "{{ item.label }}"
+
+        - name: "PHASE [e2e-mail : Assert Mail A Records Resolve Privately]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - _e2e_mail_private_ip in _e2e_mail_a.results[idx].stdout
+            fail_msg: >-
+              Mail {{ item.label }} A lookup did not return {{ _e2e_mail_private_ip }}
+              through the private resolver. Got: {{ _e2e_mail_a.results[idx].stdout | default('') }}
+          loop: "{{ _e2e_mail_private_a_checks }}"
+          loop_control:
+            index_var: idx
+            label: "{{ item.label }}"
+
+        - name: "PHASE [e2e-mail : Resolver Mail MX Lookups]"
+          ansible.builtin.command:
+            cmd: >-
+              docker exec nap-agent dig @{{ _e2e_resolver }} {{ item.qname }} MX +dnssec +noall +comments +answer
+          changed_when: false
+          register: _e2e_mail_mx
+          delegate_to: dmz-agent-01
+          loop: "{{ _e2e_mail_mx_checks }}"
+          loop_control:
+            label: "{{ item.label }}"
+
+        - name: "PHASE [e2e-mail : Assert Mail MX Records]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - "'status: NOERROR' in _e2e_mail_mx.results[idx].stdout"
+              - mail_mx_value in _e2e_mail_mx.results[idx].stdout
+              - "'ad' in (_e2e_mail_mx.results[idx].stdout | regex_search('flags:[^;]*') | default('') | split())"
+            fail_msg: >-
+              Mail MX lookup for {{ item.label }} did not return
+              {{ mail_mx_value }} with DNSSEC AD validation.
+              Got: {{ _e2e_mail_mx.results[idx].stdout | default('') }}
+          loop: "{{ _e2e_mail_mx_checks }}"
+          loop_control:
+            index_var: idx
+            label: "{{ item.label }}"
+
+        - name: "PHASE [e2e-mail : Check Resolver Has No Mail Static-Key Anchor]"
+          ansible.builtin.command:
+            cmd: >-
+              grep -F {{ _e2e_mail_domain }}. /etc/named/named.trust-anchors.conf
+          changed_when: false
+          failed_when: false
+          register: _e2e_mail_static_key_anchor
+          delegate_to: dns-01
+
+        - name: "PHASE [e2e-mail : Assert Mail Trust Uses Parent DS]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - _e2e_mail_static_key_anchor.rc != 0
+            fail_msg: >-
+              Resolver still has a local static-key anchor for {{ _e2e_mail_domain }};
+              mail DNSSEC validation should chain through the parent DS instead.
+
+        - name: "PHASE [e2e-mail : Check Resolver Has No Mail Forward Zone]"
+          ansible.builtin.command:
+            cmd: >-
+              grep -F 'zone "{{ _e2e_mail_domain }}"' /etc/named/named.zones.conf
+          changed_when: false
+          failed_when: false
+          register: _e2e_mail_forward_zone
+          delegate_to: dns-01
+
+        - name: "PHASE [e2e-mail : Assert Mail Resolves Through Parent Delegation]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - _e2e_mail_forward_zone.rc != 0
+            fail_msg: >-
+              Resolver still has an explicit forward zone for {{ _e2e_mail_domain }};
+              mail DNSSEC validation should route through the parent-zone delegation.
+
+        - name: "PHASE [e2e-mail : Resolver Mail Parent DS Lookup]"
+          ansible.builtin.command:
+            cmd: >-
+              docker exec nap-agent dig @{{ _e2e_resolver }} {{ _e2e_mail_domain }} DS +dnssec +noall +comments +answer
+          changed_when: false
+          register: _e2e_mail_parent_ds
+          delegate_to: dmz-agent-01
+
+        - name: "PHASE [e2e-mail : Derive Mail Child DS From DNSKEY]"
+          ansible.builtin.shell:
+            cmd: >-
+              set -o pipefail &&
+              dig @{{ _e2e_primary }} {{ _e2e_mail_domain }} DNSKEY +noall +answer
+              | dnssec-dsfromkey -f - {{ _e2e_mail_domain }}
+          changed_when: false
+          register: _e2e_mail_child_ds
+
+        - name: "PHASE [e2e-mail : Extract Mail DS Lines]"
+          ansible.builtin.set_fact:
+            _e2e_mail_parent_ds_line: >-
+              {{ _e2e_mail_parent_ds.stdout_lines
+                 | reject('search', 'RRSIG')
+                 | select('search', 'DS')
+                 | first | default('') }}
+            _e2e_mail_child_ds_line: >-
+              {{ _e2e_mail_child_ds.stdout_lines
+                 | reject('search', 'RRSIG')
+                 | select('search', 'DS')
+                 | first | default('') }}
+
+        - name: "PHASE [e2e-mail : Tokenize Mail DS Lines]"
+          ansible.builtin.set_fact:
+            _e2e_mail_parent_ds_tokens: "{{ _e2e_mail_parent_ds_line.split() }}"
+            _e2e_mail_child_ds_tokens: "{{ _e2e_mail_child_ds_line.split() }}"
+
+        - name: "PHASE [e2e-mail : Normalize Mail DS RDATA]"
+          ansible.builtin.set_fact:
+            _e2e_mail_parent_ds_rdata: >-
+              {{ _e2e_mail_parent_ds_tokens[(_e2e_mail_parent_ds_tokens.index('DS') + 1) :] | join('') }}
+            _e2e_mail_child_ds_rdata: >-
+              {{ _e2e_mail_child_ds_tokens[(_e2e_mail_child_ds_tokens.index('DS') + 1) :] | join('') }}
+
+        - name: "PHASE [e2e-mail : Assert Mail Parent DS Validates Child DNSKEY]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - "'status: NOERROR' in _e2e_mail_parent_ds.stdout"
+              - _e2e_mail_parent_ds_line | length > 0
+              - "'DS' in _e2e_mail_parent_ds_tokens"
+              - _e2e_mail_parent_ds_tokens[(_e2e_mail_parent_ds_tokens.index('DS') + 2)] == '13'
+              - _e2e_mail_parent_ds_tokens[(_e2e_mail_parent_ds_tokens.index('DS') + 3)] == '2'
+              - "'ad' in (_e2e_mail_parent_ds.stdout | regex_search('flags:[^;]*') | default('') | split())"
+              - _e2e_mail_parent_ds_rdata | length > 0
+              - _e2e_mail_child_ds_rdata | length > 0
+              - _e2e_mail_parent_ds_rdata == _e2e_mail_child_ds_rdata
+            fail_msg: >-
+              Mail parent DS did not validate against the child DNSKEY-derived DS.
+              parent={{ _e2e_mail_parent_ds.stdout | default('') }}
+              child={{ _e2e_mail_child_ds.stdout | default('') }}
+
+        - name: "PHASE [e2e-mail : Resolver Mail TXT Lookups]"
+          ansible.builtin.command:
+            cmd: >-
+              docker exec nap-agent dig @{{ _e2e_resolver }} {{ item.qname }} TXT +short
+          changed_when: false
+          register: _e2e_mail_txt
+          delegate_to: dmz-agent-01
+          loop: "{{ _e2e_mail_txt_checks }}"
+          loop_control:
+            label: "{{ item.label }}"
+
+        - name: "PHASE [e2e-mail : Assert Mail TXT Records]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - item.token in _e2e_mail_txt.results[idx].stdout
+            fail_msg: >-
+              Mail TXT lookup for {{ item.label }} did not include {{ item.token }}.
+              Got: {{ _e2e_mail_txt.results[idx].stdout | default('') }}
+          loop: "{{ _e2e_mail_txt_checks }}"
+          loop_control:
+            index_var: idx
+            label: "{{ item.label }}"
+
+        - name: "PHASE [e2e-mail : Resolver Private Mail PTR Lookup]"
+          ansible.builtin.command:
+            cmd: >-
+              docker exec nap-agent dig @{{ _e2e_resolver }} -x {{ _e2e_mail_private_ip }} +short
+          changed_when: false
+          register: _e2e_mail_private_ptr
+          delegate_to: dmz-agent-01
+
+        - name: "PHASE [e2e-mail : Assert Private Mail PTR]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - _e2e_mail_fqdn in _e2e_mail_private_ptr.stdout
+            fail_msg: >-
+              Private mail PTR for {{ _e2e_mail_private_ip }} did not return
+              {{ _e2e_mail_fqdn }}. Got: {{ _e2e_mail_private_ptr.stdout | default('') }}
+
+        - name: "PHASE [e2e-mail : Secondary Private Mail Zone SOA]"
+          ansible.builtin.command:
+            cmd: >-
+              docker exec nap-agent dig @{{ _e2e_secondary }} {{ _e2e_mail_domain }} SOA +short
+          changed_when: false
+          register: _e2e_mail_secondary_private_soa
+          delegate_to: dmz-agent-01
+
+        - name: "PHASE [e2e-mail : Assert Secondary Private Mail Zone SOA]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - _e2e_mail_secondary_private_soa.stdout | length > 0
+              - ('private-ns.' ~ _e2e_forward_zone ~ '.') in _e2e_mail_secondary_private_soa.stdout
+            fail_msg: >-
+              Secondary private view did not serve {{ _e2e_mail_domain }} SOA.
+              Got: {{ _e2e_mail_secondary_private_soa.stdout | default('') }}
+
+        - name: "PHASE [e2e-mail : Secondary Public Mail Zone SOA]"
+          ansible.builtin.command:
+            cmd: >-
+              dig @{{ _e2e_secondary }} -k {{ _bind9_axfr_keyfile.path }}
+              {{ _e2e_mail_domain }} SOA +short
+          changed_when: false
+          register: _e2e_mail_secondary_public_soa
+
+        - name: "PHASE [e2e-mail : Assert Secondary Public Mail Zone SOA]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - _e2e_mail_secondary_public_soa.stdout | length > 0
+              - ('private-ns.' ~ _e2e_forward_zone ~ '.') in _e2e_mail_secondary_public_soa.stdout
+            fail_msg: >-
+              Secondary public view did not serve {{ _e2e_mail_domain }} SOA.
+              Got: {{ _e2e_mail_secondary_public_soa.stdout | default('') }}
+
+        - name: "PHASE [e2e-mail : Secondary Public Client PTR Lookup]"
+          ansible.builtin.command:
+            cmd: >-
+              dig @{{ _e2e_secondary }} -k {{ _bind9_axfr_keyfile.path }}
+              {{ _e2e_public_client_reverse_label }}.{{ bind9_vpn_child_reverse_zone_name }} PTR +short
+          changed_when: false
+          register: _e2e_public_client_ptr
+
+        - name: "PHASE [e2e-mail : Assert Secondary Public Client PTR]"
+          ansible.builtin.assert:
+            quiet: true
+            that:
+              - ('client.' ~ _e2e_forward_zone ~ '.') in _e2e_public_client_ptr.stdout
+            fail_msg: >-
+              Public VPN client PTR did not return client.{{ _e2e_forward_zone }}.
+              Got: {{ _e2e_public_client_ptr.stdout | default('') }}
+      always:
+        - name: "PHASE [e2e-mail : Cleanup - Remove Scoped TSIG Keyfile]"
+          ansible.builtin.include_tasks: roles/bind9/tasks/tsig_teardown.yml
+          vars:
+            _keyfiles_label_prefix: "E2E Mail - "
+
+    - name: "PHASE [e2e-mail : END]"
+      ansible.builtin.debug:
+        msg: "E2E mail DNS verification complete"
+
+# ──────────────────────────────────────────────────────────
 # E2E: Blocked-client probe from VPN subnet
 # ──────────────────────────────────────────────────────────
 - name: "E2E Blocked Client Verification"
@@ -427,6 +736,8 @@
       - name: "{{ bind9_dmz_reverse_zone }}"
         view: private
       - name: "{{ bind9_internal_reverse_zone }}"
+        view: private
+      - name: "mail.{{ bind9_forward_zone_name }}"
         view: private
   tasks:
     - name: "PHASE [e2e-ds : START]"

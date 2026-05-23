@@ -18,11 +18,6 @@ bind9_soa_admin: "admin"
 bind9_acl_dmz: "dmz_clients"
 bind9_acl_internal: "internal_clients"
 
-# VPN host IP offsets
-bind9_vpn_router_offset: 1
-bind9_vpn_client_offset: 2
-bind9_vpn_ns_offset: 3
-
 # Canonical split-view policy for authoritative modes
 bind9_views:
   - name: public
@@ -52,6 +47,12 @@ bind9_dynamic_hosts:
 
 # Upstream forwarders for resolver mode
 bind9_forwarders: []
+
+# VPN host IP offsets. These are also defined in global DNS identity inventory
+# vars so non-role playbooks can compute the same derived VPN addresses.
+bind9_vpn_router_offset: 1
+bind9_vpn_client_offset: 2
+bind9_vpn_ns_offset: 3
 
 # Trust anchors for DNSSEC validation in resolver mode. Each item is a dict
 # with keys: zone, flags, protocol, algorithm, key.
@@ -87,6 +88,10 @@ bind9_dnssec_policy:
 # keymgr accepts the pre-distributed key instead of retiring it and minting
 # a fresh one on every restart.
 bind9_dnssec_key_material: []
+
+# Signed child zones delegated from zones hosted by this primary. DS records
+# are derived from bind9_dnssec_key_material.public before zone files render.
+bind9_dnssec_delegated_child_zones: []
 
 # ───────────────────────────── SOA serial ─────────────────────────────
 # Computed per-zone via the bind9_zone_serial filter plugin

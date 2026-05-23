@@ -1,0 +1,6 @@
+---
+# Feature flags
+base_upgrade_enabled: false
+bind9_enabled: false
+docker_enabled: false
+wireguard_enabled: false

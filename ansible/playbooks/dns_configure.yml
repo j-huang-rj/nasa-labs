@@ -22,5 +22,9 @@
 
   roles:
     - role: network
-    - role: docker
+
+  tasks:
+    - name: Run Docker Role
+      ansible.builtin.include_role:
+        name: docker
       when: docker_enabled | default(false) | bool

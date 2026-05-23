@@ -214,6 +214,15 @@ argument_specs:
           minting a fresh one on every restart. Populated from secrets.yml; empty default means no keys
           are distributed when omitted.
 
+      bind9_dnssec_delegated_child_zones:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Signed child zones delegated from zones hosted by this primary. The role derives DS RDATA
+          from matching public DNSKEY owner lines in bind9_dnssec_key_material before rendering zone
+          files, so parent-zone DS records do not need to be stored manually.
+
       bind9_trust_anchors:
         type: list
         elements: dict
