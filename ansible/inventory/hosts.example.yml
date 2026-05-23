@@ -56,3 +56,7 @@ all:
         primary-ns-01:
         secondary-ns-01:
         dns-01:
+
+    mail:
+      hosts:
+        dmz-client-01:
