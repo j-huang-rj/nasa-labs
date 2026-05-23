@@ -303,6 +303,26 @@
       remain stable across reboots/restarts. Ensure host_vars/primary-ns-01/secrets.yml
       provides the pre-generated key material.
 
+- name: "PHASE [assert : Validate Mail Zone Record Variables When Referenced]"
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - hostvars['dmz-client-01'].mail_mx_value is defined
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - hostvars['dmz-client-01'].mail_endpoint_dmz_ip is defined and hostvars['dmz-client-01'].mail_endpoint_dmz_ip | length > 0
+      - hostvars['dmz-client-01'].mail_endpoint_vpn_ip is defined and hostvars['dmz-client-01'].mail_endpoint_vpn_ip | length > 0
+      - hostvars['dmz-client-01'].mail_mx_value is defined and hostvars['dmz-client-01'].mail_mx_value | length > 0
+      - hostvars['dmz-client-01'].mail_spf_value is defined and hostvars['dmz-client-01'].mail_spf_value | length > 0
+      - hostvars['dmz-client-01'].mail_dkim_selector is defined and hostvars['dmz-client-01'].mail_dkim_selector | length > 0
+      - hostvars['dmz-client-01'].mail_dkim_txt_value is defined and hostvars['dmz-client-01'].mail_dkim_txt_value | length > 0
+      - hostvars['dmz-client-01'].mail_dmarc_value is defined and hostvars['dmz-client-01'].mail_dmarc_value | length > 0
+    fail_msg: >-
+      Mail zone records reference hostvars['dmz-client-01'] variables that must be defined
+      and non-empty. Ensure group_vars/mail.yml is loaded (dmz-client-01 is in the 'mail' group)
+      and host_vars/dmz-client-01/secrets.yml provides dkim_txt_value.
+  no_log: true
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:
