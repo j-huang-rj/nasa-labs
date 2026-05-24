@@ -118,3 +118,84 @@ argument_specs:
           Dictionary mapping local user names to hashed passwords for Dovecot passwd-file.
           Must contain keys for all entries in mail_local_users.
           Asserted non-empty for each user at runtime when mail_enabled is true (no_log: true).
+
+      mail_opendkim_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for OpenDKIM signing and verification
+
+      mail_opendkim_enable_epel:
+        type: bool
+        required: false
+        description: Whether to enable the EPEL repository if OpenDKIM packages are unavailable
+
+      mail_opendkim_epel_package:
+        type: str
+        required: false
+        description: DNF package name for EPEL repository enablement
+
+      mail_opendkim_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the OpenDKIM milter service
+
+      mail_opendkim_user:
+        type: str
+        required: false
+        description: System user identity for the OpenDKIM daemon
+
+      mail_opendkim_group:
+        type: str
+        required: false
+        description: System group identity for the OpenDKIM daemon
+
+      mail_opendkim_conf_dir:
+        type: str
+        required: false
+        description: Absolute path to the OpenDKIM configuration directory
+
+      mail_opendkim_keys_dir:
+        type: str
+        required: false
+        description: Absolute path to the OpenDKIM private key storage directory
+
+      mail_dkim_selector:
+        type: str
+        required: false
+        description: DKIM selector name used for both managed domains (D-01)
+
+      mail_opendkim_private_key_path:
+        type: str
+        required: false
+        description: >-
+          Absolute path to the DKIM private key file derived from mail_opendkim_keys_dir
+          and mail_dkim_selector
+
+      mail_opendkim_socket:
+        type: str
+        required: false
+        description: >-
+          OpenDKIM-side milter socket address in inet:port@host syntax for the service listener
+
+      mail_opendkim_postfix_socket:
+        type: str
+        required: false
+        description: >-
+          Milter socket address in Postfix inet:host:port syntax for the milter client
+
+      mail_dkim_private_keys:
+        type: dict
+        required: false
+        description: >-
+          Dictionary mapping DKIM selector names to PEM-encoded private keys.
+          Must contain a key matching mail_dkim_selector. Secret — provided by
+          gitignored host_vars/*/secrets.yml.
+
+      mail_pre_dkim_milters:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          List of milter socket addresses to insert before OpenDKIM in the
+          Postfix milter chain. Empty in Phase 04; populated in Phase 06.
