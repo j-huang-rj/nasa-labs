@@ -23,6 +23,9 @@ smtpd_sasl_auth_enable = no
 smtpd_tls_cert_file = {{ mail_tls_cert_path }}
 smtpd_tls_key_file = {{ mail_tls_key_path }}
 
+# Opportunistic TLS on port 25 (offers STARTTLS but does not require it)
+smtpd_tls_security_level = may
+
 # Recipient restrictions — reject non-local relay by default (D-09, SMTP-02)
 smtpd_recipient_restrictions = reject_unauth_destination
 
