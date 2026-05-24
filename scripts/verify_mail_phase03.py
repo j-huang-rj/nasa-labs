@@ -10,6 +10,7 @@ socket, ssl) — no swaks or nmap required.
 """
 
 import argparse
+import shlex
 import smtplib
 import ssl
 import subprocess
@@ -73,15 +74,30 @@ def ssh_cmd(
 def case_auth_local(args):
     """Verify admin and test can authenticate through Dovecot passwd-file.
 
-    Uses 'doveadm auth login' over SSH.
+    Uses 'doveadm auth login' over SSH with password passed via stdin
+    to avoid shell injection risks.
     """
     for user, password in [
         ("admin", args.admin_password),
         ("test", args.test_password),
     ]:
-        proc = ssh_cmd(
-            args.ssh_host,
-            f"echo '{password}' | sudo doveadm auth login -x service=imap {user}",
+        remote_cmd = "sudo doveadm auth login -x service=imap " + shlex.quote(user)
+        proc = subprocess.run(
+            [
+                "ssh",
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "ConnectTimeout=5",
+                "-o",
+                "BatchMode=yes",
+                args.ssh_host,
+                remote_cmd,
+            ],
+            input=password,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if proc.returncode != 0:
             fail_case(
@@ -89,7 +105,7 @@ def case_auth_local(args):
                 f"doveadm auth login for {user} failed: {proc.stderr.strip()}",
             )
             return
-        if "auth succeeded" not in (proc.stdout or "").lower() and proc.returncode != 0:
+        if "auth succeeded" not in (proc.stdout or "").lower():
             fail_case(
                 f"auth-local", f"doveadm auth login for {user} did not report success"
             )
@@ -135,14 +151,7 @@ def case_local_delivery(args):
 
         # IMAP fetch confirmation
         try:
-            found = _imap_fetch_contains(
-                imap_host,
-                user,
-                getattr(args, f"{user}_password")
-                if hasattr(args, f"{user}_password")
-                else password_for(user, args),
-                tag,
-            )
+            found = _imap_fetch_contains(imap_host, user, password_for(user, args), tag)
         except Exception as e:
             fail_case("local-delivery", f"IMAP fetch error for {user}: {e}")
             return
@@ -625,10 +634,6 @@ def main():
         parser.error(
             "At least one --case is required. Use --case all to run all cases."
         )
-
-    # Derive admin password for the local-delivery helper
-    args.admin_password = args.admin_password
-    args.test_password = args.test_password
 
     print(f"=== Phase 03 Mail Verification ===")
     print(f"SMTP: {args.smtp_host}  IMAP: {args.imap_host}")
