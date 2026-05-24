@@ -224,7 +224,9 @@ def case_submission_starttls(args):
                 return
     except Exception as e:
         # Connection closed or error after bad AUTH attempt is also acceptable
-        pass
+        # The server may drop the connection, which is normal for pre-TLS AUTH.
+        # If the service is entirely down, the STARTTLS test below will fail.
+        print(f"  NOTE: pre-TLS AUTH probe raised {e.__class__.__name__}: {e}")
 
     # 2. Verify STARTTLS succeeds and authenticated send works
     try:
@@ -534,9 +536,15 @@ def _imap_fetch_contains(
                 conn.logout()
                 return True
             conn.logout()
-        except Exception:
-            pass
-        time.sleep(delay)
+        except Exception as e:
+            if attempt < retries - 1:
+                print(f"  NOTE: IMAP fetch attempt {attempt + 1}/{retries} failed: {e}")
+                time.sleep(delay)
+            else:
+                print(f"  NOTE: IMAP fetch attempt {attempt + 1}/{retries} failed: {e}")
+                return False
+        else:
+            time.sleep(delay)
 
     return False
 
