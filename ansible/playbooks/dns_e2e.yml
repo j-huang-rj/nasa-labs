@@ -219,7 +219,7 @@
     _e2e_secondary: "{{ bind9_secondary_ns_ip }}"
     _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
     _e2e_mail_domain: "{{ mail_domain_name }}"
-    _e2e_mail_fqdn: "smtp.{{ bind9_forward_zone_name }}."
+    _e2e_client_fqdn: "client.{{ bind9_forward_zone_name }}."
     _e2e_mail_private_ip: "{{ mail_endpoint_dmz_ip }}"
     _e2e_public_client_reverse_label: >-
       {{ (bind9_vpn_network_base | int) + (bind9_vpn_client_offset | int) }}
@@ -265,6 +265,13 @@
 
     - name: "PHASE [e2e-mail : Mail DNS Exercise]"
       block:
+        - name: "PHASE [e2e-mail : Flush Resolver Cache]"
+          ansible.builtin.command:
+            cmd: rndc flush
+          changed_when: false
+          become: true
+          delegate_to: dns-01
+
         - name: "PHASE [e2e-mail : Resolver Mail A Lookups]"
           ansible.builtin.command:
             cmd: >-
@@ -436,7 +443,7 @@
             index_var: idx
             label: "{{ item.label }}"
 
-        - name: "PHASE [e2e-mail : Resolver Private Mail PTR Lookup]"
+        - name: "PHASE [e2e-mail : Resolver Private Client PTR Lookup]"
           ansible.builtin.command:
             cmd: >-
               docker exec nap-agent dig @{{ _e2e_resolver }} -x {{ _e2e_mail_private_ip }} +short
@@ -444,14 +451,14 @@
           register: _e2e_mail_private_ptr
           delegate_to: dmz-agent-01
 
-        - name: "PHASE [e2e-mail : Assert Private Mail PTR]"
+        - name: "PHASE [e2e-mail : Assert Private Client PTR]"
           ansible.builtin.assert:
             quiet: true
             that:
-              - _e2e_mail_fqdn in _e2e_mail_private_ptr.stdout
+              - _e2e_client_fqdn in _e2e_mail_private_ptr.stdout
             fail_msg: >-
-              Private mail PTR for {{ _e2e_mail_private_ip }} did not return
-              {{ _e2e_mail_fqdn }}. Got: {{ _e2e_mail_private_ptr.stdout | default('') }}
+              Private mail endpoint PTR for {{ _e2e_mail_private_ip }} did not return
+              canonical client name {{ _e2e_client_fqdn }}. Got: {{ _e2e_mail_private_ptr.stdout | default('') }}
 
         - name: "PHASE [e2e-mail : Secondary Private Mail Zone SOA]"
           ansible.builtin.command:

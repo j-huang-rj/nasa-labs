@@ -310,6 +310,7 @@
   ansible.builtin.assert:
     quiet: true
     that:
+      - bind9_dmz_client_ip is defined and bind9_dmz_client_ip | length > 0
       - mail_endpoint_dmz_ip is defined and mail_endpoint_dmz_ip | length > 0
       - mail_endpoint_vpn_ip is defined and mail_endpoint_vpn_ip | length > 0
       - mail_mx_value is defined and mail_mx_value | length > 0

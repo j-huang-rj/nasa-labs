@@ -66,6 +66,9 @@ bind9_zones:
       - name: "router"
         type: "A"
         value: "{{ bind9_router_internal_ip }}"
+      - name: "client"
+        type: "A"
+        value: "{{ bind9_dmz_client_ip }}"
       - name: "agent"
         type: "A"
         value: "{{ bind9_dmz_agent_ip }}"
@@ -257,7 +260,7 @@ bind9_zones:
     records:
       - name: "1"
         type: "PTR"
-        value: "smtp.{{ bind9_forward_zone_name }}."
+        value: "client.{{ bind9_forward_zone_name }}."
       - name: "53"
         type: "PTR"
         value: "ns.{{ bind9_forward_zone_name }}."
