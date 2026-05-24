@@ -1,0 +1,7 @@
+# OpenDKIM SigningTable - managed by Ansible
+# Maps sender patterns to KeyTable key names (D-02).
+# Each managed domain signs with its own d= value,
+# avoiding a global Domain directive.
+{% for domain in mail_managed_domains %}
+*@{{ domain }} {{ mail_dkim_selector }}._domainkey.{{ domain }}
+{% endfor %}

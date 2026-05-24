@@ -1,0 +1,9 @@
+# OpenDKIM TrustedHosts - managed by Ansible
+# Hosts and domains trusted to sign; skip verification for these sources.
+127.0.0.1
+::1
+localhost
+{{ mail_smtp_fqdn }}
+{% for domain in mail_managed_domains %}
+{{ domain }}
+{% endfor %}
