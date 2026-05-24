@@ -17,6 +17,9 @@ network_bootstrap_dns4:
 # WireGuard Config
 wireguard_enabled: true
 
+# Mail Config
+mail_enabled: true
+
 # Firewall Config
 firewall_custom_zones:
   - vpn
