@@ -4,9 +4,24 @@
   ansible.builtin.debug:
     msg: "Install mail packages"
 
+- name: "PHASE [install : Probe OpenDKIM Package Availability]"
+  ansible.builtin.command:
+    cmd: dnf -q info opendkim opendkim-tools
+  register: _mail_opendkim_probe
+  changed_when: false
+  failed_when: false
+
+- name: "PHASE [install : Enable EPEL Repository (epel-release) For OpenDKIM]"
+  ansible.builtin.dnf:
+    name: "{{ mail_opendkim_epel_package }}"
+    state: present
+  when:
+    - _mail_opendkim_probe.rc != 0
+    - mail_opendkim_enable_epel | bool
+
 - name: "PHASE [install : Install Mail Packages]"
   ansible.builtin.dnf:
-    name: "{{ mail_postfix_packages + mail_dovecot_packages }}"
+    name: "{{ mail_postfix_packages + mail_dovecot_packages + mail_opendkim_packages }}"
     state: present
 
 - name: "PHASE [install : END]"
