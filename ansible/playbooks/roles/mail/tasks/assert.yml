@@ -56,6 +56,58 @@
   loop: "{{ mail_local_users }}"
   no_log: true
 
+- name: "PHASE [assert : Check DKIM Selector Is 2026-na]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_dkim_selector | string == '2026-na'
+    fail_msg: >-
+      DKIM selector must be exactly '2026-na'. Got: '{{ mail_dkim_selector }}'.
+      Update the selector in secrets or inventory to match the published DNS key.
+
+- name: "PHASE [assert : Check DKIM Private Keys Dict Is Defined]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_dkim_private_keys is defined
+      - mail_dkim_private_keys is mapping
+    fail_msg: >-
+      mail_dkim_private_keys must be defined as a dictionary mapping selector
+      names to PEM-encoded private keys. Provide it in host_vars/*/secrets.yml.
+  no_log: true
+
+- name: "PHASE [assert : Check DKIM Private Key Is Present And Non-Empty]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_dkim_selector in mail_dkim_private_keys
+      - mail_dkim_private_keys[mail_dkim_selector] is defined
+      - mail_dkim_private_keys[mail_dkim_selector] | length > 0
+      - "'-----BEGIN' in mail_dkim_private_keys[mail_dkim_selector]"
+      - "'PRIVATE KEY-----' in mail_dkim_private_keys[mail_dkim_selector]"
+    fail_msg: >-
+      DKIM private key for selector '{{ mail_dkim_selector }}' is missing, empty,
+      or malformed (must contain '-----BEGIN' and 'PRIVATE KEY-----').
+      Provide mail_dkim_private_keys['{{ mail_dkim_selector }}'] with a valid
+      PEM-encoded private key in host_vars/dmz-client-01/secrets.yml.
+  no_log: true
+
+- name: "PHASE [assert : Check mail_pre_dkim_milters Is A Clean Sequence]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_pre_dkim_milters is defined
+      - mail_pre_dkim_milters is sequence
+      - mail_opendkim_postfix_socket not in mail_pre_dkim_milters
+    fail_msg: >-
+      mail_pre_dkim_milters must be a list and must not already contain the
+      OpenDKIM milter socket '{{ mail_opendkim_postfix_socket }}'. The socket
+      is appended automatically; do not duplicate it in the pre-DKIM slot.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:
