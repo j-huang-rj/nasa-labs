@@ -1,0 +1,31 @@
+# Postfix main configuration - managed by Ansible
+# Global managed-domain, SASL, TLS, LMTP, plus delimiter, and relay settings
+
+# Host identity
+myhostname = {{ mail_smtp_fqdn }}
+mydestination = localhost
+
+# Virtual mailbox domains — only accept unauthenticated mail for these (D-09, SMTP-01)
+virtual_mailbox_domains = hash:/etc/postfix/virtual_mailbox_domains
+virtual_transport = lmtp:unix:private/dovecot-lmtp
+
+# Plus-address routing (IMAP-03, IMAP-04)
+recipient_delimiter = +
+
+# Dovecot SASL authentication (SMTP-03)
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+
+# Global policy: SASL auth disabled by default; submission service overrides this (D-08, D-10)
+smtpd_sasl_auth_enable = no
+
+# TLS certificate and key paths (TLS-01, TLS-02)
+smtpd_tls_cert_file = {{ mail_tls_cert_path }}
+smtpd_tls_key_file = {{ mail_tls_key_path }}
+
+# Recipient restrictions — reject non-local relay by default (D-09, SMTP-02)
+smtpd_recipient_restrictions = reject_unauth_destination
+
+# No relayhost or transport_maps shortcuts — outbound mail uses normal DNS resolution (SMTP-05)
+relayhost =
+transport_maps =

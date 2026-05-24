@@ -19,6 +19,9 @@
 - name: "PHASE [main : Configure Dovecot]"
   ansible.builtin.import_tasks: dovecot.yml
 
+- name: "PHASE [main : Configure Postfix]"
+  ansible.builtin.import_tasks: postfix.yml
+
 - name: "END"
   become: false
   ansible.builtin.debug:
