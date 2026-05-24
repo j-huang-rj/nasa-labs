@@ -56,7 +56,7 @@
 - name: "PHASE [opendkim : Render OpenDKIM Main Configuration]"
   ansible.builtin.template:
     src: opendkim/opendkim.conf.j2
-    dest: "{{ mail_opendkim_conf_dir }}/opendkim.conf"
+    dest: /etc/opendkim.conf
     owner: root
     group: "{{ mail_opendkim_group }}"
     mode: "0640"
@@ -91,7 +91,7 @@
 
 - name: "PHASE [opendkim : Validate OpenDKIM Configuration]"
   ansible.builtin.command:
-    cmd: opendkim -t -x /etc/opendkim/opendkim.conf
+    cmd: opendkim -n -x /etc/opendkim.conf
   changed_when: false
 
 - name: "PHASE [opendkim : Flush Handlers]"
