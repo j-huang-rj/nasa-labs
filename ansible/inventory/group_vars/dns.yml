@@ -19,6 +19,9 @@ bind9_dns_resolver_ip: "{{ hostvars['dns-01'].ansible_host }}"
 bind9_dmz_agent_ip: "{{ hostvars['dmz-agent-01'].ansible_host }}"
 bind9_internal_agent_ip: "{{ hostvars['internal-agent-01'].ansible_host }}"
 
+# DMZ client (mail endpoint)
+bind9_dmz_client_ip: "{{ hostvars['dmz-client-01'].ansible_host }}"
+
 # Router gateway IPs
 bind9_router_dmz_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'dmz') | first).ip4.split('/')[0] }}"
 bind9_router_internal_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'internal') | first).ip4.split('/')[0] }}"

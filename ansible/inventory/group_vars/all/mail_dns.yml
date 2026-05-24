@@ -3,14 +3,13 @@
 
 # Mail endpoint host
 mail_endpoint_host: dmz-client-01
-bind9_dmz_client_ip: "{{ hostvars['dmz-client-01'].ansible_host }}"
 
 # Mail service FQDNs
 mail_smtp_fqdn: "smtp.{{ bind9_forward_zone_name }}"
 mail_imap_fqdn: "imap.{{ bind9_forward_zone_name }}"
 
 # Mail endpoint IPs (split-view: DMZ for private, VPN for public)
-mail_endpoint_dmz_ip: "{{ bind9_dmz_client_ip }}"
+mail_endpoint_dmz_ip: "{{ hostvars['dmz-client-01'].ansible_host }}"
 mail_endpoint_vpn_ip: "{{ bind9_vpn_client_ip }}"
 
 # MX record
