@@ -6,7 +6,7 @@ myhostname = {{ mail_smtp_fqdn }}
 mydestination = localhost
 
 # Virtual mailbox domains — only accept unauthenticated mail for these (D-09, SMTP-01)
-virtual_mailbox_domains = hash:/etc/postfix/virtual_mailbox_domains
+virtual_mailbox_domains = lmdb:/etc/postfix/virtual_mailbox_domains
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 
 # Plus-address routing (IMAP-03, IMAP-04)

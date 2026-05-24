@@ -2,6 +2,9 @@
 # Local passwd-file passdb for admin and test (D-01, D-04)
 # Renders unconditionally so local auth works regardless of LDAP enablement
 
+# Treat admin@managed-domain and admin as the same local mailbox identity.
+auth_username_format = %n
+
 passdb {
   driver = passwd-file
   args = {{ mail_dovecot_passwd_path }}
@@ -10,5 +13,5 @@ passdb {
 # Static userdb maps all virtual users to shared vmail identity (D-02)
 userdb {
   driver = static
-  args = uid={{ mail_vmail_user }} gid={{ mail_vmail_group }} home={{ mail_vmail_home }}/%d/%n
+  args = uid={{ mail_vmail_user }} gid={{ mail_vmail_group }} home={{ mail_vmail_home }}/%n
 }

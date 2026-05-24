@@ -25,6 +25,7 @@
     owner: "{{ mail_vmail_user }}"
     group: "{{ mail_vmail_group }}"
     mode: "0750"
+    setype: mail_spool_t
 
 - name: "PHASE [users : Create Dovecot Configuration Directory]"
   ansible.builtin.file:
@@ -39,7 +40,7 @@
     src: dovecot/passwd-file.j2
     dest: "{{ mail_dovecot_passwd_path }}"
     owner: root
-    group: "{{ mail_vmail_group }}"
+    group: dovecot
     mode: "0640"
   no_log: true
 

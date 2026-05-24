@@ -2,6 +2,7 @@
 # Package and service defaults
 mail_postfix_packages:
   - postfix
+  - postfix-lmdb
   - cyrus-sasl-plain
 mail_dovecot_packages:
   - dovecot
