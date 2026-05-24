@@ -1,0 +1,73 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate mail role variables"
+
+- name: "PHASE [assert : Check mail_enabled Is True]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_enabled | bool
+    fail_msg: "mail_enabled must be true when the mail role is invoked"
+
+- name: "PHASE [assert : Check mail_managed_domains Is Defined And Non-Empty]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_managed_domains is defined
+      - mail_managed_domains | length > 0
+    fail_msg: "mail_managed_domains must be defined as a non-empty list of domain names"
+
+- name: "PHASE [assert : Check mail_tls_certificate Is Non-Empty]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_tls_certificate is defined
+      - mail_tls_certificate | length > 0
+    fail_msg: >-
+      mail_tls_certificate must be non-empty. Provide the PEM certificate content
+      in host_vars/*/secrets.yml.
+  no_log: true
+
+- name: "PHASE [assert : Check mail_tls_private_key Is Non-Empty]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_tls_private_key is defined
+      - mail_tls_private_key | length > 0
+    fail_msg: >-
+      mail_tls_private_key must be non-empty. Provide the PEM private key content
+      in host_vars/*/secrets.yml.
+  no_log: true
+
+- name: "PHASE [assert : Check mail_local_user_password_hashes.admin Is Non-Empty]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_local_user_password_hashes is defined
+      - mail_local_user_password_hashes.admin is defined
+      - mail_local_user_password_hashes.admin | length > 0
+    fail_msg: >-
+      mail_local_user_password_hashes.admin must be non-empty.
+      Provide the password hash in host_vars/*/secrets.yml.
+  no_log: true
+
+- name: "PHASE [assert : Check mail_local_user_password_hashes.test Is Non-Empty]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_local_user_password_hashes is defined
+      - mail_local_user_password_hashes.test is defined
+      - mail_local_user_password_hashes.test | length > 0
+    fail_msg: >-
+      mail_local_user_password_hashes.test must be non-empty.
+      Provide the password hash in host_vars/*/secrets.yml.
+  no_log: true
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

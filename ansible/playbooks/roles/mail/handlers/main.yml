@@ -1,0 +1,10 @@
+---
+- name: "PHASE [handler : Restart Postfix]"
+  ansible.builtin.systemd_service:
+    name: "{{ mail_postfix_service_name }}"
+    state: restarted
+
+- name: "PHASE [handler : Restart Dovecot]"
+  ansible.builtin.systemd_service:
+    name: "{{ mail_dovecot_service_name }}"
+    state: restarted

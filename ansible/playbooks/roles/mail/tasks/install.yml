@@ -1,0 +1,15 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install mail packages"
+
+- name: "PHASE [install : Install Mail Packages]"
+  ansible.builtin.dnf:
+    name: "{{ mail_postfix_packages + mail_dovecot_packages }}"
+    state: present
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"
