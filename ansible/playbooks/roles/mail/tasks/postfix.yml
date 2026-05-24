@@ -48,17 +48,45 @@
     mode: "0644"
   notify: "PHASE [handler : Restart Postfix]"
 
+- name: "PHASE [postfix : Stat Sender Login Maps Source]"
+  ansible.builtin.stat:
+    path: "{{ mail_postfix_conf_dir }}/sender_login_maps"
+  register: mail_sender_login_maps_src_stat
+
+- name: "PHASE [postfix : Stat Sender Login Maps Database]"
+  ansible.builtin.stat:
+    path: "{{ mail_postfix_conf_dir }}/sender_login_maps.db"
+  register: mail_sender_login_maps_db_stat
+
 - name: "PHASE [postfix : Build Sender Login Maps Database]"
   ansible.builtin.command:
     cmd: postmap {{ mail_postfix_conf_dir }}/sender_login_maps
-  args:
-    creates: "{{ mail_postfix_conf_dir }}/sender_login_maps.db"
+  when: >-
+    not mail_sender_login_maps_db_stat.stat.exists or
+    (mail_sender_login_maps_src_stat.stat.exists and
+     mail_sender_login_maps_db_stat.stat.mtime < mail_sender_login_maps_src_stat.stat.mtime)
+  changed_when: true
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [postfix : Stat Virtual Mailbox Domains Source]"
+  ansible.builtin.stat:
+    path: "{{ mail_postfix_conf_dir }}/virtual_mailbox_domains"
+  register: mail_virtual_mailbox_domains_src_stat
+
+- name: "PHASE [postfix : Stat Virtual Mailbox Domains Database]"
+  ansible.builtin.stat:
+    path: "{{ mail_postfix_conf_dir }}/virtual_mailbox_domains.db"
+  register: mail_virtual_mailbox_domains_db_stat
 
 - name: "PHASE [postfix : Build Virtual Mailbox Domains Database]"
   ansible.builtin.command:
     cmd: postmap {{ mail_postfix_conf_dir }}/virtual_mailbox_domains
-  args:
-    creates: "{{ mail_postfix_conf_dir }}/virtual_mailbox_domains.db"
+  when: >-
+    not mail_virtual_mailbox_domains_db_stat.stat.exists or
+    (mail_virtual_mailbox_domains_src_stat.stat.exists and
+     mail_virtual_mailbox_domains_db_stat.stat.mtime < mail_virtual_mailbox_domains_src_stat.stat.mtime)
+  changed_when: true
+  notify: "PHASE [handler : Restart Postfix]"
 
 - name: "PHASE [postfix : Validate Postfix Configuration]"
   ansible.builtin.command:
