@@ -1,0 +1,8 @@
+# Dovecot mail location configuration - managed by Ansible
+# Maildir storage under shared vmail path (D-02)
+mail_location = maildir:{{ mail_vmail_home }}/%d/%n/Maildir
+
+# Namespace configuration
+namespace inbox {
+ inbox = yes
+}

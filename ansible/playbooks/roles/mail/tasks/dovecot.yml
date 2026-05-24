@@ -1,0 +1,77 @@
+---
+- name: "PHASE [dovecot : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure Dovecot IMAP, auth, and LMTP"
+
+- name: "PHASE [dovecot : Create Dovecot Conf.d Directory]"
+  ansible.builtin.file:
+    path: "{{ mail_dovecot_conf_dir }}/conf.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "PHASE [dovecot : Render Dovecot Main Configuration]"
+  ansible.builtin.template:
+    src: dovecot/dovecot.conf.j2
+    dest: "{{ mail_dovecot_conf_dir }}/dovecot.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Dovecot]"
+
+- name: "PHASE [dovecot : Render Dovecot Auth Configuration]"
+  ansible.builtin.template:
+    src: dovecot/conf.d/10-auth.conf.j2
+    dest: "{{ mail_dovecot_conf_dir }}/conf.d/10-auth.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Dovecot]"
+
+- name: "PHASE [dovecot : Render Dovecot Mail Configuration]"
+  ansible.builtin.template:
+    src: dovecot/conf.d/10-mail.conf.j2
+    dest: "{{ mail_dovecot_conf_dir }}/conf.d/10-mail.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Dovecot]"
+
+- name: "PHASE [dovecot : Render Dovecot Master Configuration]"
+  ansible.builtin.template:
+    src: dovecot/conf.d/10-master.conf.j2
+    dest: "{{ mail_dovecot_conf_dir }}/conf.d/10-master.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Dovecot]"
+
+- name: "PHASE [dovecot : Render Dovecot SSL Configuration]"
+  ansible.builtin.template:
+    src: dovecot/conf.d/10-ssl.conf.j2
+    dest: "{{ mail_dovecot_conf_dir }}/conf.d/10-ssl.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Dovecot]"
+
+- name: "PHASE [dovecot : Validate Dovecot Configuration]"
+  ansible.builtin.command:
+    cmd: doveconf -n
+  changed_when: false
+
+- name: "PHASE [dovecot : Flush Handlers]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [dovecot : Enable And Start Dovecot]"
+  ansible.builtin.systemd_service:
+    name: "{{ mail_dovecot_service_name }}"
+    enabled: true
+    state: started
+
+- name: "PHASE [dovecot : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed Dovecot configuration phase"

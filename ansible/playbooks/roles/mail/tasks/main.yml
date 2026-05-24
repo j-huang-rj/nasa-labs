@@ -16,6 +16,9 @@
 - name: "PHASE [main : Deploy TLS Certificates]"
   ansible.builtin.import_tasks: tls.yml
 
+- name: "PHASE [main : Configure Dovecot]"
+  ansible.builtin.import_tasks: dovecot.yml
+
 - name: "END"
   become: false
   ansible.builtin.debug:
