@@ -8,3 +8,8 @@
   ansible.builtin.systemd_service:
     name: "{{ mail_dovecot_service_name }}"
     state: restarted
+
+- name: "PHASE [handler : Restart OpenDKIM]"
+  ansible.builtin.systemd_service:
+    name: "{{ mail_opendkim_service_name }}"
+    state: restarted
