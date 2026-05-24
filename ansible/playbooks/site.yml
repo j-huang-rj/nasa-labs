@@ -4,3 +4,6 @@
 
 - name: DNS Services
   ansible.builtin.import_playbook: dns_configure.yml
+
+- name: Mail Services
+  ansible.builtin.import_playbook: mail_configure.yml

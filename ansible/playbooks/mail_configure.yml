@@ -1,0 +1,11 @@
+---
+# Prerequisites:
+#   - dns_configure.yml
+
+- name: Mail Service Configuration
+  hosts: mail
+  gather_facts: true
+  become: true
+  roles:
+    - role: mail
+      when: mail_enabled
