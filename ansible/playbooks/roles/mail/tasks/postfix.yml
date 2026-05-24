@@ -39,6 +39,15 @@
     mode: "0644"
   notify: "PHASE [handler : Restart Postfix]"
 
+- name: "PHASE [postfix : Render Postfix Master Configuration]"
+  ansible.builtin.template:
+    src: postfix/master.cf.j2
+    dest: "{{ mail_postfix_conf_dir }}/master.cf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Postfix]"
+
 - name: "PHASE [postfix : Build Sender Login Maps Database]"
   ansible.builtin.command:
     cmd: postmap {{ mail_postfix_conf_dir }}/sender_login_maps
