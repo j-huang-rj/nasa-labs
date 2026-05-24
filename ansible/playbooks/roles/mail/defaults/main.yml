@@ -1,0 +1,44 @@
+---
+# Package and service defaults
+mail_postfix_packages:
+  - postfix
+  - cyrus-sasl-plain
+mail_dovecot_packages:
+  - dovecot
+mail_postfix_service_name: postfix
+mail_dovecot_service_name: dovecot
+
+# Virtual mailbox user
+mail_vmail_user: vmail
+mail_vmail_group: vmail
+mail_vmail_home: /var/vmail
+
+# Configuration directories
+mail_postfix_conf_dir: /etc/postfix
+mail_dovecot_conf_dir: /etc/dovecot
+
+# TLS certificate and private key paths on the target host
+mail_tls_cert_path: /etc/pki/tls/certs/mail.pem
+mail_tls_key_path: /etc/pki/tls/private/mail.key
+
+# Dovecot passwd-file path for local virtual users
+mail_dovecot_passwd_path: /etc/dovecot/passwd
+
+# Postfix-Dovecot integration sockets (inside Postfix chroot)
+mail_dovecot_auth_socket_path: /var/spool/postfix/private/auth
+mail_dovecot_lmtp_socket_path: /var/spool/postfix/private/dovecot-lmtp
+
+# Managed domains — derived from DNS identity variables, not a literal student ID
+mail_managed_domains:
+  - "{{ bind9_forward_zone_name }}"
+  - "{{ mail_domain_name }}"
+
+# Local virtual users with passwd-file authentication (D-01, D-04)
+mail_local_users:
+  - admin
+  - test
+
+# Secret variables — real values come from gitignored host_vars/*/secrets.yml
+mail_tls_certificate: ""
+mail_tls_private_key: ""
+mail_local_user_password_hashes: {}

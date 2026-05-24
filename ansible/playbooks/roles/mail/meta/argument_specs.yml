@@ -1,0 +1,120 @@
+---
+argument_specs:
+  main:
+    short_description: Validate mail role variables
+
+    options:
+      mail_enabled:
+        type: bool
+        required: true
+        description: Whether the mail role should be active on this host
+
+      mail_postfix_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for Postfix SMTP
+
+      mail_dovecot_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for Dovecot IMAP
+
+      mail_postfix_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the Postfix service
+
+      mail_dovecot_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the Dovecot service
+
+      mail_vmail_user:
+        type: str
+        required: false
+        description: System username for the shared vmail identity
+
+      mail_vmail_group:
+        type: str
+        required: false
+        description: System group for the shared vmail identity
+
+      mail_vmail_home:
+        type: str
+        required: false
+        description: Home directory for the vmail user and Maildir storage root
+
+      mail_postfix_conf_dir:
+        type: str
+        required: false
+        description: Absolute path to the Postfix configuration directory
+
+      mail_dovecot_conf_dir:
+        type: str
+        required: false
+        description: Absolute path to the Dovecot configuration directory
+
+      mail_tls_cert_path:
+        type: str
+        required: false
+        description: Absolute path for the TLS certificate PEM file on the target host
+
+      mail_tls_key_path:
+        type: str
+        required: false
+        description: Absolute path for the TLS private key PEM file on the target host
+
+      mail_dovecot_passwd_path:
+        type: str
+        required: false
+        description: Absolute path for the Dovecot passwd-file on the target host
+
+      mail_dovecot_auth_socket_path:
+        type: str
+        required: false
+        description: >-
+          Path for the Dovecot auth socket inside the Postfix chroot for SASL authentication
+
+      mail_dovecot_lmtp_socket_path:
+        type: str
+        required: false
+        description: >-
+          Path for the Dovecot LMTP socket inside the Postfix chroot for mailbox delivery
+
+      mail_managed_domains:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          List of domains managed by this mail server. Defaults to
+          [bind9_forward_zone_name, mail_domain_name] derived from DNS identity.
+
+      mail_local_users:
+        type: list
+        elements: str
+        required: false
+        description: Local virtual user names for passwd-file authentication (admin, test)
+
+      mail_tls_certificate:
+        type: str
+        required: false
+        description: >-
+          PEM-encoded TLS certificate content. Must be provided by host_vars/*/secrets.yml.
+          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
+
+      mail_tls_private_key:
+        type: str
+        required: false
+        description: >-
+          PEM-encoded TLS private key content. Must be provided by host_vars/*/secrets.yml.
+          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
+
+      mail_local_user_password_hashes:
+        type: dict
+        required: false
+        description: >-
+          Dictionary mapping local user names to hashed passwords for Dovecot passwd-file.
+          Must contain keys for all entries in mail_local_users.
+          Asserted non-empty for each user at runtime when mail_enabled is true (no_log: true).
