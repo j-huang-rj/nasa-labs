@@ -87,10 +87,16 @@
       - mail_dkim_private_keys[mail_dkim_selector] is defined
       - mail_dkim_private_keys[mail_dkim_selector] | length > 0
       - "'-----BEGIN' in mail_dkim_private_keys[mail_dkim_selector]"
-      - "'PRIVATE KEY-----' in mail_dkim_private_keys[mail_dkim_selector]"
+      - "'-----END' in mail_dkim_private_keys[mail_dkim_selector]"
+      - >-
+        mail_dkim_private_keys[mail_dkim_selector]
+        is regex('-----BEGIN (RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----')
+      - >-
+        mail_dkim_private_keys[mail_dkim_selector]
+        is regex('-----END (RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----')
     fail_msg: >-
       DKIM private key for selector '{{ mail_dkim_selector }}' is missing, empty,
-      or malformed (must contain '-----BEGIN' and 'PRIVATE KEY-----').
+      or malformed (must contain valid PEM BEGIN/END PRIVATE KEY markers).
       Provide mail_dkim_private_keys['{{ mail_dkim_selector }}'] with a valid
       PEM-encoded private key in host_vars/dmz-client-01/secrets.yml.
   no_log: true

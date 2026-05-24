@@ -17,7 +17,6 @@ import time
 import imaplib
 from email import policy
 from email.parser import BytesParser
-from email.mime.text import MIMEText
 
 # ---------------------------------------------------------------------------
 # Result helpers
@@ -105,15 +104,21 @@ def _imap_fetch_raw(
                         elif isinstance(raw, str):
                             conn.logout()
                             return True, raw.encode("utf-8", errors="replace")
+            # Message not found yet — wait for delivery with backoff
             conn.logout()
         except Exception as e:
             if attempt < retries - 1:
                 print(f"  NOTE: IMAP fetch attempt {attempt + 1}/{retries} failed: {e}")
-                time.sleep(delay)
             else:
                 return False, None
-        else:
-            time.sleep(delay)
+
+        if attempt < retries - 1:
+            backoff = delay * (2**attempt)
+            print(
+                f"  NOTE: IMAP fetch attempt {attempt + 1}/{retries}: "
+                f"message not yet delivered; retrying in {backoff:.0f}s"
+            )
+            time.sleep(backoff)
 
     return False, None
 
@@ -271,21 +276,41 @@ def case_dkim_key(args):
             f"-k {shlex.quote(args.dkim_key_path)} -vvv"
         )
         proc = ssh_cmd(args.ssh_host, remote_cmd, timeout=args.timeout)
+        output = ((proc.stdout or "") + (proc.stderr or "")).strip()
+
+        # Gate on return code first
         if proc.returncode != 0:
             fail_case(
                 "dkim-key",
                 f"opendkim-testkey failed for {domain}: "
-                f"rc={proc.returncode} stderr={proc.stderr.strip()[:200]}",
+                f"rc={proc.returncode} stderr={output[:200]}",
             )
             return
-        # opendkim-testkey may print "key OK" or similar on success
-        output = (proc.stdout or "") + (proc.stderr or "")
-        if "key OK" not in output and "key not secure" not in output:
-            # "key not secure" is a warning, not a failure; treat as pass
+
+        # rc == 0: decide by output content
+        key_ok = "key OK" in output
+        key_not_secure = "key not secure" in output
+
+        if key_ok:
+            # Success — optionally warn about DNSSEC
+            diag = output[-300:] if key_not_secure else ""
+            pass_case(
+                "dkim-key",
+                f"opendkim-testkey {domain}: key OK"
+                f"{' (DNSSEC: key not secure)' if key_not_secure else ''}",
+            )
+        elif key_not_secure and proc.returncode == 0:
+            # Non-fatal DNSSEC-only warning; no "key OK" but exit 0
+            pass_case(
+                "dkim-key",
+                f"opendkim-testkey {domain}: exit 0 with DNSSEC warning "
+                f"(key not secure) {output[-300:]}",
+            )
+        else:
             fail_case(
                 "dkim-key",
-                f"opendkim-testkey for {domain} did not report success: "
-                f"{output.strip()[:200]}",
+                f"opendkim-testkey for {domain} did not report success "
+                f"(rc=0 but unexpected output): {output[:200]}",
             )
             return
     pass_case("dkim-key", "opendkim-testkey passed for both managed domains")
@@ -310,7 +335,7 @@ def _dig_txt(record: str, timeout: int = 15) -> str:
 def case_spf_dmarc(args):
     """Verify SPF and DMARC DNS TXT records for both managed domains."""
     # SPF expected (per-identity spec)
-    expected_spf = "v=spf1 a:smtp."
+    expected_spf_prefix = "v=spf1 a:smtp."
 
     for domain in [args.domain, args.mail_domain]:
         # --- DKIM TXT: reject t=y ---
@@ -329,16 +354,44 @@ def case_spf_dmarc(args):
             )
             return
 
-        # --- SPF: require v=spf1 a:smtp.<domain> ~all ---
+        # --- SPF: require v=spf1 a:smtp.<domain> ~all (strict match) ---
         spf_txt = _dig_txt(domain, timeout=args.timeout)
         if not spf_txt:
             fail_case("spf-dmarc", f"SPF TXT record not found for {domain}")
             return
-        if expected_spf not in spf_txt or "~all" not in spf_txt:
+
+        # Extract only the v=spf1 record (ignore other TXT records)
+        spf_lines = [ln.strip().strip('"') for ln in spf_txt.splitlines() if ln.strip()]
+        vspf = [ln for ln in spf_lines if ln.startswith("v=spf1")]
+        if not vspf:
             fail_case(
                 "spf-dmarc",
-                f"SPF record for {domain} missing '{expected_spf}' or '~all': "
-                f"{spf_txt[:200]}",
+                f"No v=spf1 record found in TXT for {domain}: {spf_txt[:200]}",
+            )
+            return
+        if len(vspf) > 1:
+            fail_case(
+                "spf-dmarc",
+                f"Multiple v=spf1 records found for {domain} (ambiguous): {vspf}",
+            )
+            return
+
+        spf_record = vspf[0]
+
+        # Reject overly permissive mechanisms that would subvert the policy
+        if "+all" in spf_record:
+            fail_case(
+                "spf-dmarc",
+                f"SPF record for {domain} contains +all (passes everything): "
+                f"{spf_record}",
+            )
+            return
+
+        if expected_spf_prefix not in spf_record or "~all" not in spf_record:
+            fail_case(
+                "spf-dmarc",
+                f"SPF record for {domain} missing '{expected_spf_prefix}' or '~all': "
+                f"{spf_record[:200]}",
             )
             return
 
