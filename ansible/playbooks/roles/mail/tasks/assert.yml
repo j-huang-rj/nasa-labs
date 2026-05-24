@@ -43,28 +43,17 @@
       in host_vars/*/secrets.yml.
   no_log: true
 
-- name: "PHASE [assert : Check mail_local_user_password_hashes.admin Is Non-Empty]"
+- name: "PHASE [assert : Check mail_local_user_password_hashes Are Defined And Non-Empty]"
   ansible.builtin.assert:
     quiet: true
     that:
       - mail_local_user_password_hashes is defined
-      - mail_local_user_password_hashes.admin is defined
-      - mail_local_user_password_hashes.admin | length > 0
+      - mail_local_user_password_hashes[item] is defined
+      - mail_local_user_password_hashes[item] | length > 0
     fail_msg: >-
-      mail_local_user_password_hashes.admin must be non-empty.
+      Missing or empty password hash for mail user '{{ item }}'.
       Provide the password hash in host_vars/*/secrets.yml.
-  no_log: true
-
-- name: "PHASE [assert : Check mail_local_user_password_hashes.test Is Non-Empty]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - mail_local_user_password_hashes is defined
-      - mail_local_user_password_hashes.test is defined
-      - mail_local_user_password_hashes.test | length > 0
-    fail_msg: >-
-      mail_local_user_password_hashes.test must be non-empty.
-      Provide the password hash in host_vars/*/secrets.yml.
+  loop: "{{ mail_local_users }}"
   no_log: true
 
 - name: "PHASE [assert : END]"
