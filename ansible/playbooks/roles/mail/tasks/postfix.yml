@@ -60,7 +60,7 @@
 
 - name: "PHASE [postfix : Build Sender Login Maps Database]"
   ansible.builtin.command:
-    cmd: postmap {{ mail_postfix_conf_dir }}/sender_login_maps
+    cmd: postmap "{{ mail_postfix_conf_dir }}/sender_login_maps"
   when: >-
     not mail_sender_login_maps_db_stat.stat.exists or
     (mail_sender_login_maps_src_stat.stat.exists and
@@ -80,7 +80,7 @@
 
 - name: "PHASE [postfix : Build Virtual Mailbox Domains Database]"
   ansible.builtin.command:
-    cmd: postmap {{ mail_postfix_conf_dir }}/virtual_mailbox_domains
+    cmd: postmap "{{ mail_postfix_conf_dir }}/virtual_mailbox_domains"
   when: >-
     not mail_virtual_mailbox_domains_db_stat.stat.exists or
     (mail_virtual_mailbox_domains_src_stat.stat.exists and
