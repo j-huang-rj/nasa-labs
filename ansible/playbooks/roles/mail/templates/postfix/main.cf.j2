@@ -32,3 +32,12 @@ smtpd_recipient_restrictions = reject_unauth_destination
 # No relayhost or transport_maps shortcuts — outbound mail uses normal DNS resolution (SMTP-05)
 relayhost =
 transport_maps =
+
+# Milter chain for DKIM signing (MSEC-03)
+# Phase 06 insertion point: rewrite/filter milters must be prepended before
+# OpenDKIM so DKIM signs final rewritten content (D-07, D-15).
+# mail_pre_dkim_milters is empty in Phase 04; populated in Phase 06.
+milter_protocol = 6
+milter_default_action = tempfail
+smtpd_milters = {{ (mail_pre_dkim_milters + [mail_opendkim_postfix_socket]) | join(', ') }}
+non_smtpd_milters = {{ (mail_pre_dkim_milters + [mail_opendkim_postfix_socket]) | join(', ') }}
