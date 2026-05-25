@@ -13,3 +13,8 @@
   ansible.builtin.systemd_service:
     name: "{{ mail_opendkim_service_name }}"
     state: restarted
+
+- name: "PHASE [handler : Restart List API]"
+  ansible.builtin.systemd_service:
+    name: "{{ mail_list_api_service_name }}"
+    state: restarted

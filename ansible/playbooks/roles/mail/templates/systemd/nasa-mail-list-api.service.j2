@@ -1,0 +1,22 @@
+[Unit]
+Description=NASA Mailing List HTTP API
+After=network.target postfix.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory={{ mail_list_api_app_dir }}
+ExecStart={{ mail_list_api_venv_dir }}/bin/uvicorn app:app --host {{ mail_list_api_listen_host }} --port {{ mail_list_api_listen_port }}
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths={{ mail_list_api_state_dir }}
+
+[Install]
+WantedBy=multi-user.target
