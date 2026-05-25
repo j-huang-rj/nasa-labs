@@ -178,6 +178,114 @@ class ListCreate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Dynamic list state — JSON persistence (D-12, D-17, D-18)
+# ---------------------------------------------------------------------------
+
+# Expected shape: { "lists": { "listname": ["user1", "user2"] } }
+_EMPTY_STATE: dict[str, dict[str, list[str]]] = {"lists": {}}
+
+
+def _load_state() -> dict[str, dict[str, list[str]]]:
+    """Load the dynamic list state from ``settings["state_file"]``.
+
+    Returns ``_EMPTY_STATE`` when the file does not exist (first run /
+    bootstrap) or is unreadable.  Corrupt JSON is logged and treated as
+    an empty state so the API can rebuild from a known baseline.
+    """
+    state_path = Path(settings["state_file"])
+    if not state_path.exists():
+        logger.info("state file %s does not exist — assuming empty state", state_path)
+        return {"lists": {}}
+    try:
+        raw = state_path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.error("corrupt state file %s: %s — refusing to load", state_path, exc)
+        return {"lists": {}}
+    except OSError as exc:
+        logger.error("cannot read state file %s: %s", state_path, exc)
+        return {"lists": {}}
+    # Coerce shape for forward-compatibility.
+    if not isinstance(data, dict):
+        logger.error("state file %s is not a JSON object — treating as empty", state_path)
+        return {"lists": {}}
+    return {"lists": data.get("lists", {})}
+
+
+def _save_state(data: dict[str, dict[str, list[str]]]) -> None:
+    """Atomically write JSON state to ``settings["state_file"]``.
+
+    Uses a temp-file in the same directory, fsync, then ``os.replace``
+    so a crash or partial write never corrupts the real file (D-13).
+    """
+    state_path = Path(settings["state_file"])
+    state_dir = state_path.parent
+    tmp = state_dir / f".{state_path.name}.tmp"
+    payload = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False)
+    try:
+        with tmp.open("w", encoding="utf-8") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, state_path)
+        # fsync the directory so the rename is durable on journaling filesystems.
+        _fsync_dir(state_dir)
+        logger.debug("state written to %s (%d bytes)", state_path, len(payload))
+    except OSError as exc:
+        logger.error("failed to write state file %s: %s", state_path, exc)
+        # Try to clean up the temp so it doesn't look like a stored state.
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+def _render_postfix_source(
+    state: dict[str, dict[str, list[str]]],
+    managed_domains: list[str],
+) -> str:
+    """Render a complete Postfix virtual-alias map source from the JSON state.
+
+    - Renders every dynamic list for every managed domain (D-17).
+    - Member targets are bare usernames (D-18).
+    - List names are sorted for deterministic output; member order within
+      each list is preserved as stored.
+    - Includes a header comment warning the source is API-managed.
+    """
+    lines: list[str] = []
+    lines.append(
+        "# Dynamic mailing-list aliases — MANAGED BY nasa-mail-list-api."
+    )
+    lines.append(
+        "# DO NOT EDIT — changes will be overwritten on the next create/delete."
+    )
+    if not state.get("lists"):
+        # Empty state still produces a valid (empty) map source.
+        return "\n".join(lines) + "\n"
+
+    for list_name in sorted(state["lists"]):
+        members = state["lists"][list_name]
+        if not members:
+            continue
+        member_str = ", ".join(members)
+        for domain in managed_domains:
+            lines.append(f"{list_name}@{domain} {member_str}")
+
+    return "\n".join(lines) + "\n"
+
+
+def _fsync_dir(dir_path: Path) -> None:
+    """fsync the directory fd so metadata (renames) are durable."""
+    try:
+        fd = os.open(str(dir_path), os.O_RDONLY)
+        os.fsync(fd)
+        os.close(fd)
+    except OSError as exc:
+        logger.warning("cannot fsync directory %s: %s", dir_path, exc)
+
+
+# ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
 app = FastAPI()
