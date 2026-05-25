@@ -286,6 +286,274 @@ def _fsync_dir(dir_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Locked rollback-safe activation (D-13, D-14, D-15)
+# ---------------------------------------------------------------------------
+def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
+    """Execute a state mutation inside the activation critical section.
+
+    ``mutate_state_fn(previous_state)`` must return ``(candidate_state, ok)``
+    where *candidate_state* is the desired new ``{"lists": {...}}`` dict and
+    *ok* is a boolean signalling whether the mutation itself accepted the
+    input (e.g. rejected because zero deliverable members).
+
+    The caller receives ``{"status": "ok", ...}`` on success or raises
+    ``HTTPException(5xx)`` on activation failure.
+
+    Locking, Postfix map rebuild, reload, JSON persistence, rollback, and
+    fsync sequencing are handled entirely inside this function so route
+    handlers never touch privileged operations directly.
+    """
+    lock_path = Path(settings["lock_file"])
+    active_source_path = Path(settings["active_source_path"])
+    source_dir = active_source_path.parent
+    state_path = Path(settings["state_file"])
+
+    # Ensure lock file and state directory exist before locking.
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with lock_path.open("a") as lock_fh:
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX)
+        except OSError as exc:
+            logger.error("[%s] cannot acquire lock: %s", context, exc)
+            raise HTTPException(status_code=503, detail="service busy")
+
+        try:
+            # ----- 2. Load previous state -----
+            previous_state = _load_state()
+
+            # ----- 3. Build candidate state -----
+            candidate_state, ok = mutate_state_fn(previous_state)
+            if not ok:
+                # Mutation rejected the input (e.g. zero-deliverable) —
+                # do NOT activate but return a 4xx.
+                raise HTTPException(
+                    status_code=422,
+                    detail="no deliverable members remain after validation",
+                )
+
+            # Build candidate Postfix source in memory.
+            managed = settings.get("managed_domains", [])
+            candidate_source = _render_postfix_source(candidate_state, managed)
+
+            # ----- 4. Snapshot previous files -----
+            prev_source_bytes: bytes | None = None
+            prev_lmdb_bytes: bytes | None = None
+            prev_source_existed = active_source_path.exists()
+            prev_lmdb_path = Path(str(active_source_path) + ".lmdb")
+            prev_lmdb_existed = prev_lmdb_path.exists()
+
+            if prev_source_existed:
+                prev_source_bytes = active_source_path.read_bytes()
+            if prev_lmdb_existed:
+                prev_lmdb_bytes = prev_lmdb_path.read_bytes()
+
+            # ----- 5. Write candidate source (temp + fsync + replace) -----
+            tmp_source = source_dir / f".{active_source_path.name}.tmp"
+            try:
+                tmp_source.write_text(candidate_source, encoding="utf-8")
+                # fsync the file
+                with tmp_source.open("rb") as fh:
+                    os.fsync(fh.fileno())
+                os.replace(tmp_source, active_source_path)
+                _fsync_dir(source_dir)
+                logger.info("[%s] wrote candidate source to %s", context, active_source_path)
+            except OSError as exc:
+                logger.error("[%s] failed to write map source: %s", context, exc)
+                # Clean up temp
+                try:
+                    tmp_source.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                _rollback(
+                    active_source_path, prev_lmdb_path,
+                    prev_source_bytes, prev_lmdb_bytes,
+                    prev_source_existed, prev_lmdb_existed,
+                    context,
+                )
+                raise HTTPException(status_code=500, detail="activation failed")
+
+            # ----- 6. postmap -----
+            try:
+                proc = subprocess.run(
+                    ["postmap", f"lmdb:{active_source_path}"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    shell=False,
+                )
+                logger.info(
+                    "[%s] postmap ok — stdout: %s",
+                    context, (proc.stdout or "").strip()[:200],
+                )
+            except subprocess.CalledProcessError as exc:
+                logger.error(
+                    "[%s] postmap failed (rc=%d): stderr=%s",
+                    context, exc.returncode, (exc.stderr or "").strip()[:500],
+                )
+                _rollback(
+                    active_source_path, prev_lmdb_path,
+                    prev_source_bytes, prev_lmdb_bytes,
+                    prev_source_existed, prev_lmdb_existed,
+                    context,
+                )
+                raise HTTPException(status_code=500, detail="activation failed")
+            except FileNotFoundError:
+                logger.error("[%s] postmap binary not found", context)
+                _rollback(
+                    active_source_path, prev_lmdb_path,
+                    prev_source_bytes, prev_lmdb_bytes,
+                    prev_source_existed, prev_lmdb_existed,
+                    context,
+                )
+                raise HTTPException(status_code=500, detail="activation failed")
+
+            # ----- 7. postfix reload -----
+            try:
+                proc = subprocess.run(
+                    ["postfix", "reload"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    shell=False,
+                )
+                logger.info(
+                    "[%s] postfix reload ok — stdout: %s",
+                    context, (proc.stdout or "").strip()[:200],
+                )
+            except subprocess.CalledProcessError as exc:
+                logger.error(
+                    "[%s] postfix reload failed (rc=%d): stderr=%s",
+                    context, exc.returncode, (exc.stderr or "").strip()[:500],
+                )
+                _rollback(
+                    active_source_path, prev_lmdb_path,
+                    prev_source_bytes, prev_lmdb_bytes,
+                    prev_source_existed, prev_lmdb_existed,
+                    context,
+                )
+                raise HTTPException(status_code=500, detail="activation failed")
+            except FileNotFoundError:
+                logger.error("[%s] postfix binary not found", context)
+                _rollback(
+                    active_source_path, prev_lmdb_path,
+                    prev_source_bytes, prev_lmdb_bytes,
+                    prev_source_existed, prev_lmdb_existed,
+                    context,
+                )
+                raise HTTPException(status_code=500, detail="activation failed")
+
+            # ----- 8. Persist JSON state only after successful activation -----
+            try:
+                _save_state(candidate_state)
+            except OSError:
+                logger.critical(
+                    "[%s] postmap+reload succeeded but state file write failed — "
+                    "Postfix behaviour is active but JSON is stale. "
+                    "Next create/delete will reconcile from the active map.",
+                    context,
+                )
+                # Do NOT roll back the LMDB — that would break active mail
+                # behaviour that already passed postmap+reload.  Instead,
+                # surface a 5xx so OJ retries, and the next request will
+                # rebuild state consistency.
+                raise HTTPException(status_code=500, detail="activation incomplete")
+
+            logger.info("[%s] activation complete — %d lists", context,
+                         len(candidate_state.get("lists", {})))
+            return {"status": "ok"}
+
+        finally:
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
+
+
+def _rollback(
+    active_source_path: Path,
+    prev_lmdb_path: Path,
+    prev_source_bytes: bytes | None,
+    prev_lmdb_bytes: bytes | None,
+    prev_source_existed: bool,
+    prev_lmdb_existed: bool,
+    context: str,
+) -> None:
+    """Restore previous source and .lmdb, or remove new files if none existed.
+
+    Attempts a ``postfix reload`` after restoration so the running Postfix
+    instance always reflects the rollback target.
+    """
+    logger.warning("[%s] rolling back map to pre-mutation state", context)
+    source_dir = active_source_path.parent
+
+    # Restore source file
+    if prev_source_existed and prev_source_bytes is not None:
+        try:
+            tmp = source_dir / f".{active_source_path.name}.rollback.tmp"
+            tmp.write_bytes(prev_source_bytes)
+            with tmp.open("rb") as fh:
+                os.fsync(fh.fileno())
+            os.replace(tmp, active_source_path)
+            _fsync_dir(source_dir)
+            logger.info("[%s] restored previous map source", context)
+        except OSError as exc:
+            logger.error("[%s] failed to restore map source: %s", context, exc)
+    elif not prev_source_existed:
+        # Remove the newly-created candidate files.
+        try:
+            active_source_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.error("[%s] failed to remove candidate source: %s", context, exc)
+
+    # Restore .lmdb file
+    if prev_lmdb_existed and prev_lmdb_bytes is not None:
+        try:
+            tmp = source_dir / f".{prev_lmdb_path.name}.rollback.tmp"
+            tmp.write_bytes(prev_lmdb_bytes)
+            with tmp.open("rb") as fh:
+                os.fsync(fh.fileno())
+            os.replace(tmp, prev_lmdb_path)
+            _fsync_dir(source_dir)
+            logger.info("[%s] restored previous .lmdb database", context)
+        except OSError as exc:
+            logger.error("[%s] failed to restore .lmdb: %s", context, exc)
+    elif not prev_lmdb_existed:
+        try:
+            prev_lmdb_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.error("[%s] failed to remove candidate .lmdb: %s", context, exc)
+
+    # Rebuild LMDB from restored source if we restored it.
+    if prev_source_existed and prev_source_bytes is not None:
+        try:
+            subprocess.run(
+                ["postmap", f"lmdb:{active_source_path}"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                shell=False,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            logger.error("[%s] postmap after rollback failed: %s", context, exc)
+
+    # Reload Postfix to pick up restored map (or empty map if no previous existed).
+    try:
+        subprocess.run(
+            ["postfix", "reload"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            shell=False,
+        )
+        logger.info("[%s] postfix reload after rollback ok", context)
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        logger.error("[%s] postfix reload after rollback failed: %s", context, exc)
+
+
+# ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
 app = FastAPI()
