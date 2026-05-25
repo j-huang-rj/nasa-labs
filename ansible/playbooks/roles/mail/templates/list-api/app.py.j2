@@ -1,0 +1,45 @@
+# NASA mailing list API — managed by Ansible
+# Phase 05-03 scaffolding: minimal fail-closed health endpoint.
+# Plan 05-04 replaces this with full FastAPI/Pydantic create/delete semantics.
+
+import json
+import sys
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+# ---------------------------------------------------------------------------
+# Load settings (rendered by Ansible into the app directory)
+# ---------------------------------------------------------------------------
+SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
+settings = json.loads(SETTINGS_PATH.read_text())
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
+app = FastAPI()
+
+
+@app.get("/")
+def health():
+    """Health endpoint — returns OK with API and version info."""
+    return {"status": "ok", "api": "nasa-mail-list-api", "phase": "05-03"}
+
+
+@app.post("/list/create")
+def create_list():
+    """Fail-closed scaffolding — 05-04 adds full semantics."""
+    return JSONResponse(
+        status_code=501,
+        content={"status": "error", "detail": "not implemented in this phase"},
+    )
+
+
+@app.delete("/list/{name}")
+def delete_list(name: str):
+    """Fail-closed scaffolding — 05-04 adds full semantics."""
+    return JSONResponse(
+        status_code=501,
+        content={"status": "error", "detail": "not implemented in this phase"},
+    )

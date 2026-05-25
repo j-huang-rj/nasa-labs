@@ -1,0 +1,92 @@
+---
+- name: "PHASE [list_api : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install list API venv, application, and systemd service"
+
+- name: "PHASE [list_api : Install API Runtime Dependencies]"
+  ansible.builtin.dnf:
+    name: "{{ mail_list_api_packages }}"
+    state: present
+
+- name: "PHASE [list_api : Create API Application Directory]"
+  ansible.builtin.file:
+    path: "{{ mail_list_api_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "PHASE [list_api : Create API State Directory]"
+  ansible.builtin.file:
+    path: "{{ mail_list_api_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "PHASE [list_api : Create Python Virtual Environment]"
+  ansible.builtin.command:
+    cmd: python3 -m venv "{{ mail_list_api_venv_dir }}"
+    creates: "{{ mail_list_api_venv_dir }}/bin/python3"
+  changed_when: true
+
+- name: "PHASE [list_api : Install API Python Dependencies]"
+  ansible.builtin.pip:
+    name: "{{ mail_list_api_python_requirements }}"
+    virtualenv: "{{ mail_list_api_venv_dir }}"
+
+- name: "PHASE [list_api : Render API Settings]"
+  ansible.builtin.template:
+    src: list-api/settings.json.j2
+    dest: "{{ mail_list_api_app_dir }}/settings.json"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: "PHASE [list_api : Render Valid Users File]"
+  ansible.builtin.template:
+    src: list-api/valid_users.j2
+    dest: "{{ mail_list_api_app_dir }}/valid_users.txt"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart List API]"
+
+- name: "PHASE [list_api : Render API Application Module]"
+  ansible.builtin.template:
+    src: list-api/app.py.j2
+    dest: "{{ mail_list_api_app_dir }}/app.py"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart List API]"
+
+- name: "PHASE [list_api : Render Systemd Service Unit]"
+  ansible.builtin.template:
+    src: systemd/nasa-mail-list-api.service.j2
+    dest: "/etc/systemd/system/{{ mail_list_api_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart List API]"
+  register: _mail_list_api_unit_rendered
+
+- name: "PHASE [list_api : Reload Systemd Daemon]"
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: _mail_list_api_unit_rendered is changed
+
+- name: "PHASE [list_api : Flush Handlers]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [list_api : Enable And Start List API Service]"
+  ansible.builtin.systemd_service:
+    name: "{{ mail_list_api_service_name }}"
+    enabled: true
+    state: started
+
+- name: "PHASE [list_api : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed list API phase"
