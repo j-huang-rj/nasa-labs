@@ -1,0 +1,8 @@
+# Postfix static list aliases - managed by Ansible
+# Virtual alias map for local_users expansion across both managed domains
+# Format: <full_address> <comma_separated_local_users>
+
+# local_users list — expand one incoming address to all local users
+{% for domain in mail_managed_domains %}
+local_users@{{ domain }} {{ mail_local_users | join(', ') }}
+{% endfor %}

@@ -1,0 +1,84 @@
+---
+- name: "PHASE [list_aliases : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Generate static mailing-list aliases and prepare Postfix virtual alias maps"
+
+- name: "PHASE [list_aliases : Create Dynamic List State Directory]"
+  ansible.builtin.file:
+    path: "{{ mail_list_api_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "PHASE [list_aliases : Bootstrap Empty Dynamic Source File]"
+  ansible.builtin.copy:
+    dest: "{{ mail_list_dynamic_source_path }}"
+    content: "# Dynamic mailing list aliases — managed by list API\n"
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
+
+- name: "PHASE [list_aliases : Render Static List Alias Source Map]"
+  ansible.builtin.template:
+    src: postfix/list_static_aliases.j2
+    dest: "{{ mail_list_static_alias_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [list_aliases : Stat Static List Alias Source]"
+  ansible.builtin.stat:
+    path: "{{ mail_list_static_alias_path }}"
+  register: mail_list_static_src_stat
+
+- name: "PHASE [list_aliases : Stat Static List Alias Database]"
+  ansible.builtin.stat:
+    path: "{{ mail_list_static_alias_path }}.lmdb"
+  register: mail_list_static_db_stat
+
+- name: "PHASE [list_aliases : Build Static List Alias Database]"
+  ansible.builtin.command:
+    cmd: postmap lmdb:"{{ mail_list_static_alias_path }}"
+  when: >-
+    not mail_list_static_db_stat.stat.exists or
+    (mail_list_static_src_stat.stat.exists and
+     mail_list_static_db_stat.stat.mtime < mail_list_static_src_stat.stat.mtime)
+  changed_when: true
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [list_aliases : Stat Dynamic List Alias Source]"
+  ansible.builtin.stat:
+    path: "{{ mail_list_dynamic_source_path }}"
+  register: mail_list_dynamic_src_stat
+
+- name: "PHASE [list_aliases : Stat Dynamic List Alias Database]"
+  ansible.builtin.stat:
+    path: "{{ mail_list_dynamic_source_path }}.lmdb"
+  register: mail_list_dynamic_db_stat
+
+- name: "PHASE [list_aliases : Build Dynamic List Alias Database]"
+  ansible.builtin.command:
+    cmd: postmap lmdb:"{{ mail_list_dynamic_source_path }}"
+  when: >-
+    not mail_list_dynamic_db_stat.stat.exists or
+    (mail_list_dynamic_src_stat.stat.exists and
+     mail_list_dynamic_db_stat.stat.mtime < mail_list_dynamic_src_stat.stat.mtime)
+  changed_when: true
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [list_aliases : Validate Postfix Configuration After Alias Addition]"
+  ansible.builtin.command:
+    cmd: postfix check
+  changed_when: false
+
+- name: "PHASE [list_aliases : Flush Handlers]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [list_aliases : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed list aliases phase"
