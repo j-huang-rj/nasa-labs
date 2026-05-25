@@ -38,11 +38,7 @@ from email.mime.text import MIMEText
 MAX_RETRIES = 5
 RETRY_DELAY = 2.0
 DEFAULT_TIMEOUT = 15
-LIST_NAME_CHARS = string.ascii_lowercase + string.digits + "_-"
 LIST_NAME_LENGTH = 12
-
-# Reserved list names the API must protect
-RESERVED_NAMES = {"local_users"}
 
 # Unsafe characters to test in invalid-inputs
 UNSAFE_CHARS = ["@", "/", " ", "'", '"', ":", ",", ";", "|", "&", "$", "`", "\\"]
