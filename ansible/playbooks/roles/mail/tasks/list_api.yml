@@ -50,7 +50,6 @@
   ansible.builtin.command:
     cmd: python3 -m venv "{{ mail_list_api_venv_dir }}"
     creates: "{{ mail_list_api_venv_dir }}/bin/python3"
-  changed_when: true
 
 - name: "PHASE [list_api : Install API Python Dependencies]"
   ansible.builtin.pip:

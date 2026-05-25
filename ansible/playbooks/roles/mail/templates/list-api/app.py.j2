@@ -410,6 +410,23 @@ def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
                 )
                 raise HTTPException(status_code=500, detail="activation failed")
 
+            # ----- 6b. Ensure SELinux context allows Postfix to read the map -----
+            for _sel_path in (active_source_path, prev_lmdb_path):
+                try:
+                    subprocess.run(
+                        ["chcon", "-t", "postfix_etc_t", str(_sel_path)],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        shell=False,
+                    )
+                except FileNotFoundError:
+                    pass  # SELinux tools not available
+                except OSError as exc:
+                    logger.warning("[%s] chcon %s failed (non-fatal): %s",
+                                   context, _sel_path.name, exc)
+
             # ----- 7. postfix reload -----
             try:
                 proc = subprocess.run(
@@ -537,6 +554,20 @@ def _rollback(
             )
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             logger.error("[%s] postmap after rollback failed: %s", context, exc)
+
+        # Ensure SELinux context allows Postfix to read restored map files.
+        for _sel_path in (active_source_path, prev_lmdb_path):
+            try:
+                subprocess.run(
+                    ["chcon", "-t", "postfix_etc_t", str(_sel_path)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    shell=False,
+                )
+            except (FileNotFoundError, OSError):
+                pass
 
     # Reload Postfix to pick up restored map (or empty map if no previous existed).
     try:

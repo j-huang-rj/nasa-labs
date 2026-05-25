@@ -2,6 +2,7 @@
 
 # Host identity
 myhostname = {{ mail_smtp_fqdn }}
+myorigin = {{ mail_managed_domains | first }}
 mydestination = localhost
 
 # Virtual mailbox domains — only accept unauthenticated mail for these

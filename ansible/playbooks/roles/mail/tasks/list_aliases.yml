@@ -21,6 +21,23 @@
     mode: "0644"
     force: false
 
+- name: "PHASE [list_aliases : Probe semanage availability]"
+  ansible.builtin.command:
+    cmd: semanage --help
+  register: _mail_semanage_probe
+  changed_when: false
+  failed_when: false
+
+- name: "PHASE [list_aliases : Ensure SELinux file context for dynamic map files]"
+  ansible.builtin.command:
+    cmd: semanage fcontext -a -t postfix_etc_t "{{ mail_list_dynamic_source_path }}(\.lmdb)?"
+  register: _mail_semanage_dynamic_add
+  changed_when: _mail_semanage_dynamic_add.rc == 0
+  failed_when:
+    - _mail_semanage_dynamic_add.rc != 0
+    - "'already defined' not in _mail_semanage_dynamic_add.stderr"
+  when: _mail_semanage_probe.rc == 0
+
 - name: "PHASE [list_aliases : Render Static List Alias Source Map]"
   ansible.builtin.template:
     src: postfix/list_static_aliases.j2
@@ -69,6 +86,18 @@
      mail_list_dynamic_db_stat.stat.mtime < mail_list_dynamic_src_stat.stat.mtime)
   changed_when: true
   notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [list_aliases : Restore SELinux context on dynamic map files]"
+  ansible.builtin.command:
+    cmd: restorecon -F "{{ mail_list_dynamic_source_path }}" "{{ mail_list_dynamic_source_path }}.lmdb"
+  changed_when: false
+
+- name: "PHASE [list_aliases : Set Postfix-readable SELinux type on dynamic map files]"
+  ansible.builtin.command:
+    cmd: chcon -t postfix_etc_t "{{ mail_list_dynamic_source_path }}" "{{ mail_list_dynamic_source_path }}.lmdb"
+  register: _mail_chcon_dynamic_maps
+  changed_when: false
+  failed_when: false
 
 - name: "PHASE [list_aliases : Validate Postfix Configuration After Alias Addition]"
   ansible.builtin.command:

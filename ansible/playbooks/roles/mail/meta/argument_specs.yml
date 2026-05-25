@@ -125,16 +125,6 @@ argument_specs:
         required: false
         description: DNF packages to install for OpenDKIM signing and verification
 
-      mail_opendkim_enable_epel:
-        type: bool
-        required: false
-        description: Whether to enable the EPEL repository if OpenDKIM packages are unavailable
-
-      mail_opendkim_epel_package:
-        type: str
-        required: false
-        description: DNF package name for EPEL repository enablement
-
       mail_opendkim_service_name:
         type: str
         required: false

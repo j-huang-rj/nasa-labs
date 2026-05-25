@@ -43,8 +43,6 @@ mail_local_users:
 mail_opendkim_packages:
   - opendkim
   - opendkim-tools
-mail_opendkim_enable_epel: true
-mail_opendkim_epel_package: epel-release
 mail_opendkim_service_name: opendkim
 mail_opendkim_user: opendkim
 mail_opendkim_group: opendkim
