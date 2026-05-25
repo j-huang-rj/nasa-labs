@@ -8,6 +8,12 @@ mydestination = localhost
 virtual_mailbox_domains = lmdb:/etc/postfix/virtual_mailbox_domains
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 
+# Virtual alias expansion for mailing lists
+# Static map comes first so Ansible-owned aliases take precedence over API-owned dynamic aliases
+virtual_alias_maps =
+    lmdb:{{ mail_list_static_alias_path }},
+    lmdb:{{ mail_list_dynamic_source_path }}
+
 # Plus-address routing
 recipient_delimiter = +
 
