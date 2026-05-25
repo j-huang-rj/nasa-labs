@@ -25,6 +25,9 @@
 - name: "PHASE [main : Configure Postfix]"
   ansible.builtin.import_tasks: postfix.yml
 
+- name: "PHASE [main : Configure Mailing-List Aliases]"
+  ansible.builtin.import_tasks: list_aliases.yml
+
 - name: "END"
   become: false
   ansible.builtin.debug:
