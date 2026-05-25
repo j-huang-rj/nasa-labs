@@ -1,5 +1,6 @@
 # Postfix virtual mailbox domains - managed by Ansible
-# Lists all domains that Postfix accepts local delivery for (D-09, SMTP-01)
+# Lists all domains that Postfix accepts local delivery
+
 {% for domain in mail_managed_domains %}
 {{ domain }} OK
 {% endfor %}

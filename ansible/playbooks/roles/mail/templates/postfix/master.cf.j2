@@ -1,17 +1,11 @@
 # Postfix master process configuration - managed by Ansible
-# Explicit port 25 MX and port 587 submission policy separation (D-08, D-09, D-10)
 
 # ==========================================================================
-# service type  private unpriv  chroot  wakeup  maxproc command + args
-#               (yes)   (yes)   (yes)   (never) (100)
+# service  type  private unpriv  chroot  wakeup  maxproc command + args
+#                (yes)   (yes)   (yes)   (never) (100)
 # ==========================================================================
+smtp       inet  n       -       n       -       -       smtpd
 
-# Port 25: ordinary MX service (D-09)
-# Accepts unauthenticated mail only for managed local domains; rejects relay
-smtp      inet  n       -       n       -       -       smtpd
-
-# Port 587: submission service (D-10, D-11)
-# Enforces STARTTLS, requires SASL auth, restricts sender ownership
 submission inet  n       -       n       -       -       smtpd
   -o syslog_name=postfix/submission
   -o smtpd_tls_security_level=encrypt
@@ -21,24 +15,24 @@ submission inet  n       -       n       -       -       smtpd
   -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
 
 # Local delivery
-pickup    unix  n       -       n       60      1       pickup
-cleanup   unix  n       -       n       -       0       cleanup
-qmgr      unix  n       -       n       300     1       qmgr
-tlsmgr    unix  -       -       n       1000?   1       tlsmgr
-rewrite   unix  -       -       n       -       -       trivial-rewrite
-bounce    unix  -       -       n       -       0       bounce
-defer     unix  -       -       n       -       0       bounce
-trace     unix  -       -       n       -       0       bounce
-verify    unix  -       -       n       -       1       verify
-flush     unix  n       -       n       1000?   0       flush
-proxymap  unix  -       -       n       -       -       proxymap
-proxywrite unix -       -       n       -       1       proxymap
-showq     unix  n       -       n       -       -       showq
-error     unix  -       -       n       -       -       error
-retry     unix  -       -       n       -       -       error
-discard   unix  -       -       n       -       -       discard
-local     unix  -       n       n       -       -       local
-virtual   unix  -       n       n       -       -       virtual
-lmtp      unix  -       -       n       -       -       lmtp
-anvil     unix  -       -       n       -       1       anvil
-scache    unix  -       -       n       -       1       scache
+pickup     unix  n       -       n       60      1       pickup
+cleanup    unix  n       -       n       -       0       cleanup
+qmgr       unix  n       -       n       300     1       qmgr
+tlsmgr     unix  -       -       n       1000?   1       tlsmgr
+rewrite    unix  -       -       n       -       -       trivial-rewrite
+bounce     unix  -       -       n       -       0       bounce
+defer      unix  -       -       n       -       0       bounce
+trace      unix  -       -       n       -       0       bounce
+verify     unix  -       -       n       -       1       verify
+flush      unix  n       -       n       1000?   0       flush
+proxymap   unix  -       -       n       -       -       proxymap
+proxywrite unix  -       -       n       -       1       proxymap
+showq      unix  n       -       n       -       -       showq
+error      unix  -       -       n       -       -       error
+retry      unix  -       -       n       -       -       error
+discard    unix  -       -       n       -       -       discard
+local      unix  -       n       n       -       -       local
+virtual    unix  -       n       n       -       -       virtual
+lmtp       unix  -       -       n       -       -       lmtp
+anvil      unix  -       -       n       -       1       anvil
+scache     unix  -       -       n       -       1       scache

@@ -1,39 +1,34 @@
 # Postfix main configuration - managed by Ansible
-# Global managed-domain, SASL, TLS, LMTP, plus delimiter, and relay settings
 
 # Host identity
 myhostname = {{ mail_smtp_fqdn }}
 mydestination = localhost
 
-# Virtual mailbox domains — only accept unauthenticated mail for these (D-09, SMTP-01)
+# Virtual mailbox domains — only accept unauthenticated mail for these
 virtual_mailbox_domains = lmdb:/etc/postfix/virtual_mailbox_domains
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 
-# Plus-address routing (IMAP-03, IMAP-04)
+# Plus-address routing
 recipient_delimiter = +
 
-# Dovecot SASL authentication (SMTP-03)
+# Dovecot SASL authentication
 smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
 
-# Global policy: SASL auth disabled by default; submission service overrides this (D-08, D-10)
+# Global policy
 smtpd_sasl_auth_enable = no
+smtpd_recipient_restrictions = reject_unauth_destination
+smtpd_tls_security_level = may
 
-# TLS certificate and key paths (TLS-01, TLS-02)
+# TLS certificate
 smtpd_tls_cert_file = {{ mail_tls_cert_path }}
 smtpd_tls_key_file = {{ mail_tls_key_path }}
 
-# Opportunistic TLS on port 25 (offers STARTTLS but does not require it)
-smtpd_tls_security_level = may
-
-# Recipient restrictions — reject non-local relay by default (D-09, SMTP-02)
-smtpd_recipient_restrictions = reject_unauth_destination
-
-# No relayhost or transport_maps shortcuts — outbound mail uses normal DNS resolution (SMTP-05)
+# No relayhost or transport_maps shortcuts
 relayhost =
 transport_maps =
 
-# Milter chain for DKIM signing (MSEC-03)
+# Milter chain for DKIM signing
 # Phase 06 insertion point: rewrite/filter milters must be prepended before
 # OpenDKIM so DKIM signs final rewritten content (D-07, D-15).
 # mail_pre_dkim_milters is empty in Phase 04; populated in Phase 06.
