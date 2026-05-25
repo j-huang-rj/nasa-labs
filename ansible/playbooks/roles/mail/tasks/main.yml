@@ -28,6 +28,9 @@
 - name: "PHASE [main : Configure Mailing-List Aliases]"
   ansible.builtin.import_tasks: list_aliases.yml
 
+- name: "PHASE [main : Deploy Mailing-List API]"
+  ansible.builtin.import_tasks: list_api.yml
+
 - name: "END"
   become: false
   ansible.builtin.debug:
