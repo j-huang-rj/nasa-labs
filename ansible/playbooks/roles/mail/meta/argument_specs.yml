@@ -199,3 +199,70 @@ argument_specs:
         description: >-
           List of milter socket addresses to insert before OpenDKIM in the
           Postfix milter chain. Empty in Phase 04; populated in Phase 06.
+
+      mail_list_api_venv_dir:
+        type: str
+        required: false
+        description: >-
+          Absolute path for the list API Python virtual environment
+
+      mail_list_api_app_dir:
+        type: str
+        required: false
+        description: >-
+          Absolute path for the list API application source directory on the target host
+
+      mail_list_api_state_dir:
+        type: str
+        required: false
+        description: >-
+          Absolute path for root-owned dynamic list state and source/database map files
+
+      mail_list_api_listen_host:
+        type: str
+        required: false
+        description: IP address or hostname the API service listens on
+
+      mail_list_api_listen_port:
+        type: int
+        required: false
+        description: TCP port the API service listens on
+
+      mail_list_api_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the list API service
+
+      mail_list_api_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages required for the list API runtime
+
+      mail_list_api_python_requirements:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Pip-installable Python package version pins for the list API runtime
+
+      mail_list_static_alias_path:
+        type: str
+        required: false
+        description: >-
+          Absolute path for the Ansible-managed static list alias source map
+          (rendered as a Postfix lmdb: source)
+
+      mail_list_dynamic_source_path:
+        type: str
+        required: false
+        description: >-
+          Absolute path for the API-managed dynamic list alias source map
+          (owned by the API service, not by Ansible)
+
+      mail_list_reserved_names:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          List of reserved list names that the API must reject for create/delete

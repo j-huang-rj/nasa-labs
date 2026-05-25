@@ -65,6 +65,25 @@ mail_dkim_private_keys: {}
 # Phase 06 milter slot — empty list in Phase 04 (D-07)
 mail_pre_dkim_milters: []
 
+# Mailing-list and API defaults
+mail_list_api_venv_dir: /opt/nasa-mail-list-api/venv
+mail_list_api_app_dir: /opt/nasa-mail-list-api/app
+mail_list_api_state_dir: /var/lib/nasa-mail-list-api
+mail_list_api_listen_host: "0.0.0.0"
+mail_list_api_listen_port: 8000
+mail_list_api_service_name: nasa-mail-list-api
+mail_list_api_packages:
+  - python3
+  - python3-pip
+mail_list_api_python_requirements:
+  - fastapi==0.136.3
+  - pydantic==2.13.4
+  - uvicorn==0.48.0
+mail_list_static_alias_path: "{{ mail_postfix_conf_dir }}/list_static_aliases"
+mail_list_dynamic_source_path: "{{ mail_list_api_state_dir }}/dynamic_aliases"
+mail_list_reserved_names:
+  - local_users
+
 # Secret variables — real values come from gitignored host_vars/*/secrets.yml
 mail_tls_certificate: ""
 mail_tls_private_key: ""
