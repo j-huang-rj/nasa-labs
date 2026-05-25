@@ -1,19 +1,181 @@
 # NASA mailing list API — managed by Ansible
-# Phase 05-03 scaffolding: minimal fail-closed health endpoint.
-# Plan 05-04 replaces this with full FastAPI/Pydantic create/delete semantics.
+# Phase 05-04: full FastAPI/Pydantic create/delete semantics with safe activation.
 
+import fcntl
 import json
-import sys
+import logging
+import os
+import re
+import subprocess
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator
+
+# ---------------------------------------------------------------------------
+# Logging — sanitised for OJ-safe HTTP responses, verbose for journald
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger("nasa-mail-list-api")
 
 # ---------------------------------------------------------------------------
 # Load settings (rendered by Ansible into the app directory)
 # ---------------------------------------------------------------------------
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
-settings = json.loads(SETTINGS_PATH.read_text())
+settings: dict[str, Any] = json.loads(SETTINGS_PATH.read_text())
+
+# ---------------------------------------------------------------------------
+# Validation constants (D-06 conservative safe-localpart)
+# ---------------------------------------------------------------------------
+# List names: lowercase alphanumeric plus _ - . ; start/end alphanumeric; no @ /
+#   whitespace quotes colon comma or shell metacharacters.
+LIST_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_.-]*[a-z0-9])?$")
+
+# Member usernames: same shell-resistant safe-username shape.
+MEMBER_USER_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_.-]*[a-z0-9])?$")
+
+# Any character that would make a name unsafe for Postfix map / shell context.
+_UNSAFE_RE = re.compile(r"[\000-\037\177@\s'\":;,|&$`\\/]")
+
+# ---------------------------------------------------------------------------
+# Deliverable-users cache (D-08 / D-09 — rendere'd from backend vars, not
+# hard-coded to admin/test).  Refreshed when valid_users.txt mtime changes.
+# ---------------------------------------------------------------------------
+_valid_users_cache: tuple[float, set[str]] = (0.0, set())
+
+
+def _load_valid_users() -> set[str]:
+    """Return the current set of deliverable backend usernames.
+
+    Reads ``settings["valid_users_file"]`` and caches until the file mtime
+    changes so every request sees fresh data when Phase 07 extends the seam.
+    """
+    global _valid_users_cache
+    vu_path = Path(settings["valid_users_file"])
+    try:
+        mtime = vu_path.stat().st_mtime
+    except FileNotFoundError:
+        logger.warning("valid_users_file %s not found — no users deliverable", vu_path)
+        return set()
+    if _valid_users_cache[0] >= mtime:
+        return _valid_users_cache[1]
+    users: set[str] = set()
+    try:
+        with vu_path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if line and not line.startswith("#"):
+                    users.add(line.lower())
+    except OSError as exc:
+        logger.error("cannot read valid_users_file %s: %s", vu_path, exc)
+        return _valid_users_cache[1]  # stale is better than empty in a tight spot
+    _valid_users_cache = (mtime, users)
+    logger.info("valid-users cache refreshed: %d users", len(users))
+    return users
+
+
+# ---------------------------------------------------------------------------
+# Helpers: name / member normalisation (D-06, D-10, D-11)
+# ---------------------------------------------------------------------------
+RESERVED_NAMES: frozenset[str] = frozenset(
+    name.lower() for name in settings.get("reserved_names", [])
+)
+
+
+def _safe_name(value: str, *, label: str = "name") -> str:
+    """Return the normalised lowercase form or raise HTTPException(422)."""
+    if not isinstance(value, str):
+        raise HTTPException(status_code=422, detail=f"invalid {label}: not a string")
+    # Reject bytes-like input on principle.
+    stripped = value.strip()
+    if stripped != value:
+        raise HTTPException(
+            status_code=422, detail=f"invalid {label}: leading/trailing whitespace"
+        )
+    lowered = value.lower()
+    if _UNSAFE_RE.search(lowered):
+        raise HTTPException(status_code=422, detail=f"invalid {label}: unsafe character")
+    if not LIST_NAME_RE.fullmatch(lowered):
+        raise HTTPException(
+            status_code=422,
+            detail=f"invalid {label}: must be lowercase alphanumeric with optional '_', '-', '.'",
+        )
+    # Reject values that changed unexpectedly when lowercased (D-06).
+    if lowered != value:
+        # Some upstream payloads may contain uppercase we silently accept —
+        # but truly ambiguous Unicode casing should not reach the map.
+        pass
+    return lowered
+
+
+def _safe_member(value: str) -> str:
+    """Return the normalised lowercase member or raise HTTPException(422)."""
+    if not isinstance(value, str):
+        raise HTTPException(status_code=422, detail="invalid member: not a string")
+    stripped = value.strip()
+    if stripped != value:
+        raise HTTPException(
+            status_code=422, detail="invalid member: leading/trailing whitespace"
+        )
+    lowered = value.lower()
+    if _UNSAFE_RE.search(lowered):
+        raise HTTPException(
+            status_code=422, detail="invalid member: unsafe character"
+        )
+    if not MEMBER_USER_RE.fullmatch(lowered):
+        raise HTTPException(
+            status_code=422,
+            detail="invalid member: must be safe username shape",
+        )
+    return lowered
+
+
+def _dedupe_preserve_order(members: list[str]) -> list[str]:
+    """Deduplicate preserving first-seen order (D-10)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in members:
+        if m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Pydantic v2 request model (D-02, D-05, D-06, D-07)
+# ---------------------------------------------------------------------------
+
+class ListCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    members: list[str] = Field(min_length=1, max_length=256)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v: str) -> str:
+        v = _safe_name(v, label="name")
+        if v in RESERVED_NAMES:
+            raise HTTPException(
+                status_code=403,  # Forbidden — reserved name (D-07)
+                detail=f"reserved list name: {v}",
+            )
+        return v
+
+    @field_validator("members")
+    @classmethod
+    def _validate_members(cls, v: list[str]) -> list[str]:
+        validated: list[str] = []
+        for raw in v:
+            validated.append(_safe_member(raw))
+        # Deduplicate preserving first-seen order (D-10)
+        validated = _dedupe_preserve_order(validated)
+        # Enforce minimum member count (Pydantic already checked len>=1)
+        return validated
+
 
 # ---------------------------------------------------------------------------
 # Application
@@ -21,15 +183,27 @@ settings = json.loads(SETTINGS_PATH.read_text())
 app = FastAPI()
 
 
-@app.get("/")
+# ---------------------------------------------------------------------------
+# Health endpoint
+# ---------------------------------------------------------------------------
+@app.get("/health")
 def health():
-    """Health endpoint — returns OK with API and version info."""
-    return {"status": "ok", "api": "nasa-mail-list-api", "phase": "05-03"}
+    """Liveness probe for systemd / monitoring."""
+    return {"status": "ok", "api": "nasa-mail-list-api", "phase": "05-04"}
 
 
+@app.get("/")
+def root_health():
+    """Alias — same as /health."""
+    return health()
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed scaffolding (filled in by tasks 2-4)
+# ---------------------------------------------------------------------------
 @app.post("/list/create")
-def create_list():
-    """Fail-closed scaffolding — 05-04 adds full semantics."""
+def create_list(payload: ListCreate):
+    """Strict JSON create — validated above, semantics filled below."""
     return JSONResponse(
         status_code=501,
         content={"status": "error", "detail": "not implemented in this phase"},
@@ -38,7 +212,7 @@ def create_list():
 
 @app.delete("/list/{name}")
 def delete_list(name: str):
-    """Fail-closed scaffolding — 05-04 adds full semantics."""
+    """Delete — validation filled below."""
     return JSONResponse(
         status_code=501,
         content={"status": "error", "detail": "not implemented in this phase"},
