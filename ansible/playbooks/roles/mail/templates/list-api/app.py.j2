@@ -575,21 +575,69 @@ def root_health():
 
 
 # ---------------------------------------------------------------------------
-# Fail-closed scaffolding (filled in by tasks 2-4)
+# Route: POST /list/create  (D-02, D-03)
 # ---------------------------------------------------------------------------
-@app.post("/list/create")
+@app.post("/list/create", status_code=201)
 def create_list(payload: ListCreate):
-    """Strict JSON create — validated above, semantics filled below."""
-    return JSONResponse(
-        status_code=501,
-        content={"status": "error", "detail": "not implemented in this phase"},
-    )
+    """Create or replace a dynamic mailing list.
+
+    Validated by the Pydantic model before this handler runs.  The handler
+    gates on deliverable members (D-11) and then activates inside the locked
+    critical section.
+    """
+    name = payload.name
+    members = payload.members
+
+    # -------------------------------------------------- D-11: zero-deliverable gate
+    valid_users = _load_valid_users()
+    deliverable = [m for m in members if m in valid_users]
+    if not deliverable:
+        raise HTTPException(
+            status_code=422,
+            detail="no deliverable members — all submitted members are unknown to the current backend",
+        )
+
+    # -------------------------------------------------- Activation mutation
+    def _mutation(previous_state: dict[str, dict[str, list[str]]]):
+        """Replace the named list exactly (D-03 atomic upsert)."""
+        next_state = {"lists": dict(previous_state.get("lists", {}))}
+        next_state["lists"][name] = deliverable
+        return next_state, True
+
+    _activate(_mutation, context=f"create:{name}")
+    return {"status": "ok", "name": name, "members": deliverable}
 
 
+# ---------------------------------------------------------------------------
+# Route: DELETE /list/{name}  (D-04)
+# ---------------------------------------------------------------------------
 @app.delete("/list/{name}")
 def delete_list(name: str):
-    """Delete — validation filled below."""
-    return JSONResponse(
-        status_code=501,
-        content={"status": "error", "detail": "not implemented in this phase"},
-    )
+    """Delete a dynamic mailing list.
+
+    Idempotent: deleting a non-existent or already-deleted dynamic list
+    succeeds as a no-op (D-04).  Reserved names are always rejected.
+    """
+    # -------------------------------------------------- Validate name
+    valid_name = _safe_name(name, label="list name")
+
+    # Reserved names are permanently protected (D-07).
+    if valid_name in RESERVED_NAMES:
+        raise HTTPException(
+            status_code=403,
+            detail=f"reserved list name: {valid_name}",
+        )
+
+    # -------------------------------------------------- Activation mutation
+    deleted = False
+
+    def _mutation(previous_state: dict[str, dict[str, list[str]]]):
+        nonlocal deleted
+        next_state = {"lists": dict(previous_state.get("lists", {}))}
+        if valid_name in next_state["lists"]:
+            del next_state["lists"][valid_name]
+            deleted = True
+        return next_state, True
+
+    _activate(_mutation, context=f"delete:{valid_name}")
+    return {"status": "ok", "name": valid_name, "deleted": deleted}
