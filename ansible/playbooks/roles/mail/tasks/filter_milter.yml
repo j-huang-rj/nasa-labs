@@ -1,0 +1,71 @@
+---
+- name: "PHASE [filter_milter : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install filter/rewrite milter runtime, application, and systemd service"
+
+- name: "PHASE [filter_milter : Install Filter Milter Runtime Dependencies]"
+  ansible.builtin.dnf:
+    name: "{{ mail_filter_milter_packages }}"
+    state: present
+
+- name: "PHASE [filter_milter : Create Milter Application Directory]"
+  ansible.builtin.file:
+    path: "{{ mail_filter_milter_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "PHASE [filter_milter : Create Python Virtual Environment]"
+  ansible.builtin.command:
+    cmd: python3 -m venv "{{ mail_filter_milter_venv_dir }}"
+    creates: "{{ mail_filter_milter_venv_dir }}/bin/python3"
+
+- name: "PHASE [filter_milter : Install Milter Python Dependencies]"
+  ansible.builtin.pip:
+    name: "{{ mail_filter_milter_python_requirements }}"
+    virtualenv: "{{ mail_filter_milter_venv_dir }}"
+
+- name: "PHASE [filter_milter : Render Milter Application Module]"
+  ansible.builtin.template:
+    src: filter_milter/mail_filter.py.j2
+    dest: "{{ mail_filter_milter_app_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Filter Milter]"
+
+- name: "PHASE [filter_milter : Render Systemd Service Unit]"
+  ansible.builtin.template:
+    src: systemd/nasa-mail-milter.service.j2
+    dest: "/etc/systemd/system/{{ mail_filter_milter_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Filter Milter]"
+  register: _mail_filter_milter_unit_rendered
+
+- name: "PHASE [filter_milter : Reload Systemd Daemon]"  # noqa: no-handler
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: _mail_filter_milter_unit_rendered is changed
+
+- name: "PHASE [filter_milter : Flush Handlers]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [filter_milter : Enable And Start Filter Milter Service]"
+  ansible.builtin.systemd_service:
+    name: "{{ mail_filter_milter_service_name }}"
+    enabled: true
+    state: started
+
+- name: "PHASE [filter_milter : Validate Milter Socket Listening]"
+  ansible.builtin.command:
+    cmd: "ss -tlnp | grep {{ mail_filter_milter_socket_port }}"
+  changed_when: false
+
+- name: "PHASE [filter_milter : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed filter/rewrite milter phase"

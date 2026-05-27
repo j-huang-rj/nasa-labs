@@ -22,6 +22,9 @@
 - name: "PHASE [main : Configure OpenDKIM Signing]"
   ansible.builtin.import_tasks: opendkim.yml
 
+- name: "PHASE [main : Configure Filter/Rewrite Milter]"
+  ansible.builtin.import_tasks: filter_milter.yml
+
 - name: "PHASE [main : Configure Postfix]"
   ansible.builtin.import_tasks: postfix.yml
 
