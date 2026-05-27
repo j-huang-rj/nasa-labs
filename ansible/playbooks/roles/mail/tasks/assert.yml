@@ -114,6 +114,67 @@
       OpenDKIM milter socket '{{ mail_opendkim_postfix_socket }}'. The socket
       is appended automatically; do not duplicate it in the pre-DKIM slot.
 
+- name: "PHASE [assert : Assert LDAP Variables When Enabled]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_ldap_host is defined
+      - mail_ldap_host | length > 0
+      - mail_ldap_base_dn is defined
+      - mail_ldap_base_dn | length > 0
+      - mail_ldap_uri is defined
+      - mail_ldap_uri | length > 0
+      - mail_ldap_ca_cert_path is defined
+      - mail_ldap_ca_cert_path | length > 0
+    fail_msg: >-
+      LDAP integration is enabled but required LDAP variables are missing.
+      Define mail_ldap_host, mail_ldap_base_dn, mail_ldap_uri, and
+      mail_ldap_ca_cert_path.
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [assert : Check LDAP CA Certificate Is Present]"
+  ansible.builtin.stat:
+    path: "{{ mail_ldap_ca_cert_path }}"
+  register: _mail_ldap_ca_cert_stat
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [assert : Assert LDAP CA Certificate Exists]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _mail_ldap_ca_cert_stat.stat.exists
+    fail_msg: >-
+      LDAP CA certificate not found at {{ mail_ldap_ca_cert_path }}.
+      Deploy the LDAP CA cert from secrets before enabling LDAP.
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [assert : Check LDAP Server Reachability]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -H {{ mail_ldap_uri }}
+      -b "{{ mail_ldap_base_dn }}"
+      -D "{{ mail_ldap_bind_dn | default('') }}"
+      -w "{{ mail_ldap_bind_password | default('') }}"
+      -x "(objectClass=posixAccount)"
+      dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _mail_ldap_connectivity_check
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [assert : Assert LDAP Server Is Reachable]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _mail_ldap_connectivity_check.rc == 0
+    fail_msg: >-
+      LDAP server at {{ mail_ldap_uri }} is unreachable.
+      When mail_ldap_enabled is true, the LDAP server must be
+      available at deploy time.
+  when: mail_ldap_enabled | default(false)
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:

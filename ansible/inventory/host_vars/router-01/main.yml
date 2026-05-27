@@ -54,6 +54,19 @@ firewall_policies:
       - icmp
     ports: []
 
+  - name: dmz-to-internal-ldaps
+    priority: -55
+    target: ACCEPT
+    ingress_zones:
+      - dmz
+    egress_zones:
+      - internal
+    protocols:
+      - tcp
+    ports:
+      - port: 636
+        proto: tcp
+
   - name: dmz-to-internal
     priority: -50
     target: REJECT
