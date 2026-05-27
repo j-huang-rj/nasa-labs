@@ -12,12 +12,11 @@
     group: root
     mode: "0644"
   when: mail_ldap_enabled | default(false) and mail_ldap_ca_cert is defined and mail_ldap_ca_cert | length > 0
-  register: _mail_ldap_ca_cert_deploy
 
 - name: "PHASE [ldap_ca_cert : Rebuild CA Trust Bundle]"
   ansible.builtin.command:
     cmd: update-ca-trust extract
-  when: _mail_ldap_ca_cert_deploy is changed
+  when: mail_ldap_enabled | default(false) and mail_ldap_ca_cert is defined and mail_ldap_ca_cert | length > 0
   changed_when: false
 
 - name: "PHASE [ldap_ca_cert : Remove LDAP CA Certificate When Disabled]"
@@ -25,12 +24,11 @@
     state: absent
     path: "{{ mail_ldap_ca_cert_path }}"
   when: not (mail_ldap_enabled | default(false))
-  register: _mail_ldap_ca_cert_remove
 
 - name: "PHASE [ldap_ca_cert : Rebuild CA Trust Bundle After Removal]"
   ansible.builtin.command:
     cmd: update-ca-trust extract
-  when: _mail_ldap_ca_cert_remove is changed
+  when: not (mail_ldap_enabled | default(false))
   changed_when: false
 
 - name: "PHASE [ldap_ca_cert : END]"

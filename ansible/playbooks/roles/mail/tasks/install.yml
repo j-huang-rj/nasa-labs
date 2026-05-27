@@ -11,7 +11,11 @@
 
 - name: "PHASE [install : Install Mail Packages]"
   ansible.builtin.dnf:
-    name: "{{ mail_postfix_packages + mail_dovecot_packages + mail_opendkim_packages + (mail_dovecot_ldap_packages + mail_ldap_assert_packages if (mail_ldap_enabled | default(false)) else []) }}"
+    name: >-
+      {{ mail_postfix_packages
+         + mail_dovecot_packages
+         + mail_opendkim_packages
+         + (mail_dovecot_ldap_packages + mail_ldap_assert_packages if (mail_ldap_enabled | default(false)) else []) }}
     state: present
 
 - name: "PHASE [install : END]"
