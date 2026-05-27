@@ -1,6 +1,4 @@
-{# Dovecot passwd-file for local virtual users (D-01, D-04)
-   Rendered unconditionally so local auth works regardless of LDAP enablement.
-   Password hashes come from mail_local_user_password_hashes in secrets.yml. #}
+{# Dovecot passwd-file for local virtual users #}
 {% for user in mail_local_users %}
 {{ user }}:{% if mail_local_user_password_hashes[user] is defined %}{{ mail_local_user_password_hashes[user] }}{% endif %}::::::
 {% endfor %}

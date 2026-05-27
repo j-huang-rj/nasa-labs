@@ -1,6 +1,6 @@
 # Dovecot master service configuration - managed by Ansible
-# Auth and LMTP sockets for Postfix integration (D-03)
 
+# Auth sockets
 service auth {
   unix_listener {{ mail_dovecot_auth_socket_path }} {
     mode = 0660
@@ -9,6 +9,7 @@ service auth {
   }
 }
 
+# LMTP sockets
 service lmtp {
   unix_listener {{ mail_dovecot_lmtp_socket_path }} {
     mode = 0660

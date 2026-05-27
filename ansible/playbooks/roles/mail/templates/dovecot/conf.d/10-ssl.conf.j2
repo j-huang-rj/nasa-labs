@@ -1,10 +1,9 @@
 # Dovecot SSL/STARTTLS configuration - managed by Ansible
-# IMAP STARTTLS on port 143 (D-05, TLS-03)
 
 # Enable SSL/TLS support - STARTTLS advertised on IMAP 143
 ssl = yes
 
-# Certificate and key paths (D-07: operator-provided PEMs)
+# Certificate and key paths
 ssl_cert = <{{ mail_tls_cert_path }}
 ssl_key = <{{ mail_tls_key_path }}
 
