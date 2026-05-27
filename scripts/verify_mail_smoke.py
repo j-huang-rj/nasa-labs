@@ -85,6 +85,7 @@ def _run_phase_verifier(
     label: str,
     extra_args: list | None,
     args: argparse.Namespace,
+    pass_mail_domain: bool = True,
 ) -> bool:
     """Run a single phase verifier script via subprocess.
 
@@ -99,17 +100,21 @@ def _run_phase_verifier(
         args.imap_host,
         "--domain",
         args.domain,
-        "--mail-domain",
-        args.mail_domain,
-        "--admin-password",
-        args.admin_password,
-        "--test-password",
-        args.test_password,
-        "--ssh-host",
-        args.ssh_host,
-        "--case",
-        "all",
     ]
+    if pass_mail_domain:
+        cmd.extend(["--mail-domain", args.mail_domain])
+    cmd.extend(
+        [
+            "--admin-password",
+            args.admin_password,
+            "--test-password",
+            args.test_password,
+            "--ssh-host",
+            args.ssh_host,
+            "--case",
+            "all",
+        ]
+    )
     if extra_args:
         cmd.extend(extra_args)
 
@@ -161,7 +166,9 @@ def case_phase05(args: argparse.Namespace) -> None:
 
 
 def case_phase06(args: argparse.Namespace) -> None:
-    _run_phase_verifier("scripts/verify_mail_phase06.py", "Phase 06", None, args)
+    _run_phase_verifier(
+        "scripts/verify_mail_phase06.py", "Phase 06", None, args, pass_mail_domain=False
+    )
 
 
 # ---------------------------------------------------------------------------
