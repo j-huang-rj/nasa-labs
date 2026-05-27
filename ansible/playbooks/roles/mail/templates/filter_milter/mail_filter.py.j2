@@ -231,6 +231,12 @@ class MailFilterMilter(Milter.Milter):
                     )
                     return Milter.TEMPFAIL
 
+            # Normalize line endings to CRLF per RFC 5321.
+            # BytesGenerator defaults to linesep='\n' producing LF-only
+            # output; the extracted body must use CRLF line endings
+            # before being passed to replacebody() (WR-08).
+            modified_body = modified_body.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
+
             self.replacebody(modified_body)
 
         except (UnicodeDecodeError, LookupError) as exc:
