@@ -215,7 +215,11 @@ def case_spam_reject(args):
                     )
                     return
             except smtplib.SMTPRecipientsRefused:
-                pass  # Also acceptable
+                fail_case(
+                    "spam-reject",
+                    "Port 25 SMTPRecipientsRefused — not a milter rejection",
+                )
+                return
     except Exception as e:
         fail_case("spam-reject", f"Port 25 SMTP connection error: {e}")
         return
@@ -257,7 +261,11 @@ def case_spam_reject(args):
                     )
                     return
             except smtplib.SMTPRecipientsRefused:
-                pass
+                fail_case(
+                    "spam-reject",
+                    "Port 587 SMTPRecipientsRefused — not a milter rejection",
+                )
+                return
     except smtplib.SMTPAuthenticationError as e:
         fail_case("spam-reject", f"Port 587 authentication failed: {e}")
         return
