@@ -85,6 +85,8 @@ mail_list_reserved_names:
 
 # Phase 06 — Filter/rewrite milter defaults (populates mail_pre_dkim_milters)
 mail_filter_milter_service_name: nasa-mail-milter
+mail_filter_milter_user: nasa-mail-milter
+mail_filter_milter_group: nasa-mail-milter
 mail_filter_milter_packages:
   - python3
   - python3-pip

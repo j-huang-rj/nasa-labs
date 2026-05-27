@@ -38,7 +38,8 @@
 
 - name: "PHASE [filter_milter : Create Filter Milter System User]"
   ansible.builtin.user:
-    name: nasa-mail-milter
+    name: "{{ mail_filter_milter_user }}"
+    group: "{{ mail_filter_milter_group }}"
     system: true
     shell: /sbin/nologin
     create_home: false

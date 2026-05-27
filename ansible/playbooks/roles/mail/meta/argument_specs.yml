@@ -262,6 +262,16 @@ argument_specs:
         required: false
         description: Systemd unit name for the filter/rewrite milter service
 
+      mail_filter_milter_user:
+        type: str
+        required: false
+        description: System user identity for the filter/rewrite milter daemon
+
+      mail_filter_milter_group:
+        type: str
+        required: false
+        description: System group identity for the filter/rewrite milter daemon
+
       mail_filter_milter_packages:
         type: list
         elements: str
