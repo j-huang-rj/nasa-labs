@@ -12,10 +12,12 @@ Uses only Python standard library modules.
 
 import argparse
 import imaplib
+import os
 import smtplib
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Result helpers
@@ -214,6 +216,16 @@ def case_idempotency(args: argparse.Namespace) -> None:
     """Run ansible-playbook twice; second run must report 0 changes and 0 failures."""
     playbook = "ansible/playbooks/mail_configure.yml"
 
+    # Ensure ansible-playbook finds the project's ansible.cfg (WR-03).
+    # The config file lives at ansible/ansible.cfg, not in the project root,
+    # and the standard config search path will not discover it from the
+    # repository root when ansible-playbook is invoked without -i or
+    # ANSIBLE_CONFIG.
+    env = os.environ.copy()
+    env["ANSIBLE_CONFIG"] = str(
+        Path(__file__).resolve().parent.parent / "ansible" / "ansible.cfg"
+    )
+
     # First run — may make changes
     print(f"  Running ansible-playbook (first pass)...")
     try:
@@ -222,6 +234,7 @@ def case_idempotency(args: argparse.Namespace) -> None:
             capture_output=True,
             text=True,
             timeout=300,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         fail_case("idempotency", "First ansible-playbook run timed out after 300s")
@@ -249,6 +262,7 @@ def case_idempotency(args: argparse.Namespace) -> None:
             capture_output=True,
             text=True,
             timeout=300,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         fail_case("idempotency", "Second ansible-playbook run timed out after 300s")
