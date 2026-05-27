@@ -58,21 +58,29 @@ def fail_case(name: str, reason: str) -> None:
 
 
 def ssh_cmd(
-    ssh_host: str, command: str, timeout: int = 15
+    ssh_host: str,
+    command: str,
+    timeout: int = 15,
+    port: int | None = None,
+    proxy_jump: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command on the target host via SSH."""
+    cmd = [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "ConnectTimeout=5",
+        "-o",
+        "BatchMode=yes",
+    ]
+    if port is not None:
+        cmd.extend(["-p", str(port)])
+    if proxy_jump:
+        cmd.extend(["-J", proxy_jump])
+    cmd.extend([ssh_host, command])
     return subprocess.run(
-        [
-            "ssh",
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "ConnectTimeout=5",
-            "-o",
-            "BatchMode=yes",
-            ssh_host,
-            command,
-        ],
+        cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -150,15 +158,31 @@ def _unique_tag(prefix: str = "p07") -> str:
 # ---------------------------------------------------------------------------
 
 
-def _derive_domain(ssh_host: str, timeout: int = 15) -> str:
+def _derive_domain(
+    ssh_host: str,
+    timeout: int = 15,
+    port: int | None = None,
+    proxy_jump: str | None = None,
+) -> str:
     """SSH to target and run hostname -d to get the managed domain."""
-    proc = ssh_cmd(ssh_host, "hostname -d", timeout=timeout)
+    proc = ssh_cmd(
+        ssh_host, "hostname -d", timeout=timeout, port=port, proxy_jump=proxy_jump
+    )
     if proc.returncode != 0:
         raise RuntimeError(f"Failed to derive domain via SSH: {proc.stderr.strip()}")
     domain = (proc.stdout or "").strip()
     if not domain:
         raise RuntimeError("SSH hostname -d returned empty domain")
     return domain
+
+
+def _resolve_service_host(
+    service_host_override: str | None, domain: str, prefix: str
+) -> str:
+    """Return the override if set, otherwise derive from domain."""
+    if service_host_override:
+        return service_host_override
+    return f"{prefix}.{domain}"
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +346,8 @@ def case_ldap_flag_check(args: argparse.Namespace) -> None:
         host,
         "rpm -q dovecot-ldap 2>&1; echo RPM_EXIT:$?",
         timeout=args.timeout,
+        port=args.port,
+        proxy_jump=args.proxy_jump,
     )
     rpm_output = (proc.stdout or "").strip()
     print(f"  rpm -q dovecot-ldap: {rpm_output}")
@@ -341,6 +367,8 @@ def case_ldap_flag_check(args: argparse.Namespace) -> None:
         host,
         "rpm -q openldap-clients 2>&1; echo RPM_EXIT:$?",
         timeout=args.timeout,
+        port=args.port,
+        proxy_jump=args.proxy_jump,
     )
     rpm2_output = (proc2.stdout or "").strip()
     print(f"  rpm -q openldap-clients: {rpm2_output}")
@@ -356,6 +384,8 @@ def case_ldap_flag_check(args: argparse.Namespace) -> None:
         host,
         "stat /etc/dovecot/dovecot-ldap.conf.ext 2>&1; echo STAT_EXIT:$?",
         timeout=args.timeout,
+        port=args.port,
+        proxy_jump=args.proxy_jump,
     )
     stat_output = (proc3.stdout or "").strip()
     print(f"  stat dovecot-ldap.conf.ext: {stat_output[:120]}")
@@ -368,6 +398,8 @@ def case_ldap_flag_check(args: argparse.Namespace) -> None:
         host,
         "grep -E '^(mailta|generalta)$' /etc/postfix/valid_users.txt 2>/dev/null || true",
         timeout=args.timeout,
+        port=args.port,
+        proxy_jump=args.proxy_jump,
     )
     vu_output = (proc4.stdout or "").strip()
     print(
@@ -398,20 +430,24 @@ def case_ldap_disabled_regression(args: argparse.Namespace) -> None:
 
     # Derive domain and SMTP/IMAP hosts
     try:
-        domain = _derive_domain(host, timeout=args.timeout)
+        domain = _derive_domain(
+            host, timeout=args.timeout, port=args.port, proxy_jump=args.proxy_jump
+        )
         print(f"  Derived domain: {domain}")
     except Exception as e:
         fail_case("ldap-disabled-regression", f"Domain derivation failed: {e}")
         return
 
-    smtp_host = f"smtp.{domain}"
-    imap_host = f"imap.{domain}"
+    smtp_host = _resolve_service_host(args.service_host, domain, "smtp")
+    imap_host = _resolve_service_host(args.service_host, domain, "imap")
 
     # 1. dovecot-ldap.conf.ext must NOT exist
     proc = ssh_cmd(
         host,
         "stat /etc/dovecot/dovecot-ldap.conf.ext 2>&1; echo EXIT:$?",
         timeout=args.timeout,
+        port=args.port,
+        proxy_jump=args.proxy_jump,
     )
     stat_out = (proc.stdout or "").strip()
     if "EXIT:0" in stat_out:
@@ -427,6 +463,8 @@ def case_ldap_disabled_regression(args: argparse.Namespace) -> None:
         host,
         "grep -c 'driver = ldap' /etc/dovecot/conf.d/10-auth.conf 2>/dev/null || echo 0",
         timeout=args.timeout,
+        port=args.port,
+        proxy_jump=args.proxy_jump,
     )
     ldap_count_str = (proc2.stdout or "0").strip()
     try:
@@ -446,6 +484,8 @@ def case_ldap_disabled_regression(args: argparse.Namespace) -> None:
         host,
         "grep -cE '^(mailta|generalta)$' /etc/postfix/valid_users.txt 2>/dev/null || echo 0",
         timeout=args.timeout,
+        port=args.port,
+        proxy_jump=args.proxy_jump,
     )
     ldap_vu_str = (proc3.stdout or "0").strip()
     try:
@@ -566,12 +606,14 @@ def case_ldap_smtp_auth(args: argparse.Namespace) -> None:
     host = args.host
 
     try:
-        domain = _derive_domain(host, timeout=args.timeout)
+        domain = _derive_domain(
+            host, timeout=args.timeout, port=args.port, proxy_jump=args.proxy_jump
+        )
     except Exception as e:
         fail_case("ldap-smtp-auth", f"Domain derivation failed: {e}")
         return
 
-    smtp_host = f"smtp.{domain}"
+    smtp_host = _resolve_service_host(args.service_host, domain, "smtp")
     ldap_user = args.ldap_user
 
     try:
@@ -628,12 +670,14 @@ def case_ldap_sender_restrict(args: argparse.Namespace) -> None:
     host = args.host
 
     try:
-        domain = _derive_domain(host, timeout=args.timeout)
+        domain = _derive_domain(
+            host, timeout=args.timeout, port=args.port, proxy_jump=args.proxy_jump
+        )
     except Exception as e:
         fail_case("ldap-sender-restrict", f"Domain derivation failed: {e}")
         return
 
-    smtp_host = f"smtp.{domain}"
+    smtp_host = _resolve_service_host(args.service_host, domain, "smtp")
     ldap_user = args.ldap_user
 
     try:
@@ -726,13 +770,15 @@ def case_ldap_imap_delivery(args: argparse.Namespace) -> None:
     host = args.host
 
     try:
-        domain = _derive_domain(host, timeout=args.timeout)
+        domain = _derive_domain(
+            host, timeout=args.timeout, port=args.port, proxy_jump=args.proxy_jump
+        )
     except Exception as e:
         fail_case("ldap-imap-delivery", f"Domain derivation failed: {e}")
         return
 
-    smtp_host = f"smtp.{domain}"
-    imap_host = f"imap.{domain}"
+    smtp_host = _resolve_service_host(args.service_host, domain, "smtp")
+    imap_host = _resolve_service_host(args.service_host, domain, "imap")
     ldap_user = args.ldap_user
 
     try:
@@ -839,13 +885,15 @@ def case_ldap_list_member(args: argparse.Namespace) -> None:
     host = args.host
 
     try:
-        domain = _derive_domain(host, timeout=args.timeout)
+        domain = _derive_domain(
+            host, timeout=args.timeout, port=args.port, proxy_jump=args.proxy_jump
+        )
     except Exception as e:
         fail_case("ldap-list-member", f"Domain derivation failed: {e}")
         return
 
-    smtp_host = f"smtp.{domain}"
-    imap_host = f"imap.{domain}"
+    smtp_host = _resolve_service_host(args.service_host, domain, "smtp")
+    imap_host = _resolve_service_host(args.service_host, domain, "imap")
     api_host = smtp_host  # List API runs on the mail server
     api_port = 8000
     ldap_user = args.ldap_user
@@ -1064,6 +1112,23 @@ def main() -> None:
         default=15,
         help="Socket and SSH timeout in seconds (default: 15)",
     )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="SSH port for the target host (default: standard SSH port)",
+    )
+    parser.add_argument(
+        "--proxy-jump",
+        default=None,
+        help="SSH ProxyJump host (e.g., user@router:port) for reaching the target",
+    )
+    parser.add_argument(
+        "--service-host",
+        default=None,
+        help="Override hostname for SMTP/IMAP/API connections "
+        "(use when DNS-derived hostnames are not reachable, e.g., 127.0.0.1 with tunnels)",
+    )
 
     args = parser.parse_args()
 
@@ -1090,6 +1155,12 @@ def main() -> None:
 
     print("=== Phase 07 LDAP Integration Verification ===")
     print(f"Host (SSH target): {args.host}")
+    if args.port:
+        print(f"SSH port: {args.port}")
+    if args.proxy_jump:
+        print(f"ProxyJump: {args.proxy_jump}")
+    if args.service_host:
+        print(f"Service host override: {args.service_host}")
     print(f"LDAP user: {args.ldap_user}")
     print(f"Admin password: {'set' if admin_set else 'NOT SET'}")
     print(f"Test password:  {'set' if test_set else 'NOT SET'}")
