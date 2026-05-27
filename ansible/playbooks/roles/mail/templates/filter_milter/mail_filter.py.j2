@@ -74,6 +74,13 @@ def _rewrite_text_parts(part):
     # Pass payload without charset — avoids MIME headers injection
     # and base64 Content-Transfer-Encoding mangling (CR-02).
     part.set_payload(redacted)
+    # Remove stale Content-Transfer-Encoding header after rewriting.
+    # set_payload(raw_bytes) without charset leaves the original CTE
+    # (e.g. base64 / quoted-printable) in place even though the body
+    # is now raw decoded text. Deleting the stale CTE prevents
+    # malformed messages per RFC 2045 (WR-07).
+    if 'Content-Transfer-Encoding' in part:
+        del part['Content-Transfer-Encoding']
 
 
 # ---------------------------------------------------------------------------
