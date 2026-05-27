@@ -651,8 +651,27 @@ def case_fail_closed(args):
             "fail-closed", f"Failed to restart milter: {proc2.stderr.strip()[:200]}"
         )
         return
-    print("  Milter restarted, waiting 3s...")
-    time.sleep(3)
+    # Wait for the milter to bind to its socket (up to 30s)
+    # Use SSH to check the remote socket, replicating the Ansible
+    # wait_for pattern used during deployment.
+    for attempt in range(15):
+        probe = ssh_cmd(
+            args.ssh_host,
+            "ss -tlnp | grep -q ':8892'",
+            timeout=5,
+        )
+        if probe.returncode == 0:
+            break
+        if attempt < 14:
+            print(f"  Milter not yet listening (attempt {attempt + 1}/15)...")
+            time.sleep(2)
+        else:
+            fail_case(
+                "fail-closed",
+                "Milter did not bind to port 8892 within 30s after restart",
+            )
+            return
+    print("  Milter is listening on port 8892")
 
     # Step 4: Try sending again — should succeed now
     try:
