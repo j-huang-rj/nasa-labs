@@ -285,40 +285,53 @@ def case_idempotency(args: argparse.Namespace) -> None:
         )
         return
 
-    # Parse the PLAY RECAP line for changed=0 unreachable=0 failed=0
+    # Parse all PLAY RECAP host lines to verify every host reports
+    # changed=0, failed=0, unreachable=0.  A naive substring search for
+    # "changed=0" in the full stdout can produce false positives when
+    # multi-host playbook output has one host's changed=0 masking another
+    # host's changed=1 (WR-09).
+    import re
+
     stdout = proc2.stdout or ""
-    recap_line = ""
-    for line in stdout.splitlines():
-        if "PLAY RECAP" in line or (
-            "changed=" in line and "failed=" in line and "unreachable=" in line
-        ):
-            recap_line = line.strip()
-            break
-
-    print(f"  Second run recap: {recap_line or '(not found in output)'}")
-
-    # Check for 0 changes, 0 failures
-    has_zero_changed = "changed=0" in recap_line or "changed=0" in stdout
-    has_zero_failed = "failed=0" in recap_line or "failed=0" in stdout
-    has_zero_unreachable = "unreachable=0" in recap_line or "unreachable=0" in stdout
-
-    if not has_zero_changed:
-        fail_case(
-            "idempotency", "Second run reported non-zero changes — not idempotent"
-        )
+    recap_lines = [
+        line.strip()
+        for line in stdout.splitlines()
+        if re.match(r"\S+\s+:", line) and "changed=" in line
+    ]
+    if not recap_lines:
+        fail_case("idempotency", "No PLAY RECAP host lines found in output")
         return
 
-    if not has_zero_failed:
-        fail_case("idempotency", "Second run reported failures")
-        return
+    print(f"  Second run recap lines: {recap_lines}")
 
-    detail_parts = ["0 changes"]
-    if has_zero_failed:
-        detail_parts.append("0 failures")
-    if has_zero_unreachable:
-        detail_parts.append("0 unreachable")
+    for line in recap_lines:
+        m_failed = re.search(r"failed=(\d+)", line)
+        m_changed = re.search(r"changed=(\d+)", line)
+        m_unreachable = re.search(r"unreachable=(\d+)", line)
 
-    pass_case("idempotency", "Ansible idempotent: " + ", ".join(detail_parts))
+        if not m_changed or m_changed.group(1) != "0":
+            fail_case(
+                "idempotency",
+                f"Non-idempotent host line: {line}",
+            )
+            return
+        if not m_failed or m_failed.group(1) != "0":
+            fail_case(
+                "idempotency",
+                f"Second run reported failures: {line}",
+            )
+            return
+        if m_unreachable and m_unreachable.group(1) != "0":
+            fail_case(
+                "idempotency",
+                f"Second run reported unreachable hosts: {line}",
+            )
+            return
+
+    pass_case(
+        "idempotency",
+        f"Ansible idempotent: all hosts report 0 changes, 0 failures ({len(recap_lines)} host(s))",
+    )
 
 
 def case_no_open_relay(args: argparse.Namespace) -> None:
