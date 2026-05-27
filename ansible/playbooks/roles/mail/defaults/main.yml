@@ -60,8 +60,9 @@ mail_opendkim_postfix_socket: "inet:127.0.0.1:8891"
 # DKIM private key — consumed from gitignored host_vars/*/secrets.yml (D-03)
 mail_dkim_private_keys: {}
 
-# Phase 06 milter slot — empty list in Phase 04 (D-07)
-mail_pre_dkim_milters: []
+# Phase 06 milter slot — populated with filter milter before OpenDKIM (FILT-04)
+mail_pre_dkim_milters:
+  - "{{ mail_filter_milter_postfix_socket }}"
 
 # Mailing-list and API defaults
 mail_list_api_venv_dir: /opt/nasa-mail-list-api/venv
@@ -81,6 +82,25 @@ mail_list_static_alias_path: "{{ mail_postfix_conf_dir }}/list_static_aliases"
 mail_list_dynamic_source_path: "{{ mail_list_api_state_dir }}/dynamic_aliases"
 mail_list_reserved_names:
   - local_users
+
+# Phase 06 — Filter/rewrite milter defaults (populates mail_pre_dkim_milters)
+mail_filter_milter_service_name: nasa-mail-milter
+mail_filter_milter_packages:
+  - python3
+  - python3-pip
+  - python3-devel
+  - sendmail-devel
+mail_filter_milter_python_requirements:
+  - pymilter==1.0.5
+mail_filter_milter_venv_dir: /opt/nasa-mail-milter/venv
+mail_filter_milter_app_dir: /opt/nasa-mail-milter/app
+mail_filter_milter_app_path: "{{ mail_filter_milter_app_dir }}/mail_filter.py"
+mail_filter_milter_socket_addr: "inet:8892@127.0.0.1"
+mail_filter_milter_postfix_socket: "inet:127.0.0.1:8892"
+mail_filter_milter_socket_port: 8892
+mail_filter_milter_timeout: 600
+mail_filter_spam_tag: "[SPAM]"
+mail_filter_test_prefix: "[TEST]"
 
 # Secret variables — real values come from gitignored host_vars/*/secrets.yml
 mail_tls_certificate: ""

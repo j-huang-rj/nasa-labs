@@ -256,3 +256,65 @@ argument_specs:
         required: false
         description: >-
           List of reserved list names that the API must reject for create/delete
+
+      mail_filter_milter_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the filter/rewrite milter service
+
+      mail_filter_milter_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages required for the filter/rewrite milter runtime
+
+      mail_filter_milter_python_requirements:
+        type: list
+        elements: str
+        required: false
+        description: Pip-installable Python package version pins for the milter runtime
+
+      mail_filter_milter_venv_dir:
+        type: str
+        required: false
+        description: Absolute path for the filter milter Python virtual environment
+
+      mail_filter_milter_app_dir:
+        type: str
+        required: false
+        description: Absolute path for the filter milter application directory on the target host
+
+      mail_filter_milter_app_path:
+        type: str
+        required: false
+        description: Absolute path for the rendered milter application module
+
+      mail_filter_milter_socket_addr:
+        type: str
+        required: false
+        description: Milter socket address in inet:port@host syntax for the milter service listener
+
+      mail_filter_milter_postfix_socket:
+        type: str
+        required: false
+        description: Milter socket address in Postfix inet:host:port syntax for the milter client
+
+      mail_filter_milter_socket_port:
+        type: int
+        required: false
+        description: TCP port the filter milter listens on
+
+      mail_filter_milter_timeout:
+        type: int
+        required: false
+        description: Milter I/O timeout in seconds for the Postfix client connection
+
+      mail_filter_spam_tag:
+        type: str
+        required: false
+        description: Literal Subject tag that triggers SMTP-session rejection
+
+      mail_filter_test_prefix:
+        type: str
+        required: false
+        description: Subject prefix prepended to mail sent by the test user
