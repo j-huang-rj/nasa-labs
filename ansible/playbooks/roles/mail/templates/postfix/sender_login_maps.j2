@@ -6,4 +6,9 @@
 {% for user in mail_local_users %}
 {{ user }}@{{ domain }} {{ user }}
 {% endfor %}
+{% if mail_ldap_enabled | default(false) %}
+{% for user in mail_ldap_users | default([]) %}
+{{ user }}@{{ domain }} {{ user }}
+{% endfor %}
+{% endif %}
 {% endfor %}
