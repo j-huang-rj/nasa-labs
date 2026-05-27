@@ -1,0 +1,229 @@
+# NASA mail filter/rewrite milter — managed by Ansible
+# {{ ansible_managed | default('Ansible managed') }}
+# Source: ansible/playbooks/roles/mail/templates/filter_milter/mail_filter.py.j2
+
+import codecs
+import email
+import email.generator
+import logging
+import re
+import sys
+from io import BytesIO
+
+import Milter
+
+# ---------------------------------------------------------------------------
+# Configuration constants (Ansible-interpolated)
+# ---------------------------------------------------------------------------
+SPAM_TAG = '{{ mail_filter_spam_tag }}'
+ID_PATTERN = re.compile(rb'([A-Z]\d{9})')
+TEST_PREFIX = '{{ mail_filter_test_prefix }}'
+SOCKET = '{{ mail_filter_milter_socket_addr }}'
+TIMEOUT = {{ mail_filter_milter_timeout }}
+
+# ---------------------------------------------------------------------------
+# Logging — write to stdout for journald capture
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("mail-filter")
+
+
+# ---------------------------------------------------------------------------
+# MIME helpers — text-part-only rewriting (D-02, D-05, D-08, D-11)
+# ---------------------------------------------------------------------------
+
+def _rewrite_text_parts(part):
+    """Walk the MIME tree and redact ID numbers in text parts.
+
+    Only ``text/plain`` and ``text/html`` parts are rewritten (D-05).
+    Binary and other non-text parts are skipped.
+    Charset decode failures propagate upward for D-11 tempfail.
+    """
+    if part.is_multipart():
+        for subpart in part.get_payload():
+            _rewrite_text_parts(subpart)
+        return
+
+    content_type = part.get_content_type()
+    if content_type not in ("text/plain", "text/html"):
+        # Skip binary attachments and other non-text content types (D-05)
+        return
+
+    payload = part.get_payload(decode=True)
+    if payload is None:
+        return
+
+    charset = part.get_content_charset() or "utf-8"
+
+    # Validate charset by attempting decode (D-11 safety gate).
+    # If the declared charset cannot be decoded, tempfail rather than
+    # deliver possibly-unredacted content.
+    try:
+        codecs.decode(payload, charset)
+    except (UnicodeDecodeError, LookupError):
+        raise  # caught in eom() for D-11 TEMPFAIL
+
+    # D-02: apply ASCII-pattern redaction on raw bytes.
+    # The regex [A-Z]\d{9} matches ASCII characters regardless of
+    # the text part charset, so bytes-level substitution is safe.
+    redacted = ID_PATTERN.sub(b"***", payload)
+    part.set_payload(redacted, charset)
+
+
+# ---------------------------------------------------------------------------
+# Milter application
+# ---------------------------------------------------------------------------
+
+class MailFilterMilter(Milter.Milter):
+    """Postfix milter implementing filtering and rewriting.
+
+    - FILT-01: rejects [SPAM] subjects at SMTP session time
+    - FILT-02: redacts ID patterns ([A-Z]\\d{9}) in text bodies
+    - FILT-03: prefixes [TEST] to subjects for authenticated user 'test'
+    - FILT-04: runs before OpenDKIM in the milter chain (ordering
+      controlled by mail_pre_dkim_milters in Postfix main.cf)"""
+
+    def __init__(self):
+        self.id = Milter.uniqueID()
+        self.auth_user = None
+        self.mailfrom = None
+        self.fp = None  # body accumulation buffer (unused; chunks list preferred)
+        self.body_chunks = []  # list of bytes
+        self.subject = None
+        self.subject_idx = None  # 1-based header index for chgheader
+        self.header_count = 0
+        self.need_subject_rewrite = False
+
+    @Milter.noreply
+    def envfrom(self, f, *str):
+        """Called at MAIL FROM — capture authenticated sender identity.
+
+        D-04: auth_user is read from the {auth_authen} milter macro
+        (SASL login name), NOT from the forgeable From: header.
+        """
+        self.mailfrom = f
+        self.auth_user = self.getsymval('{{ '{' }}auth_authen{{ '}' }}')
+        # Reset per-message state
+        self.body_chunks = []
+        self.subject = None
+        self.subject_idx = None
+        self.header_count = 0
+        self.need_subject_rewrite = False
+        return Milter.CONTINUE
+
+    def header(self, name, val, *rest):
+        """Called for each message header.
+
+        - FILT-01: reject if [SPAM] is found in Subject (D-01, D-10)
+        - FILT-03: prefix [TEST] for authenticated user test (D-03, D-04)
+        """
+        self.header_count += 1
+        if name.lower() == "subject":
+            self.subject = val
+            self.subject_idx = self.header_count
+
+            # FILT-01 (D-01, D-10): case-sensitive substring match in Subject
+            if SPAM_TAG in val:
+                self.setreply(
+                    "550", "5.7.1",
+                    "Message rejected: spam detected in subject",
+                )
+                return Milter.REJECT
+
+            # FILT-03 (D-03, D-04): exactly one prefix, no duplicates
+            if (
+                self.auth_user == "test"
+                and not val.startswith(TEST_PREFIX)
+            ):
+                self.subject = TEST_PREFIX + val
+                self.need_subject_rewrite = True
+
+        return Milter.CONTINUE
+
+    def body(self, chunk):
+        """Accumulate raw body chunks for rewriting in eom()."""
+        self.body_chunks.append(bytes(chunk))
+        return Milter.CONTINUE
+
+    def eoh(self):
+        """Called after all headers — rewrite Subject if needed.
+
+        Uses chgheader to replace the Subject header at its tracked
+        index, so the [TEST] prefix is applied before body rewriting
+        and before OpenDKIM signs the final content.
+        """
+        if self.need_subject_rewrite and self.subject is not None and self.subject_idx is not None:
+            self.chgheader("subject", self.subject_idx, self.subject)
+        return Milter.CONTINUE
+
+    def eom(self):
+        """Called at end-of-message — perform body ID redaction.
+
+        FILT-02 (D-02, D-05, D-08, D-11):
+        - Parse MIME structure from accumulated body bytes
+        - Rewrite text/plain and text/html parts only (D-05)
+        - Validate charset; tempfail on decode failure (D-11)
+        - Reconstruct and replace the message body
+        """
+        body_bytes = b"".join(self.body_chunks)
+        if not body_bytes:
+            return Milter.ACCEPT
+
+        try:
+            msg = email.message_from_bytes(body_bytes)
+
+            # D-02, D-05, D-08: walk MIME tree and redact text parts
+            _rewrite_text_parts(msg)
+
+            # Reconstruct the modified message
+            fp = BytesIO()
+            gen = email.generator.BytesGenerator(fp)
+            gen.flatten(msg)
+            modified_bytes = fp.getvalue()
+
+            self.replacebody(modified_bytes)
+
+        except (UnicodeDecodeError, LookupError) as exc:
+            # D-11: charset cannot be safely decoded — tempfail
+            logger.warning(
+                "charset decode failure for message %s: %s",
+                self.id, exc,
+            )
+            self.setreply(
+                "450", "4.7.0",
+                "Temporary failure: unable to decode message charset",
+            )
+            return Milter.TEMPFAIL
+
+        except Exception as exc:
+            # D-09 / D-11: any unexpected MIME processing error — tempfail
+            logger.error(
+                "MIME processing error for message %s: %s",
+                self.id, exc,
+            )
+            self.setreply(
+                "450", "4.7.0",
+                "Temporary failure: message processing error",
+            )
+            return Milter.TEMPFAIL
+
+        return Milter.ACCEPT
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+def main():
+    Milter.factory = MailFilterMilter
+    # Enable body modification, header modification, and header addition
+    Milter.set_flags(Milter.CHGBODY | Milter.CHGHDRS | Milter.ADDHDRS)
+    logger.info("Starting mail filter milter on %s", SOCKET)
+    Milter.runmilter("mail-filter", SOCKET, TIMEOUT)
+
+
+if __name__ == "__main__":
+    main()
