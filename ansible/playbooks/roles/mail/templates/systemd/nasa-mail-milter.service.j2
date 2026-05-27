@@ -1,0 +1,22 @@
+[Unit]
+Description=NASA Mail Filter/Rewrite Milter
+After=network.target
+Before=postfix.service opendkim.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory={{ mail_filter_milter_app_dir }}
+ExecStart={{ mail_filter_milter_venv_dir }}/bin/python3 {{ mail_filter_milter_app_path }}
+Restart=on-failure
+RestartSec=5
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
