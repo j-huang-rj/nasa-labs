@@ -71,7 +71,9 @@ def _rewrite_text_parts(part):
     # The regex [A-Z]\d{9} matches ASCII characters regardless of
     # the text part charset, so bytes-level substitution is safe.
     redacted = ID_PATTERN.sub(b"***", payload)
-    part.set_payload(redacted, charset)
+    # Pass payload without charset — avoids MIME headers injection
+    # and base64 Content-Transfer-Encoding mangling (CR-02).
+    part.set_payload(redacted)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +98,7 @@ class MailFilterMilter(Milter.Milter):
         self.subject = None
         self.subject_idx = None  # 1-based header index for chgheader
         self.header_count = 0
+        self.header_lines = []  # collect (name, val) for full-message reconstruction (CR-03)
         self.need_subject_rewrite = False
 
     @Milter.noreply
@@ -109,6 +112,7 @@ class MailFilterMilter(Milter.Milter):
         self.auth_user = self.getsymval('{{ '{' }}auth_authen{{ '}' }}')
         # Reset per-message state
         self.body_chunks = []
+        self.header_lines = []
         self.subject = None
         self.subject_idx = None
         self.header_count = 0
@@ -122,6 +126,7 @@ class MailFilterMilter(Milter.Milter):
         - FILT-03: prefix [TEST] for authenticated user test (D-03, D-04)
         """
         self.header_count += 1
+        self.header_lines.append((name, val))  # collect for full-message reconstruction (CR-03)
         if name.lower() == "subject":
             self.subject = val
             self.subject_idx = self.header_count
@@ -164,28 +169,53 @@ class MailFilterMilter(Milter.Milter):
         """Called at end-of-message — perform body ID redaction.
 
         FILT-02 (D-02, D-05, D-08, D-11):
-        - Parse MIME structure from accumulated body bytes
+        - Reconstruct full SMTP message from collected headers + body (CR-03)
+        - Parse MIME structure with proper Content-Type awareness
         - Rewrite text/plain and text/html parts only (D-05)
         - Validate charset; tempfail on decode failure (D-11)
-        - Reconstruct and replace the message body
+        - Extract and replace the SMTP body portion only
         """
         body_bytes = b"".join(self.body_chunks)
         if not body_bytes:
             return Milter.ACCEPT
 
+        # Reconstruct full SMTP message from collected headers + body (CR-03).
+        # The body-only data lacks the Content-Type header, so reconstructing
+        # the headers-body unit lets email.message_from_bytes() properly parse
+        # multipart structures instead of treating everything as text/plain.
+        header_bytes = b"".join(
+            f"{name}: {val}\r\n".encode("utf-8")
+            for name, val in self.header_lines
+        )
+        full_msg_bytes = header_bytes + b"\r\n" + body_bytes
+
         try:
-            msg = email.message_from_bytes(body_bytes)
+            msg = email.message_from_bytes(full_msg_bytes)
 
             # D-02, D-05, D-08: walk MIME tree and redact text parts
             _rewrite_text_parts(msg)
 
-            # Reconstruct the modified message
+            # Serialize the modified message ...
             fp = BytesIO()
             gen = email.generator.BytesGenerator(fp)
             gen.flatten(msg)
-            modified_bytes = fp.getvalue()
+            full_output = fp.getvalue()
 
-            self.replacebody(modified_bytes)
+            # ... and extract only the body portion (after the headers-body
+            # separator) for replacebody(), which expects raw body data
+            # without MIME headers.
+            sep_idx = full_output.find(b"\r\n\r\n")
+            if sep_idx != -1:
+                modified_body = full_output[sep_idx + 4:]
+            else:
+                # Some implementations use bare LF-only line endings
+                sep_idx_n = full_output.find(b"\n\n")
+                if sep_idx_n != -1:
+                    modified_body = full_output[sep_idx_n + 2:]
+                else:
+                    modified_body = full_output  # fallback
+
+            self.replacebody(modified_body)
 
         except (UnicodeDecodeError, LookupError) as exc:
             # D-11: charset cannot be safely decoded — tempfail
@@ -201,9 +231,9 @@ class MailFilterMilter(Milter.Milter):
 
         except Exception as exc:
             # D-09 / D-11: any unexpected MIME processing error — tempfail
-            logger.error(
-                "MIME processing error for message %s: %s",
-                self.id, exc,
+            # IN-04: use logger.exception for full traceback on unexpected errors
+            logger.exception(
+                "MIME processing error for message %s", self.id
             )
             self.setreply(
                 "450", "4.7.0",
