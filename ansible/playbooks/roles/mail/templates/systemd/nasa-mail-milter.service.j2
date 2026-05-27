@@ -12,6 +12,9 @@ ExecStart={{ mail_filter_milter_venv_dir }}/bin/python3 {{ mail_filter_milter_ap
 Restart=on-failure
 RestartSec=5
 
+# Ensure Python stdout/stderr are line-buffered for journald
+Environment=PYTHONUNBUFFERED=1
+
 # Security hardening
 PrivateTmp=true
 ProtectSystem=strict
