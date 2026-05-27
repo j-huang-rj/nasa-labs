@@ -8,6 +8,15 @@ passdb {
   args = {{ mail_dovecot_passwd_path }}
 }
 
+{% if mail_ldap_enabled | default(false) %}
+# LDAP passdb — chained after passwd-file, only checked if local user not found
+passdb {
+  driver = ldap
+  args = {{ mail_dovecot_conf_dir }}/dovecot-ldap.conf.ext
+  skip = authenticated
+}
+{% endif %}
+
 # Static userdb maps all virtual users to shared vmail identity
 userdb {
   driver = static

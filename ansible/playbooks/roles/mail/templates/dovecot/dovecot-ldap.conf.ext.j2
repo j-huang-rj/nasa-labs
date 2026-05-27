@@ -1,0 +1,22 @@
+# Dovecot LDAP passdb configuration - managed by Ansible
+# LDAPS connection for ta-group user authentication
+
+# LDAPS connection on port 636 (not StartTLS)
+uris = {{ mail_ldap_uri }}
+
+# TLS trust for LDAPS certificate verification
+tls_ca_cert_file = {{ mail_ldap_ca_cert_path }}
+
+# Base DN for searches
+base = {{ mail_ldap_base_dn }}
+
+# Auth bind as user — DN template avoids extra LDAP lookup
+auth_bind = yes
+auth_bind_userdn = uid=%n,ou=People,{{ mail_ldap_base_dn }}
+
+# Restrict to posixAccount entries under ou=People (group restriction deferred to HW1-3 schema confirmation)
+pass_filter = (&(objectClass=posixAccount)(uid=%n))
+
+# Search scope
+scope = subtree
+deref = never
