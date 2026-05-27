@@ -36,6 +36,12 @@
     mode: "0644"
   notify: "PHASE [handler : Restart Filter Milter]"
 
+- name: "PHASE [filter_milter : Create Filter Milter System Group]"
+  ansible.builtin.group:
+    name: "{{ mail_filter_milter_group }}"
+    system: true
+    state: present
+
 - name: "PHASE [filter_milter : Create Filter Milter System User]"
   ansible.builtin.user:
     name: "{{ mail_filter_milter_user }}"

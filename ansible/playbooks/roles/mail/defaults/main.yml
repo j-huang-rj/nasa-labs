@@ -93,6 +93,7 @@ mail_filter_milter_packages:
   - python3-pip
   - python3-devel
   - sendmail-devel
+  - gcc
 mail_filter_milter_python_requirements:
   - pymilter==1.0.5
 mail_filter_milter_venv_dir: /opt/nasa-mail-milter/venv
