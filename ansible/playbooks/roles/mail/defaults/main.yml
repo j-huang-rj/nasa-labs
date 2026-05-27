@@ -105,3 +105,15 @@ mail_filter_milter_socket_port: 8892
 mail_filter_milter_timeout: 600
 mail_filter_spam_tag: "[SPAM]"
 mail_filter_test_prefix: "[TEST]"
+
+# LDAP Integration (Phase 07) — gated behind mail_ldap_enabled
+mail_ldap_enabled: false
+mail_ldap_host: "ldap.{{ bind9_forward_zone_name }}"
+mail_ldap_base_dn: "dc={{ bind9_forward_zone_name | regex_replace('\\.', ',dc=') }}"
+mail_ldap_uri: "ldaps://{{ mail_ldap_host }}:636"
+mail_ldap_ca_cert_path: /etc/pki/ca-trust/source/anchors/ldap-ca.crt
+mail_ldap_users: []
+mail_dovecot_ldap_packages:
+  - dovecot-ldap
+mail_ldap_assert_packages:
+  - openldap-clients
