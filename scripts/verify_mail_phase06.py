@@ -874,11 +874,6 @@ def main():
         "--domain", required=True, help="Base managed domain (e.g. STUID.nasa)"
     )
     parser.add_argument(
-        "--mail-domain",
-        required=True,
-        help="Mail managed domain (e.g. mail.STUID.nasa)",
-    )
-    parser.add_argument(
         "--admin-password", required=True, help="Password for admin user"
     )
     parser.add_argument("--test-password", required=True, help="Password for test user")
@@ -916,7 +911,7 @@ def main():
 
     print("=== Phase 06 Filtering & Rewriting Verification ===")
     print(f"SMTP: {args.smtp_host}  IMAP: {args.imap_host}")
-    print(f"Domain: {args.domain}  Mail domain: {args.mail_domain}")
+    print(f"Domain: {args.domain}")
     print(f"SSH host: {args.ssh_host}  DKIM selector: {args.dkim_selector}")
     print(f"Cases: {args.cases}")
     print()
