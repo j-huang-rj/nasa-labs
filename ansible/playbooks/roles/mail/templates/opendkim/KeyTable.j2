@@ -1,6 +1,5 @@
 # OpenDKIM KeyTable - managed by Ansible
-# Maps key names to domain:selector:keyfile tuples.
-# Both managed domains share the same private key (D-01).
+
 {% for domain in mail_managed_domains %}
 {{ mail_dkim_selector }}._domainkey.{{ domain }} {{ domain }}:{{ mail_dkim_selector }}:{{ mail_opendkim_private_key_path }}
 {% endfor %}

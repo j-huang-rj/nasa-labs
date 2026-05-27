@@ -145,6 +145,11 @@ argument_specs:
         required: false
         description: Absolute path to the OpenDKIM configuration directory
 
+      mail_opendkim_main_config:
+        type: str
+        required: false
+        description: Absolute path to the main OpenDKIM configuration file
+
       mail_opendkim_keys_dir:
         type: str
         required: false

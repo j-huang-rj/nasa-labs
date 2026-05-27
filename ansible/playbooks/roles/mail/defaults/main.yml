@@ -1,70 +1,67 @@
 ---
-# Package and service defaults
+# Postfix
 mail_postfix_packages:
   - postfix
   - postfix-lmdb
   - cyrus-sasl-plain
-mail_dovecot_packages:
-  - dovecot
 mail_postfix_service_name: postfix
-mail_dovecot_service_name: dovecot
+
+# Managed domains
+mail_managed_domains:
+  - "{{ bind9_forward_zone_name }}"
+  - "{{ mail_domain_name }}"
 
 # Virtual mailbox user
 mail_vmail_user: vmail
 mail_vmail_group: vmail
 mail_vmail_home: /var/vmail
 
-# Configuration directories
-mail_postfix_conf_dir: /etc/postfix
-mail_dovecot_conf_dir: /etc/dovecot
-
-# TLS certificate and private key paths on the target host
-mail_tls_cert_path: /etc/pki/tls/certs/mail.pem
-mail_tls_key_path: /etc/pki/tls/private/mail.key
-
-# Dovecot passwd-file path for local virtual users
-mail_dovecot_passwd_path: /etc/dovecot/passwd
-
-# Postfix-Dovecot integration sockets (inside Postfix chroot)
-mail_dovecot_auth_socket_path: /var/spool/postfix/private/auth
-mail_dovecot_lmtp_socket_path: /var/spool/postfix/private/dovecot-lmtp
-
-# Managed domains — derived from DNS identity variables, not a literal student ID
-mail_managed_domains:
-  - "{{ bind9_forward_zone_name }}"
-  - "{{ mail_domain_name }}"
-
-# Local virtual users with passwd-file authentication (D-01, D-04)
+# Local virtual users
 mail_local_users:
   - admin
   - test
+mail_local_user_password_hashes: {}
 
-# OpenDKIM package and service defaults
+# Configuration directories
+mail_postfix_conf_dir: /etc/postfix
+
+# TLS
+mail_tls_certificate: ""
+mail_tls_private_key: ""
+mail_tls_cert_path: /etc/pki/tls/certs/mail.pem
+mail_tls_key_path: /etc/pki/tls/private/mail.key
+
+# Dovecot
+mail_dovecot_packages:
+  - dovecot
+mail_dovecot_service_name: dovecot
+
+mail_dovecot_conf_dir: /etc/dovecot
+mail_dovecot_passwd_path: "{{ mail_dovecot_conf_dir }}/passwd"
+mail_dovecot_auth_socket_path: /var/spool/postfix/private/auth
+mail_dovecot_lmtp_socket_path: /var/spool/postfix/private/dovecot-lmtp
+
+# DKIM
+mail_dkim_selector: "2026-na"
+mail_dkim_private_keys: {}
+
+# OpenDKIM
 mail_opendkim_packages:
   - opendkim
   - opendkim-tools
-mail_opendkim_service_name: opendkim
 mail_opendkim_user: opendkim
 mail_opendkim_group: opendkim
-mail_opendkim_conf_dir: /etc/opendkim
-mail_opendkim_keys_dir: /etc/opendkim/keys
+mail_opendkim_service_name: opendkim
 
-# DKIM selector and key path — one selector for both managed domains (D-01)
-mail_dkim_selector: "2026-na"
+mail_opendkim_conf_dir: /etc/opendkim
+mail_opendkim_main_config: /etc/opendkim.conf
+mail_opendkim_keys_dir: "{{ mail_opendkim_conf_dir }}/keys"
 mail_opendkim_private_key_path: "{{ mail_opendkim_keys_dir }}/{{ mail_dkim_selector }}.private"
 
-# OpenDKIM and Postfix milter socket addresses (D-05)
 mail_opendkim_socket: "inet:8891@127.0.0.1"
 mail_opendkim_postfix_socket: "inet:127.0.0.1:8891"
 
-# DKIM private key — consumed from gitignored host_vars/*/secrets.yml (D-03)
-mail_dkim_private_keys: {}
-
-# Phase 06 milter slot — populated with filter milter before OpenDKIM (FILT-04)
-mail_pre_dkim_milters:
-  - "{{ mail_filter_milter_postfix_socket }}"
-
-# Mailing-list and API defaults
+# Mailing-list API
 mail_list_api_venv_dir: /opt/nasa-mail-list-api/venv
 mail_list_api_app_dir: /opt/nasa-mail-list-api/app
 mail_list_api_state_dir: /var/lib/nasa-mail-list-api
@@ -83,7 +80,11 @@ mail_list_dynamic_source_path: "{{ mail_list_api_state_dir }}/dynamic_aliases"
 mail_list_reserved_names:
   - local_users
 
-# Phase 06 — Filter/rewrite milter defaults (populates mail_pre_dkim_milters)
+# Milter slot
+mail_pre_dkim_milters:
+  - "{{ mail_filter_milter_postfix_socket }}"
+
+# Filter/rewrite milter defaults
 mail_filter_milter_service_name: nasa-mail-milter
 mail_filter_milter_user: nasa-mail-milter
 mail_filter_milter_group: nasa-mail-milter
@@ -103,8 +104,3 @@ mail_filter_milter_socket_port: 8892
 mail_filter_milter_timeout: 600
 mail_filter_spam_tag: "[SPAM]"
 mail_filter_test_prefix: "[TEST]"
-
-# Secret variables — real values come from gitignored host_vars/*/secrets.yml
-mail_tls_certificate: ""
-mail_tls_private_key: ""
-mail_local_user_password_hashes: {}

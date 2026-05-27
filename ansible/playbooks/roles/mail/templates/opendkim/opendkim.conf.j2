@@ -1,12 +1,11 @@
 # OpenDKIM main configuration - managed by Ansible
-# DKIM signing milter for managed-domain outbound mail
 
 Syslog yes
 Mode sv
 Canonicalization relaxed/relaxed
 Socket inet:8891@127.0.0.1
-KeyTable /etc/opendkim/KeyTable
-SigningTable refile:/etc/opendkim/SigningTable
-ExternalIgnoreList /etc/opendkim/TrustedHosts
-InternalHosts /etc/opendkim/TrustedHosts
+KeyTable {{ mail_opendkim_conf_dir }}/KeyTable
+SigningTable refile:{{ mail_opendkim_conf_dir }}/SigningTable
+ExternalIgnoreList {{ mail_opendkim_conf_dir }}/TrustedHosts
+InternalHosts {{ mail_opendkim_conf_dir }}/TrustedHosts
 UserID opendkim:opendkim

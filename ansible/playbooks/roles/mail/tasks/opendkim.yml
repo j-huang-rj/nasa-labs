@@ -56,7 +56,7 @@
 - name: "PHASE [opendkim : Render OpenDKIM Main Configuration]"
   ansible.builtin.template:
     src: opendkim/opendkim.conf.j2
-    dest: /etc/opendkim.conf
+    dest: "{{ mail_opendkim_main_config }}"
     owner: root
     group: "{{ mail_opendkim_group }}"
     mode: "0640"
@@ -74,7 +74,7 @@
 - name: "PHASE [opendkim : Render OpenDKIM KeyTable]"
   ansible.builtin.template:
     src: opendkim/KeyTable.j2
-    dest: /etc/opendkim/KeyTable
+    dest: "{{ mail_opendkim_conf_dir }}/KeyTable"
     owner: root
     group: "{{ mail_opendkim_group }}"
     mode: "0640"
@@ -83,7 +83,7 @@
 - name: "PHASE [opendkim : Render OpenDKIM SigningTable]"
   ansible.builtin.template:
     src: opendkim/SigningTable.j2
-    dest: /etc/opendkim/SigningTable
+    dest: "{{ mail_opendkim_conf_dir }}/SigningTable"
     owner: root
     group: "{{ mail_opendkim_group }}"
     mode: "0640"
@@ -91,7 +91,7 @@
 
 - name: "PHASE [opendkim : Validate OpenDKIM Configuration]"
   ansible.builtin.command:
-    cmd: opendkim -n -x /etc/opendkim.conf
+    cmd: opendkim -n -x {{ mail_opendkim_main_config }}
   changed_when: false
 
 - name: "PHASE [opendkim : Flush Handlers]"
