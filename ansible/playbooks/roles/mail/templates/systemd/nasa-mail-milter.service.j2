@@ -5,8 +5,8 @@ Before=postfix.service opendkim.service
 
 [Service]
 Type=simple
-User=root
-Group=root
+User=nasa-mail-milter
+Group=nasa-mail-milter
 WorkingDirectory={{ mail_filter_milter_app_dir }}
 ExecStart={{ mail_filter_milter_venv_dir }}/bin/python3 {{ mail_filter_milter_app_path }}
 Restart=on-failure

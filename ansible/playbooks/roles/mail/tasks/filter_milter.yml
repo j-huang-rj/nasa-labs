@@ -36,6 +36,13 @@
     mode: "0644"
   notify: "PHASE [handler : Restart Filter Milter]"
 
+- name: "PHASE [filter_milter : Create Filter Milter System User]"
+  ansible.builtin.user:
+    name: nasa-mail-milter
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+
 - name: "PHASE [filter_milter : Render Systemd Service Unit]"
   ansible.builtin.template:
     src: systemd/nasa-mail-milter.service.j2
