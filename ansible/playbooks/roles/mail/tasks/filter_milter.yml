@@ -61,9 +61,11 @@
     state: started
 
 - name: "PHASE [filter_milter : Validate Milter Socket Listening]"
-  ansible.builtin.command:
-    cmd: "ss -tlnp | grep {{ mail_filter_milter_socket_port }}"
-  changed_when: false
+  ansible.builtin.wait_for:
+    port: "{{ mail_filter_milter_socket_port }}"
+    host: 127.0.0.1
+    timeout: 30
+    state: started
 
 - name: "PHASE [filter_milter : END]"
   become: false
