@@ -213,7 +213,16 @@ class MailFilterMilter(Milter.Milter):
                 if sep_idx_n != -1:
                     modified_body = full_output[sep_idx_n + 2:]
                 else:
-                    modified_body = full_output  # fallback
+                    # No header-body separator found — tempfail per D-11
+                    logger.exception(
+                        "MIME serialization produced no header-body separator for message %s",
+                        self.id,
+                    )
+                    self.setreply(
+                        "450", "4.7.0",
+                        "Temporary failure: message processing error",
+                    )
+                    return Milter.TEMPFAIL
 
             self.replacebody(modified_body)
 
