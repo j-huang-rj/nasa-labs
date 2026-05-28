@@ -1,6 +1,4 @@
-{# Backend-valid user names for list member validation (D-08)
-   Generated from mail_local_users in Phase 05.
-   Phase 07 extends this to include LDAP users when mail_ldap_enabled is true. #}
+{# Backend-valid user names for list member validation #}
 {% for user in mail_local_users %}
 {{ user }}
 {% endfor %}

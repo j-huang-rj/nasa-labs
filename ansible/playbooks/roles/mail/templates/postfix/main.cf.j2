@@ -5,12 +5,11 @@ myhostname = {{ mail_smtp_fqdn }}
 myorigin = {{ mail_managed_domains | first }}
 mydestination = localhost
 
-# Virtual mailbox domains — only accept unauthenticated mail for these
+# Virtual mailbox domains — accept delivery from trusted networks or authenticated users
 virtual_mailbox_domains = lmdb:/etc/postfix/virtual_mailbox_domains
 virtual_transport = lmtp:unix:private/dovecot-lmtp
 
 # Virtual alias expansion for mailing lists
-# Static map comes first so Ansible-owned aliases take precedence over API-owned dynamic aliases
 virtual_alias_maps =
     lmdb:{{ mail_list_static_alias_path }},
     lmdb:{{ mail_list_dynamic_source_path }}
@@ -22,10 +21,16 @@ recipient_delimiter = +
 smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
 
-# Global policy
-smtpd_sasl_auth_enable = no
-smtpd_recipient_restrictions = reject_unauth_destination
+# Global policy — require SASL auth for submission, allow MX delivery from trusted networks
+smtpd_sasl_auth_enable = yes
+smtpd_sender_login_maps = lmdb:/etc/postfix/sender_login_maps
+smtpd_sender_restrictions = reject_sender_login_mismatch
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject
+smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject
 smtpd_tls_security_level = may
+
+# Trusted networks
+mynetworks = 127.0.0.0/8, 192.168.255.0/28
 
 # TLS certificate
 smtpd_tls_cert_file = {{ mail_tls_cert_path }}
@@ -35,10 +40,7 @@ smtpd_tls_key_file = {{ mail_tls_key_path }}
 relayhost =
 transport_maps =
 
-# Milter chain for DKIM signing
-# Phase 06 insertion point: rewrite/filter milters must be prepended before
-# OpenDKIM so DKIM signs final rewritten content (D-07, D-15).
-# mail_pre_dkim_milters is empty in Phase 04; populated in Phase 06.
+# Milter chain
 milter_protocol = 6
 milter_default_action = tempfail
 smtpd_milters = {{ (mail_pre_dkim_milters + [mail_opendkim_postfix_socket]) | join(', ') }}

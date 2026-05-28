@@ -1,5 +1,5 @@
-{# List API runtime settings — generated from role variables. Contains no secrets. #}
-{% raw %}{{% endraw %}
+{# List API runtime settings #}
+{
   "state_file": "{{ mail_list_api_state_dir }}/lists.json",
   "lock_file": "{{ mail_list_api_state_dir }}/lists.lock",
   "valid_users_file": "{{ mail_list_api_app_dir }}/valid_users.txt",
@@ -8,4 +8,4 @@
   "reserved_names": {{ mail_list_reserved_names | to_json }},
   "listen_host": "{{ mail_list_api_listen_host }}",
   "listen_port": {{ mail_list_api_listen_port }}
-{% raw %}}{% endraw %}
+}

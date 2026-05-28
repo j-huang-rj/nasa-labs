@@ -1,14 +1,13 @@
 # Dovecot SSL/STARTTLS configuration - managed by Ansible
 
-# Enable SSL/TLS support - STARTTLS advertised on IMAP 143
+# Enable SSL/TLS support
 ssl = yes
 
 # Certificate and key paths
 ssl_cert = <{{ mail_tls_cert_path }}
 ssl_key = <{{ mail_tls_key_path }}
 
-# Require TLS before plaintext authentication on non-SSL connections
-# Clients connecting to IMAP 143 must use STARTTLS before authenticating
-disable_plaintext_auth = yes
+# Allow plaintext auth without TLS
+disable_plaintext_auth = no
 
 ssl_min_protocol = TLSv1.2

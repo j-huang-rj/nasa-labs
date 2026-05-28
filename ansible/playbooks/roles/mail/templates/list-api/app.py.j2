@@ -1,5 +1,4 @@
 # NASA mailing list API — managed by Ansible
-# Phase 05-04: full FastAPI/Pydantic create/delete semantics with safe activation.
 
 import fcntl
 import json
@@ -11,11 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 # ---------------------------------------------------------------------------
-# Logging — sanitised for OJ-safe HTTP responses, verbose for journald
+# Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
@@ -24,16 +22,16 @@ logging.basicConfig(
 logger = logging.getLogger("nasa-mail-list-api")
 
 # ---------------------------------------------------------------------------
-# Load settings (rendered by Ansible into the app directory)
+# Load settings
 # ---------------------------------------------------------------------------
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 settings: dict[str, Any] = json.loads(SETTINGS_PATH.read_text())
 
 # ---------------------------------------------------------------------------
-# Validation constants (D-06 conservative safe-localpart)
+# Validation constants
 # ---------------------------------------------------------------------------
-# List names: lowercase alphanumeric plus _ - . ; start/end alphanumeric; no @ /
-#   whitespace quotes colon comma or shell metacharacters.
+# List names: lowercase alphanumeric plus _ - . ; start/end alphanumeric;
+# no @ / whitespace quotes colon comma or shell metacharacters.
 LIST_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_.-]*[a-z0-9])?$")
 
 # Member usernames: same shell-resistant safe-username shape.
@@ -43,8 +41,8 @@ MEMBER_USER_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_.-]*[a-z0-9])?$")
 _UNSAFE_RE = re.compile(r"[\000-\037\177@\s'\":;,|&$`\\/]")
 
 # ---------------------------------------------------------------------------
-# Deliverable-users cache (D-08 / D-09 — rendere'd from backend vars, not
-# hard-coded to admin/test).  Refreshed when valid_users.txt mtime changes.
+# Deliverable-users cache.
+# Refreshed when valid_users.txt mtime changes.
 # ---------------------------------------------------------------------------
 _valid_users_cache: tuple[float, set[str]] = (0.0, set())
 
@@ -52,18 +50,22 @@ _valid_users_cache: tuple[float, set[str]] = (0.0, set())
 def _load_valid_users() -> set[str]:
     """Return the current set of deliverable backend usernames.
 
-    Reads ``settings["valid_users_file"]`` and caches until the file mtime
-    changes so every request sees fresh data when Phase 07 extends the seam.
+    Reads `settings["valid_users_file"]` and caches until the file mtime
+    changes so every request sees fresh data.
     """
     global _valid_users_cache
     vu_path = Path(settings["valid_users_file"])
+
     try:
         mtime = vu_path.stat().st_mtime
+
     except FileNotFoundError:
         logger.warning("valid_users_file %s not found — no users deliverable", vu_path)
         return set()
+
     if _valid_users_cache[0] >= mtime:
         return _valid_users_cache[1]
+
     users: set[str] = set()
     try:
         with vu_path.open("r", encoding="utf-8") as fh:
@@ -71,16 +73,18 @@ def _load_valid_users() -> set[str]:
                 line = raw.strip()
                 if line and not line.startswith("#"):
                     users.add(line.lower())
+
     except OSError as exc:
         logger.error("cannot read valid_users_file %s: %s", vu_path, exc)
-        return _valid_users_cache[1]  # stale is better than empty in a tight spot
+        return _valid_users_cache[1]
+
     _valid_users_cache = (mtime, users)
     logger.info("valid-users cache refreshed: %d users", len(users))
     return users
 
 
 # ---------------------------------------------------------------------------
-# Helpers: name / member normalisation (D-06, D-10, D-11)
+# Helpers: name / member normalization
 # ---------------------------------------------------------------------------
 RESERVED_NAMES: frozenset[str] = frozenset(
     name.lower() for name in settings.get("reserved_names", [])
@@ -91,25 +95,28 @@ def _safe_name(value: str, *, label: str = "name") -> str:
     """Return the normalised lowercase form or raise HTTPException(422)."""
     if not isinstance(value, str):
         raise HTTPException(status_code=422, detail=f"invalid {label}: not a string")
-    # Reject bytes-like input on principle.
+
     stripped = value.strip()
     if stripped != value:
         raise HTTPException(
             status_code=422, detail=f"invalid {label}: leading/trailing whitespace"
         )
+
     lowered = value.lower()
     if _UNSAFE_RE.search(lowered):
-        raise HTTPException(status_code=422, detail=f"invalid {label}: unsafe character")
+        raise HTTPException(
+            status_code=422, detail=f"invalid {label}: unsafe character"
+        )
     if not LIST_NAME_RE.fullmatch(lowered):
         raise HTTPException(
             status_code=422,
             detail=f"invalid {label}: must be lowercase alphanumeric with optional '_', '-', '.'",
         )
-    # Reject values that changed unexpectedly when lowercased (D-06).
+
+    # Reject values that changed unexpectedly when lowercased
     if lowered != value:
-        # Some upstream payloads may contain uppercase we silently accept —
-        # but truly ambiguous Unicode casing should not reach the map.
         pass
+
     return lowered
 
 
@@ -122,33 +129,37 @@ def _safe_member(value: str) -> str:
         raise HTTPException(
             status_code=422, detail="invalid member: leading/trailing whitespace"
         )
+
     lowered = value.lower()
     if _UNSAFE_RE.search(lowered):
-        raise HTTPException(
-            status_code=422, detail="invalid member: unsafe character"
-        )
+        raise HTTPException(status_code=422, detail="invalid member: unsafe character")
+
     if not MEMBER_USER_RE.fullmatch(lowered):
         raise HTTPException(
             status_code=422,
             detail="invalid member: must be safe username shape",
         )
+
     return lowered
 
 
 def _dedupe_preserve_order(members: list[str]) -> list[str]:
-    """Deduplicate preserving first-seen order (D-10)."""
+    """Deduplicate preserving first-seen order."""
     seen: set[str] = set()
     out: list[str] = []
+
     for m in members:
         if m not in seen:
             seen.add(m)
             out.append(m)
+
     return out
 
 
 # ---------------------------------------------------------------------------
-# Pydantic v2 request model (D-02, D-05, D-06, D-07)
+# Pydantic request model
 # ---------------------------------------------------------------------------
+
 
 class ListCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
@@ -160,7 +171,7 @@ class ListCreate(BaseModel):
         v = _safe_name(v, label="name")
         if v in RESERVED_NAMES:
             raise HTTPException(
-                status_code=403,  # Forbidden — reserved name (D-07)
+                status_code=403,
                 detail=f"reserved list name: {v}",
             )
         return v
@@ -171,14 +182,12 @@ class ListCreate(BaseModel):
         validated: list[str] = []
         for raw in v:
             validated.append(_safe_member(raw))
-        # Deduplicate preserving first-seen order (D-10)
         validated = _dedupe_preserve_order(validated)
-        # Enforce minimum member count (Pydantic already checked len>=1)
         return validated
 
 
 # ---------------------------------------------------------------------------
-# Dynamic list state — JSON persistence (D-12, D-17, D-18)
+# Dynamic list state — JSON persistence
 # ---------------------------------------------------------------------------
 
 # Expected shape: { "lists": { "listname": ["user1", "user2"] } }
@@ -186,9 +195,9 @@ _EMPTY_STATE: dict[str, dict[str, list[str]]] = {"lists": {}}
 
 
 def _load_state() -> dict[str, dict[str, list[str]]]:
-    """Load the dynamic list state from ``settings["state_file"]``.
+    """Load the dynamic list state from `settings["state_file"]`.
 
-    Returns ``_EMPTY_STATE`` when the file does not exist (first run /
+    Returns `_EMPTY_STATE` when the file does not exist (first run /
     bootstrap) or is unreadable.  Corrupt JSON is logged and treated as
     an empty state so the API can rebuild from a known baseline.
     """
@@ -196,44 +205,56 @@ def _load_state() -> dict[str, dict[str, list[str]]]:
     if not state_path.exists():
         logger.info("state file %s does not exist — assuming empty state", state_path)
         return {"lists": {}}
+
     try:
         raw = state_path.read_text(encoding="utf-8")
         data = json.loads(raw)
+
     except json.JSONDecodeError as exc:
         logger.error("corrupt state file %s: %s — refusing to load", state_path, exc)
         return {"lists": {}}
+
     except OSError as exc:
         logger.error("cannot read state file %s: %s", state_path, exc)
         return {"lists": {}}
-    # Coerce shape for forward-compatibility.
+
+    # Coerce shape for forward-compatibility
     if not isinstance(data, dict):
-        logger.error("state file %s is not a JSON object — treating as empty", state_path)
+        logger.error(
+            "state file %s is not a JSON object — treating as empty", state_path
+        )
         return {"lists": {}}
+
     return {"lists": data.get("lists", {})}
 
 
 def _save_state(data: dict[str, dict[str, list[str]]]) -> None:
-    """Atomically write JSON state to ``settings["state_file"]``.
+    """Atomically write JSON state to `settings["state_file"]`.
 
-    Uses a temp-file in the same directory, fsync, then ``os.replace``
-    so a crash or partial write never corrupts the real file (D-13).
+    Uses a temp-file in the same directory, fsync, then `os.replace`
+    so a crash or partial write never corrupts the real file.
     """
     state_path = Path(settings["state_file"])
     state_dir = state_path.parent
     tmp = state_dir / f".{state_path.name}.tmp"
     payload = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False)
+
     try:
         with tmp.open("w", encoding="utf-8") as fh:
             fh.write(payload)
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, state_path)
-        # fsync the directory so the rename is durable on journaling filesystems.
+
+        # fsync the directory so the rename is durable on journaling filesystems
         _fsync_dir(state_dir)
+
         logger.debug("state written to %s (%d bytes)", state_path, len(payload))
+
     except OSError as exc:
         logger.error("failed to write state file %s: %s", state_path, exc)
-        # Try to clean up the temp so it doesn't look like a stored state.
+
+        # Try to clean up the temp so it doesn't look like a stored state
         try:
             tmp.unlink(missing_ok=True)
         except OSError:
@@ -247,21 +268,19 @@ def _render_postfix_source(
 ) -> str:
     """Render a complete Postfix virtual-alias map source from the JSON state.
 
-    - Renders every dynamic list for every managed domain (D-17).
-    - Member targets are bare usernames (D-18).
+    - Renders every dynamic list for every managed domain.
+    - Member targets are bare usernames.
     - List names are sorted for deterministic output; member order within
       each list is preserved as stored.
     - Includes a header comment warning the source is API-managed.
     """
     lines: list[str] = []
-    lines.append(
-        "# Dynamic mailing-list aliases — MANAGED BY nasa-mail-list-api."
-    )
+    lines.append("# Dynamic mailing-list aliases — MANAGED BY nasa-mail-list-api.")
     lines.append(
         "# DO NOT EDIT — changes will be overwritten on the next create/delete."
     )
     if not state.get("lists"):
-        # Empty state still produces a valid (empty) map source.
+        # Empty state still produces a valid map source
         return "\n".join(lines) + "\n"
 
     for list_name in sorted(state["lists"]):
@@ -286,18 +305,18 @@ def _fsync_dir(dir_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Locked rollback-safe activation (D-13, D-14, D-15)
+# Locked rollback-safe activation
 # ---------------------------------------------------------------------------
 def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
     """Execute a state mutation inside the activation critical section.
 
-    ``mutate_state_fn(previous_state)`` must return ``(candidate_state, ok)``
-    where *candidate_state* is the desired new ``{"lists": {...}}`` dict and
+    `mutate_state_fn(previous_state)` must return `(candidate_state, ok)`
+    where *candidate_state* is the desired new `{"lists": {...}}` dict and
     *ok* is a boolean signalling whether the mutation itself accepted the
     input (e.g. rejected because zero deliverable members).
 
-    The caller receives ``{"status": "ok", ...}`` on success or raises
-    ``HTTPException(5xx)`` on activation failure.
+    The caller receives `{"status": "ok", ...}` on success or raises
+    `HTTPException(5xx)` on activation failure.
 
     Locking, Postfix map rebuild, reload, JSON persistence, rollback, and
     fsync sequencing are handled entirely inside this function so route
@@ -308,36 +327,35 @@ def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
     source_dir = active_source_path.parent
     state_path = Path(settings["state_file"])
 
-    # Ensure lock file and state directory exist before locking.
+    # Ensure lock file and state directory exist before locking
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     with lock_path.open("a") as lock_fh:
         try:
             fcntl.flock(lock_fh, fcntl.LOCK_EX)
+
         except OSError as exc:
             logger.error("[%s] cannot acquire lock: %s", context, exc)
             raise HTTPException(status_code=503, detail="service busy")
 
         try:
-            # ----- 2. Load previous state -----
+            # ----- Load previous state -----
             previous_state = _load_state()
 
-            # ----- 3. Build candidate state -----
+            # ----- Build candidate state -----
             candidate_state, ok = mutate_state_fn(previous_state)
             if not ok:
-                # Mutation rejected the input (e.g. zero-deliverable) —
-                # do NOT activate but return a 4xx.
                 raise HTTPException(
                     status_code=422,
                     detail="no deliverable members remain after validation",
                 )
 
-            # Build candidate Postfix source in memory.
+            # Build candidate Postfix source in memory
             managed = settings.get("managed_domains", [])
             candidate_source = _render_postfix_source(candidate_state, managed)
 
-            # ----- 4. Snapshot previous files -----
+            # ----- Snapshot previous files -----
             prev_source_bytes: bytes | None = None
             prev_lmdb_bytes: bytes | None = None
             prev_source_existed = active_source_path.exists()
@@ -349,32 +367,43 @@ def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
             if prev_lmdb_existed:
                 prev_lmdb_bytes = prev_lmdb_path.read_bytes()
 
-            # ----- 5. Write candidate source (temp + fsync + replace) -----
+            # ----- Write candidate source (temp + fsync + replace) -----
             tmp_source = source_dir / f".{active_source_path.name}.tmp"
             try:
                 tmp_source.write_text(candidate_source, encoding="utf-8")
+
                 # fsync the file
                 with tmp_source.open("rb") as fh:
                     os.fsync(fh.fileno())
                 os.replace(tmp_source, active_source_path)
                 _fsync_dir(source_dir)
-                logger.info("[%s] wrote candidate source to %s", context, active_source_path)
+
+                logger.info(
+                    "[%s] wrote candidate source to %s", context, active_source_path
+                )
+
             except OSError as exc:
                 logger.error("[%s] failed to write map source: %s", context, exc)
+
                 # Clean up temp
                 try:
                     tmp_source.unlink(missing_ok=True)
+
                 except OSError:
                     pass
+
                 _rollback(
-                    active_source_path, prev_lmdb_path,
-                    prev_source_bytes, prev_lmdb_bytes,
-                    prev_source_existed, prev_lmdb_existed,
+                    active_source_path,
+                    prev_lmdb_path,
+                    prev_source_bytes,
+                    prev_lmdb_bytes,
+                    prev_source_existed,
+                    prev_lmdb_existed,
                     context,
                 )
                 raise HTTPException(status_code=500, detail="activation failed")
 
-            # ----- 6. postmap -----
+            # ----- postmap -----
             try:
                 proc = subprocess.run(
                     ["postmap", f"lmdb:{active_source_path}"],
@@ -386,31 +415,46 @@ def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
                 )
                 logger.info(
                     "[%s] postmap ok — stdout: %s",
-                    context, (proc.stdout or "").strip()[:200],
+                    context,
+                    (proc.stdout or "").strip()[:200],
                 )
+
             except subprocess.CalledProcessError as exc:
                 logger.error(
                     "[%s] postmap failed (rc=%d): stderr=%s",
-                    context, exc.returncode, (exc.stderr or "").strip()[:500],
+                    context,
+                    exc.returncode,
+                    (exc.stderr or "").strip()[:500],
                 )
+
                 _rollback(
-                    active_source_path, prev_lmdb_path,
-                    prev_source_bytes, prev_lmdb_bytes,
-                    prev_source_existed, prev_lmdb_existed,
+                    active_source_path,
+                    prev_lmdb_path,
+                    prev_source_bytes,
+                    prev_lmdb_bytes,
+                    prev_source_existed,
+                    prev_lmdb_existed,
                     context,
                 )
-                raise HTTPException(status_code=500, detail="activation failed")
-            except FileNotFoundError:
-                logger.error("[%s] postmap binary not found", context)
-                _rollback(
-                    active_source_path, prev_lmdb_path,
-                    prev_source_bytes, prev_lmdb_bytes,
-                    prev_source_existed, prev_lmdb_existed,
-                    context,
-                )
+
                 raise HTTPException(status_code=500, detail="activation failed")
 
-            # ----- 6b. Ensure SELinux context allows Postfix to read the map -----
+            except FileNotFoundError:
+                logger.error("[%s] postmap binary not found", context)
+
+                _rollback(
+                    active_source_path,
+                    prev_lmdb_path,
+                    prev_source_bytes,
+                    prev_lmdb_bytes,
+                    prev_source_existed,
+                    prev_lmdb_existed,
+                    context,
+                )
+
+                raise HTTPException(status_code=500, detail="activation failed")
+
+            # ----- Ensure SELinux context allows Postfix to read the map -----
             for _sel_path in (active_source_path, prev_lmdb_path):
                 try:
                     subprocess.run(
@@ -421,13 +465,19 @@ def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
                         timeout=10,
                         shell=False,
                     )
+
                 except FileNotFoundError:
                     pass  # SELinux tools not available
-                except OSError as exc:
-                    logger.warning("[%s] chcon %s failed (non-fatal): %s",
-                                   context, _sel_path.name, exc)
 
-            # ----- 7. postfix reload -----
+                except OSError as exc:
+                    logger.warning(
+                        "[%s] chcon %s failed (non-fatal): %s",
+                        context,
+                        _sel_path.name,
+                        exc,
+                    )
+
+            # ----- postfix reload -----
             try:
                 proc = subprocess.run(
                     ["postfix", "reload"],
@@ -437,35 +487,51 @@ def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
                     timeout=30,
                     shell=False,
                 )
+
                 logger.info(
                     "[%s] postfix reload ok — stdout: %s",
-                    context, (proc.stdout or "").strip()[:200],
+                    context,
+                    (proc.stdout or "").strip()[:200],
                 )
+
             except subprocess.CalledProcessError as exc:
                 logger.error(
                     "[%s] postfix reload failed (rc=%d): stderr=%s",
-                    context, exc.returncode, (exc.stderr or "").strip()[:500],
+                    context,
+                    exc.returncode,
+                    (exc.stderr or "").strip()[:500],
                 )
+
                 _rollback(
-                    active_source_path, prev_lmdb_path,
-                    prev_source_bytes, prev_lmdb_bytes,
-                    prev_source_existed, prev_lmdb_existed,
+                    active_source_path,
+                    prev_lmdb_path,
+                    prev_source_bytes,
+                    prev_lmdb_bytes,
+                    prev_source_existed,
+                    prev_lmdb_existed,
                     context,
                 )
+
                 raise HTTPException(status_code=500, detail="activation failed")
+
             except FileNotFoundError:
                 logger.error("[%s] postfix binary not found", context)
                 _rollback(
-                    active_source_path, prev_lmdb_path,
-                    prev_source_bytes, prev_lmdb_bytes,
-                    prev_source_existed, prev_lmdb_existed,
+                    active_source_path,
+                    prev_lmdb_path,
+                    prev_source_bytes,
+                    prev_lmdb_bytes,
+                    prev_source_existed,
+                    prev_lmdb_existed,
                     context,
                 )
+
                 raise HTTPException(status_code=500, detail="activation failed")
 
-            # ----- 8. Persist JSON state only after successful activation -----
+            # ----- Persist JSON state only after successful activation -----
             try:
                 _save_state(candidate_state)
+
             except OSError:
                 logger.critical(
                     "[%s] postmap+reload succeeded but state file write failed — "
@@ -473,14 +539,14 @@ def _activate(mutate_state_fn, *, context: str = "mutation") -> dict[str, Any]:
                     "Next create/delete will reconcile from the active map.",
                     context,
                 )
-                # Do NOT roll back the LMDB — that would break active mail
-                # behaviour that already passed postmap+reload.  Instead,
-                # surface a 5xx so OJ retries, and the next request will
-                # rebuild state consistency.
+
                 raise HTTPException(status_code=500, detail="activation incomplete")
 
-            logger.info("[%s] activation complete — %d lists", context,
-                         len(candidate_state.get("lists", {})))
+            logger.info(
+                "[%s] activation complete — %d lists",
+                context,
+                len(candidate_state.get("lists", {})),
+            )
             return {"status": "ok"}
 
         finally:
@@ -498,7 +564,7 @@ def _rollback(
 ) -> None:
     """Restore previous source and .lmdb, or remove new files if none existed.
 
-    Attempts a ``postfix reload`` after restoration so the running Postfix
+    Attempts a `postfix reload` after restoration so the running Postfix
     instance always reflects the rollback target.
     """
     logger.warning("[%s] rolling back map to pre-mutation state", context)
@@ -514,10 +580,12 @@ def _rollback(
             os.replace(tmp, active_source_path)
             _fsync_dir(source_dir)
             logger.info("[%s] restored previous map source", context)
+
         except OSError as exc:
             logger.error("[%s] failed to restore map source: %s", context, exc)
+
     elif not prev_source_existed:
-        # Remove the newly-created candidate files.
+        # Remove the newly-created candidate files
         try:
             active_source_path.unlink(missing_ok=True)
         except OSError as exc:
@@ -533,15 +601,18 @@ def _rollback(
             os.replace(tmp, prev_lmdb_path)
             _fsync_dir(source_dir)
             logger.info("[%s] restored previous .lmdb database", context)
+
         except OSError as exc:
             logger.error("[%s] failed to restore .lmdb: %s", context, exc)
+
     elif not prev_lmdb_existed:
         try:
             prev_lmdb_path.unlink(missing_ok=True)
+
         except OSError as exc:
             logger.error("[%s] failed to remove candidate .lmdb: %s", context, exc)
 
-    # Rebuild LMDB from restored source if we restored it.
+    # Rebuild LMDB from restored source if we restored it
     if prev_source_existed and prev_source_bytes is not None:
         try:
             subprocess.run(
@@ -552,10 +623,11 @@ def _rollback(
                 timeout=30,
                 shell=False,
             )
+
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             logger.error("[%s] postmap after rollback failed: %s", context, exc)
 
-        # Ensure SELinux context allows Postfix to read restored map files.
+        # Ensure SELinux context allows Postfix to read restored map files
         for _sel_path in (active_source_path, prev_lmdb_path):
             try:
                 subprocess.run(
@@ -566,10 +638,11 @@ def _rollback(
                     timeout=10,
                     shell=False,
                 )
+
             except (FileNotFoundError, OSError):
                 pass
 
-    # Reload Postfix to pick up restored map (or empty map if no previous existed).
+    # Reload Postfix to pick up restored map
     try:
         subprocess.run(
             ["postfix", "reload"],
@@ -580,6 +653,7 @@ def _rollback(
             shell=False,
         )
         logger.info("[%s] postfix reload after rollback ok", context)
+
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         logger.error("[%s] postfix reload after rollback failed: %s", context, exc)
 
@@ -596,7 +670,7 @@ app = FastAPI()
 @app.get("/health")
 def health():
     """Liveness probe for systemd / monitoring."""
-    return {"status": "ok", "api": "nasa-mail-list-api", "phase": "05-04"}
+    return {"status": "ok"}
 
 
 @app.get("/")
@@ -606,20 +680,14 @@ def root_health():
 
 
 # ---------------------------------------------------------------------------
-# Route: POST /list/create  (D-02, D-03)
+# Route: POST /list/create
 # ---------------------------------------------------------------------------
 @app.post("/list/create", status_code=201)
 def create_list(payload: ListCreate):
-    """Create or replace a dynamic mailing list.
-
-    Validated by the Pydantic model before this handler runs.  The handler
-    gates on deliverable members (D-11) and then activates inside the locked
-    critical section.
-    """
+    """Create or replace a dynamic mailing list."""
     name = payload.name
     members = payload.members
 
-    # -------------------------------------------------- D-11: zero-deliverable gate
     valid_users = _load_valid_users()
     deliverable = [m for m in members if m in valid_users]
     if not deliverable:
@@ -628,38 +696,36 @@ def create_list(payload: ListCreate):
             detail="no deliverable members — all submitted members are unknown to the current backend",
         )
 
-    # -------------------------------------------------- Activation mutation
     def _mutation(previous_state: dict[str, dict[str, list[str]]]):
-        """Replace the named list exactly (D-03 atomic upsert)."""
+        """Replace the named list."""
         next_state = {"lists": dict(previous_state.get("lists", {}))}
         next_state["lists"][name] = deliverable
         return next_state, True
 
     _activate(_mutation, context=f"create:{name}")
+
     return {"status": "ok", "name": name, "members": deliverable}
 
 
 # ---------------------------------------------------------------------------
-# Route: DELETE /list/{name}  (D-04)
+# Route: DELETE /list/{name}
 # ---------------------------------------------------------------------------
 @app.delete("/list/{name}")
 def delete_list(name: str):
     """Delete a dynamic mailing list.
 
     Idempotent: deleting a non-existent or already-deleted dynamic list
-    succeeds as a no-op (D-04).  Reserved names are always rejected.
+    succeeds as a no-op. Reserved names are always rejected.
     """
-    # -------------------------------------------------- Validate name
     valid_name = _safe_name(name, label="list name")
 
-    # Reserved names are permanently protected (D-07).
+    # Reserved names are permanently protected
     if valid_name in RESERVED_NAMES:
         raise HTTPException(
             status_code=403,
             detail=f"reserved list name: {valid_name}",
         )
 
-    # -------------------------------------------------- Activation mutation
     deleted = False
 
     def _mutation(previous_state: dict[str, dict[str, list[str]]]):
@@ -671,4 +737,5 @@ def delete_list(name: str):
         return next_state, True
 
     _activate(_mutation, context=f"delete:{valid_name}")
+
     return {"status": "ok", "name": valid_name, "deleted": deleted}

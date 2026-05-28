@@ -1,6 +1,5 @@
 # Postfix sender-login maps - managed by Ansible
 # Maps envelope sender addresses to SASL login names
-# Format: <sender_address> <sasl_login>
 
 {% for domain in mail_managed_domains %}
 {% for user in mail_local_users %}

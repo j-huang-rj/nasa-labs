@@ -9,7 +9,7 @@ passdb {
 }
 
 {% if mail_ldap_enabled | default(false) %}
-# LDAP passdb — chained after passwd-file, only checked if local user not found
+# LDAP passdb
 passdb {
   driver = ldap
   args = {{ mail_dovecot_conf_dir }}/dovecot-ldap.conf.ext

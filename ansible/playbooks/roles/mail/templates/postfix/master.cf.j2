@@ -9,10 +9,12 @@ smtp       inet  n       -       n       -       -       smtpd
 submission inet  n       -       n       -       -       smtpd
   -o syslog_name=postfix/submission
   -o smtpd_tls_security_level=encrypt
-  -o smtpd_sasl_auth_enable=yes
-  -o smtpd_sender_login_maps=lmdb:/etc/postfix/sender_login_maps
   -o smtpd_sender_restrictions=reject_sender_login_mismatch,permit_sasl_authenticated,reject
+  -o smtpd_relay_restrictions=permit_sasl_authenticated,reject
   -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+
+# Outbound SMTP client for remote MX delivery
+smtp       unix  -       -       n       -       -       smtp
 
 # Local delivery
 pickup     unix  n       -       n       60      1       pickup
