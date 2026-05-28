@@ -9,62 +9,52 @@ argument_specs:
         required: true
         description: Whether the mail role should be active on this host
 
+      # DNS zone bridge
+      mail_zone_name:
+        type: str
+        required: false
+        description: >-
+          DNS zone name for the mail server
+
+      mail_alias_domain:
+        type: str
+        required: false
+        description: >-
+          Secondary virtual mailbox domain
+
+      # Postfix
       mail_postfix_packages:
         type: list
         elements: str
         required: false
         description: DNF packages to install for Postfix SMTP
 
-      mail_dovecot_packages:
-        type: list
-        elements: str
-        required: false
-        description: DNF packages to install for Dovecot IMAP
-
       mail_postfix_service_name:
         type: str
         required: false
         description: Systemd unit name for the Postfix service
-
-      mail_dovecot_service_name:
-        type: str
-        required: false
-        description: Systemd unit name for the Dovecot service
-
-      mail_vmail_user:
-        type: str
-        required: false
-        description: System username for the shared vmail identity
-
-      mail_vmail_group:
-        type: str
-        required: false
-        description: System group for the shared vmail identity
-
-      mail_vmail_home:
-        type: str
-        required: false
-        description: Home directory for the vmail user and Maildir storage root
 
       mail_postfix_conf_dir:
         type: str
         required: false
         description: Absolute path to the Postfix configuration directory
 
+      # Dovecot
+      mail_dovecot_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for Dovecot IMAP
+
+      mail_dovecot_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the Dovecot service
+
       mail_dovecot_conf_dir:
         type: str
         required: false
         description: Absolute path to the Dovecot configuration directory
-
-      mail_tls_cert_path:
-        type: str
-        required: false
-        description: Absolute path for the TLS certificate PEM file on the target host
-
-      mail_tls_key_path:
-        type: str
-        required: false
-        description: Absolute path for the TLS private key PEM file on the target host
 
       mail_dovecot_passwd_path:
         type: str
@@ -83,33 +73,37 @@ argument_specs:
         description: >-
           Path for the Dovecot LMTP socket inside the Postfix chroot for mailbox delivery
 
+      # Managed domains
       mail_managed_domains:
         type: list
         elements: str
         required: false
         description: >-
           List of domains managed by this mail server. Defaults to
-          [bind9_forward_zone_name, mail_domain_name] derived from DNS identity.
+          [mail_zone_name, mail_alias_domain] derived from DNS identity.
 
+      # Virtual mailbox user
+      mail_vmail_user:
+        type: str
+        required: false
+        description: System username for the shared vmail identity
+
+      mail_vmail_group:
+        type: str
+        required: false
+        description: System group for the shared vmail identity
+
+      mail_vmail_home:
+        type: str
+        required: false
+        description: Home directory for the vmail user and Maildir storage root
+
+      # Local virtual users
       mail_local_users:
         type: list
         elements: str
         required: false
-        description: Local virtual user names for passwd-file authentication (admin, test)
-
-      mail_tls_certificate:
-        type: str
-        required: false
-        description: >-
-          PEM-encoded TLS certificate content. Must be provided by host_vars/*/secrets.yml.
-          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
-
-      mail_tls_private_key:
-        type: str
-        required: false
-        description: >-
-          PEM-encoded TLS private key content. Must be provided by host_vars/*/secrets.yml.
-          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
+        description: Local virtual user names for passwd-file authentication
 
       mail_local_user_password_hashes:
         type: dict
@@ -119,16 +113,50 @@ argument_specs:
           Must contain keys for all entries in mail_local_users.
           Asserted non-empty for each user at runtime when mail_enabled is true (no_log: true).
 
+      # TLS
+      mail_tls_certificate:
+        type: str
+        required: false
+        description: >-
+          PEM-encoded TLS certificate content.
+          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
+
+      mail_tls_private_key:
+        type: str
+        required: false
+        description: >-
+          PEM-encoded TLS private key content.
+          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
+
+      mail_tls_cert_path:
+        type: str
+        required: false
+        description: Absolute path for the TLS certificate PEM file on the target host
+
+      mail_tls_key_path:
+        type: str
+        required: false
+        description: Absolute path for the TLS private key PEM file on the target host
+
+      # DKIM
+      mail_dkim_selector:
+        type: str
+        required: false
+        description: DKIM selector name used for DNS TXT records and key file naming
+
+      mail_dkim_private_keys:
+        type: dict
+        required: false
+        description: >-
+          Dictionary mapping DKIM selector names to PEM-encoded private keys.
+          Must contain a key matching mail_dkim_selector.
+
+      # OpenDKIM
       mail_opendkim_packages:
         type: list
         elements: str
         required: false
         description: DNF packages to install for OpenDKIM signing and verification
-
-      mail_opendkim_service_name:
-        type: str
-        required: false
-        description: Systemd unit name for the OpenDKIM milter service
 
       mail_opendkim_user:
         type: str
@@ -139,6 +167,11 @@ argument_specs:
         type: str
         required: false
         description: System group identity for the OpenDKIM daemon
+
+      mail_opendkim_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the OpenDKIM milter service
 
       mail_opendkim_conf_dir:
         type: str
@@ -155,17 +188,18 @@ argument_specs:
         required: false
         description: Absolute path to the OpenDKIM private key storage directory
 
-      mail_dkim_selector:
-        type: str
-        required: false
-        description: DKIM selector name used for both managed domains (D-01)
-
       mail_opendkim_private_key_path:
         type: str
         required: false
         description: >-
           Absolute path to the DKIM private key file derived from mail_opendkim_keys_dir
           and mail_dkim_selector
+
+      mail_opendkim_socket_port:
+        type: int
+        required: false
+        description: >-
+          TCP port for the OpenDKIM milter listener; used to derive both socket format strings
 
       mail_opendkim_socket:
         type: str
@@ -179,21 +213,34 @@ argument_specs:
         description: >-
           Milter socket address in Postfix inet:host:port syntax for the milter client
 
-      mail_dkim_private_keys:
-        type: dict
+      # Mailing-list API
+      mail_list_api_service_name:
+        type: str
         required: false
-        description: >-
-          Dictionary mapping DKIM selector names to PEM-encoded private keys.
-          Must contain a key matching mail_dkim_selector. Secret — provided by
-          gitignored host_vars/*/secrets.yml.
+        description: Systemd unit name for the list API service
 
-      mail_pre_dkim_milters:
+      mail_list_api_listen_host:
+        type: str
+        required: false
+        description: IP address or hostname the API service listens on
+
+      mail_list_api_listen_port:
+        type: int
+        required: false
+        description: TCP port the API service listens on
+
+      mail_list_api_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages required for the list API runtime
+
+      mail_list_api_python_requirements:
         type: list
         elements: str
         required: false
         description: >-
-          List of milter socket addresses to insert before OpenDKIM in the
-          Postfix milter chain. Empty in Phase 04; populated in Phase 06.
+          Pip-installable Python package version pins for the list API runtime
 
       mail_list_api_venv_dir:
         type: str
@@ -213,47 +260,17 @@ argument_specs:
         description: >-
           Absolute path for root-owned dynamic list state and source/database map files
 
-      mail_list_api_listen_host:
-        type: str
-        required: false
-        description: IP address or hostname the API service listens on
-
-      mail_list_api_listen_port:
-        type: int
-        required: false
-        description: TCP port the API service listens on
-
-      mail_list_api_service_name:
-        type: str
-        required: false
-        description: Systemd unit name for the list API service
-
-      mail_list_api_packages:
-        type: list
-        elements: str
-        required: false
-        description: DNF packages required for the list API runtime
-
-      mail_list_api_python_requirements:
-        type: list
-        elements: str
-        required: false
-        description: >-
-          Pip-installable Python package version pins for the list API runtime
-
       mail_list_static_alias_path:
         type: str
         required: false
         description: >-
           Absolute path for the Ansible-managed static list alias source map
-          (rendered as a Postfix lmdb: source)
 
       mail_list_dynamic_source_path:
         type: str
         required: false
         description: >-
           Absolute path for the API-managed dynamic list alias source map
-          (owned by the API service, not by Ansible)
 
       mail_list_reserved_names:
         type: list
@@ -262,6 +279,7 @@ argument_specs:
         description: >-
           List of reserved list names that the API must reject for create/delete
 
+      # Filter/rewrite milter defaults
       mail_filter_milter_service_name:
         type: str
         required: false
@@ -304,6 +322,11 @@ argument_specs:
         required: false
         description: Absolute path for the rendered milter application module
 
+      mail_filter_milter_socket_port:
+        type: int
+        required: false
+        description: TCP port the filter milter listens on; used to derive both socket format strings
+
       mail_filter_milter_socket_addr:
         type: str
         required: false
@@ -314,11 +337,6 @@ argument_specs:
         required: false
         description: Milter socket address in Postfix inet:host:port syntax for the milter client
 
-      mail_filter_milter_socket_port:
-        type: int
-        required: false
-        description: TCP port the filter milter listens on
-
       mail_filter_milter_timeout:
         type: int
         required: false
@@ -327,18 +345,28 @@ argument_specs:
       mail_filter_spam_tag:
         type: str
         required: false
-        description: Literal Subject tag that triggers SMTP-session rejection
+        description: Subject tag prepended to messages identified as spam
 
       mail_filter_test_prefix:
         type: str
         required: false
         description: Subject prefix prepended to mail sent by the test user
 
+      # Milter slot
+      mail_pre_dkim_milters:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          List of milter socket addresses to insert before OpenDKIM in the
+          Postfix milter chain
+
+      # LDAP
       mail_ldap_enabled:
         type: bool
         required: false
         description: >-
-          Whether LDAP integration is active. When false, zero LDAP footprint.
+          Whether LDAP integration is active
 
       mail_ldap_host:
         type: str
@@ -350,7 +378,7 @@ argument_specs:
         type: str
         required: false
         description: >-
-          Base DN for LDAP searches derived from bind9_forward_zone_name
+          Base DN for LDAP searches derived from mail_zone_name
 
       mail_ldap_uri:
         type: str
@@ -363,13 +391,6 @@ argument_specs:
         description: >-
           Absolute path to the LDAP CA certificate on the target host
 
-      mail_ldap_users:
-        type: list
-        elements: str
-        required: false
-        description: >-
-          List of LDAP usernames for verifier and sender-login maps
-
       mail_dovecot_ldap_packages:
         type: list
         elements: str
@@ -381,3 +402,10 @@ argument_specs:
         elements: str
         required: false
         description: DNF packages required for LDAP connectivity assertions
+
+      mail_ldap_users:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          List of LDAP usernames for verifier and sender-login maps
