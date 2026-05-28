@@ -60,7 +60,7 @@
   notify: "PHASE [handler : Restart Filter Milter]"
   register: _mail_filter_milter_unit_rendered
 
-- name: "PHASE [filter_milter : Reload Systemd Daemon]"  # noqa: no-handler
+- name: "PHASE [filter_milter : Reload Systemd Daemon]" # noqa: no-handler
   ansible.builtin.systemd_service:
     daemon_reload: true
   when: _mail_filter_milter_unit_rendered is changed
