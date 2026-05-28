@@ -1,5 +1,5 @@
 ---
-# Cross-host topology vars shared by all members of the `dns` group
+# Cross-host topology vars shared by all members of the DNS group
 
 # Topology CIDRs
 bind9_dmz_cidr: "172.16.0.0/24"
@@ -19,7 +19,7 @@ bind9_dns_resolver_ip: "{{ hostvars['dns-01'].ansible_host }}"
 bind9_dmz_agent_ip: "{{ hostvars['dmz-agent-01'].ansible_host }}"
 bind9_internal_agent_ip: "{{ hostvars['internal-agent-01'].ansible_host }}"
 
-# DMZ client (mail endpoint)
+# DMZ client
 bind9_dmz_client_ip: "{{ hostvars['dmz-client-01'].ansible_host }}"
 
 # Router gateway IPs
@@ -40,4 +40,4 @@ bind9_lab_primary_zones:
   - 16.172.in-addr.arpa
 
 bind9_dnssec_delegated_child_zones:
-  - "{{ mail_domain_name }}"
+  - "{{ mail_alias_domain }}"

@@ -218,7 +218,7 @@
     _e2e_primary: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _e2e_secondary: "{{ bind9_secondary_ns_ip }}"
     _e2e_forward_zone: "{{ bind9_forward_zone_name }}"
-    _e2e_mail_domain: "{{ mail_domain_name }}"
+    _e2e_mail_domain: "{{ mail_alias_domain }}"
     _e2e_client_fqdn: "client.{{ bind9_forward_zone_name }}."
     _e2e_mail_private_ip: "{{ mail_endpoint_dmz_ip }}"
     _e2e_public_client_reverse_label: >-
@@ -232,7 +232,7 @@
       - label: primary domain
         qname: "{{ bind9_forward_zone_name }}"
       - label: mail domain
-        qname: "{{ mail_domain_name }}"
+        qname: "{{ mail_alias_domain }}"
     _e2e_mail_txt_checks:
       - label: primary SPF
         qname: "{{ bind9_forward_zone_name }}"
@@ -244,14 +244,14 @@
         qname: "_dmarc.{{ bind9_forward_zone_name }}"
         token: "{{ mail_dmarc_value }}"
       - label: mail-domain SPF
-        qname: "{{ mail_domain_name }}"
+        qname: "{{ mail_alias_domain }}"
         token: "{{ mail_spf_value }}"
       - label: mail-domain DKIM
         qname: >-
-          {{ mail_dkim_selector }}._domainkey.{{ mail_domain_name }}
+          {{ mail_dkim_selector }}._domainkey.{{ mail_alias_domain }}
         token: "v=DKIM1"
       - label: mail-domain DMARC
-        qname: "_dmarc.{{ mail_domain_name }}"
+        qname: "_dmarc.{{ mail_alias_domain }}"
         token: "{{ mail_dmarc_value }}"
   tasks:
     - name: "PHASE [e2e-mail : START]"

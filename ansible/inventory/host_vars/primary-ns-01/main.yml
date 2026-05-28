@@ -85,7 +85,7 @@ bind9_zones:
         value: "ns.{{ bind9_forward_zone_name }}."
       - name: "mail"
         type: "DS"
-        value: "{{ (bind9_dnssec_delegation_ds_values | default({})).get(mail_domain_name, '') }}"
+        value: "{{ (bind9_dnssec_delegation_ds_values | default({})).get(mail_alias_domain, '') }}"
 
       # Mail service records
       - name: "smtp"
@@ -149,7 +149,7 @@ bind9_zones:
         value: "ns.{{ bind9_forward_zone_name }}."
       - name: "mail"
         type: "DS"
-        value: "{{ (bind9_dnssec_delegation_ds_values | default({})).get(mail_domain_name, '') }}"
+        value: "{{ (bind9_dnssec_delegation_ds_values | default({})).get(mail_alias_domain, '') }}"
 
       # Mail service records
       - name: "smtp"
