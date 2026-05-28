@@ -3,9 +3,9 @@
 Syslog yes
 Mode sv
 Canonicalization relaxed/relaxed
-Socket inet:8891@127.0.0.1
+Socket {{ mail_opendkim_socket }}
 KeyTable {{ mail_opendkim_conf_dir }}/KeyTable
 SigningTable refile:{{ mail_opendkim_conf_dir }}/SigningTable
 ExternalIgnoreList {{ mail_opendkim_conf_dir }}/TrustedHosts
 InternalHosts {{ mail_opendkim_conf_dir }}/TrustedHosts
-UserID opendkim:opendkim
+UserID {{ mail_opendkim_user }}:{{ mail_opendkim_group }}
