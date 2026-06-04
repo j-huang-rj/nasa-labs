@@ -1,0 +1,149 @@
+---
+# Prerequisites:
+#   - bootstrap.yml (operator-prepared VMs are already converged through site.yml)
+#   - ldap-01 is reachable and in a vanilla LDAP state
+
+- name: LDAP Package Feasibility Spike
+  hosts: ldap-01
+  gather_facts: true
+  become: true
+  vars:
+    openldap_feasibility_package_names:
+      - epel-release
+      - openldap-servers
+      - openldap-clients
+    openldap_feasibility_module_dir: /usr/lib64/openldap
+    openldap_feasibility_required_modules:
+      - name: ppolicy
+        path: /usr/lib64/openldap/ppolicy.so
+      - name: otp
+        path: /usr/lib64/openldap/otp.so
+      - name: sssvlv
+        path: /usr/lib64/openldap/sssvlv.so
+      - name: check_password
+        path: /usr/lib64/openldap/check_password.so
+      - name: check_password_config
+        path: /etc/openldap/check_password.conf
+    openldap_feasibility_check_password_config_path: /etc/openldap/check_password.conf
+    openldap_feasibility_temp_dir: /var/tmp/openldap-feasibility
+    openldap_feasibility_report_path: .planning/phases/08-package-feasibility-spike/08-FEASIBILITY-REPORT.md
+    openldap_feasibility_defaults_notes_path: .planning/phases/08-package-feasibility-spike/openldap-defaults-notes.yml
+
+  pre_tasks:
+    - name: "PHASE [preflight : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Validate ldap-01 feasibility target"
+
+    - name: "PHASE [preflight : Assert Only ldap-01 Is Targeted]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - inventory_hostname == 'ldap-01'
+          - ansible_distribution == 'AlmaLinux'
+          - ansible_host | default('') == '172.16.1.10'
+        fail_msg: >-
+          Phase 8 must run only on prepared AlmaLinux ldap-01 (172.16.1.10);
+          refusing to run on {{ inventory_hostname }}.
+
+    - name: "PHASE [preflight : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Completed preflight phase"
+
+  tasks:
+    # ─── Package install and source probe stage ───
+    - name: "PHASE [packages : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Install OpenLDAP feasibility packages"
+
+    - name: "PHASE [packages : Install EPEL Release Repository]"
+      ansible.builtin.dnf:
+        name: epel-release
+        state: present
+
+    - name: "PHASE [packages : Install OpenLDAP Server And Client Packages]"
+      ansible.builtin.dnf:
+        name:
+          - openldap-servers
+          - openldap-clients
+        state: present
+
+    - name: "PHASE [packages : Record OpenLDAP Package Versions And Sources]"
+      ansible.builtin.command:
+        argv:
+          - dnf
+          - repoquery
+          - --qf
+          - "%{name} %{evr} %{repoid} %{arch} %{sourcerpm}"
+          - epel-release
+          - openldap
+          - openldap-clients
+          - openldap-servers
+      changed_when: false
+      register: openldap_repoquery
+
+    - name: "PHASE [packages : Record Installed RPM Versions]"
+      ansible.builtin.command:
+        argv:
+          - rpm
+          - -q
+          - epel-release
+          - openldap
+          - openldap-clients
+          - openldap-servers
+      changed_when: false
+      register: openldap_rpm_query
+
+    - name: "PHASE [packages : Compute Package Probe Result]"
+      ansible.builtin.set_fact:
+        openldap_package_probe_pass: >-
+          {{ 'openldap-servers' in openldap_repoquery.stdout
+             and 'openldap-clients' in openldap_repoquery.stdout }}
+
+    - name: "PHASE [packages : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Completed package install phase"
+
+    # ─── Module file inventory stage ───
+    - name: "PHASE [modules : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Inventory required OpenLDAP module files"
+
+    - name: "PHASE [modules : Stat Required OpenLDAP Module Files]"
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      loop: "{{ openldap_feasibility_required_modules }}"
+      loop_control:
+        label: "{{ item.name }} → {{ item.path }}"
+      register: openldap_required_module_stats
+
+    - name: "PHASE [modules : Query RPM Owner For Each Required Module File]"  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        cmd: "rpm -qf {{ item.item.path }}"
+      loop: "{{ openldap_required_module_stats.results }}"
+      loop_control:
+        label: "{{ item.item.name }} → {{ item.item.path }}"
+      changed_when: false
+      register: openldap_module_owner_queries
+
+    - name: "PHASE [modules : Compute Missing Required Module Files]"
+      ansible.builtin.set_fact:
+        openldap_missing_required_modules: >-
+          {{ openldap_required_module_stats.results
+             | selectattr('stat.exists', 'equalto', false)
+             | map(attribute='item.name')
+             | list }}
+
+    - name: "PHASE [modules : Compute Module Inventory Result]"
+      ansible.builtin.set_fact:
+        openldap_module_inventory_pass: >-
+          {{ openldap_missing_required_modules | length == 0 }}
+
+    - name: "PHASE [modules : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Completed module inventory phase"
