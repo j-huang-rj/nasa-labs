@@ -20,7 +20,7 @@ all:
             -o ProxyJump=student@127.0.0.1:2787
 
         dmz-client-01:
-          ansible_host: 172.16.0.1
+          ansible_host: 172.16.0.25
           ansible_port: 22
           ansible_ssh_common_args: >-
             -o ProxyJump=student@127.0.0.1:2787

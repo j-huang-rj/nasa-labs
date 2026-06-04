@@ -7,7 +7,7 @@ ethernets:
     dhcp4: false
     dhcp6: false
     addresses:
-      - 172.16.0.1/24
+      - 172.16.0.25/24
     routes:
       - to: 0.0.0.0/0
         via: 172.16.0.254
