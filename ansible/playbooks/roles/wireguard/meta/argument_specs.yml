@@ -38,3 +38,24 @@ argument_specs:
         type: int
         required: false
         description: Seconds between keepalive packets; defaults to 5 when omitted, and 0 disables keepalive
+
+      wireguard_healthcheck_targets:
+        type: list
+        elements: str
+        required: false
+        description: ICMP targets that must be reachable after the tunnel starts; empty disables health checks
+
+      wireguard_healthcheck_retries:
+        type: int
+        required: false
+        description: Number of retries for post-restart health verification
+
+      wireguard_healthcheck_delay:
+        type: int
+        required: false
+        description: Delay in seconds between post-restart health verification attempts
+
+      wireguard_healthcheck_timeout:
+        type: int
+        required: false
+        description: Per-ping timeout in seconds for WireGuard health checks
