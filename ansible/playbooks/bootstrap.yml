@@ -12,7 +12,7 @@
       when: wireguard_enabled
 
 - name: Zone Hosts Bootstrap
-  hosts: dmz, internal
+  hosts: dmz:internal
   gather_facts: true
   become: true
   pre_tasks:

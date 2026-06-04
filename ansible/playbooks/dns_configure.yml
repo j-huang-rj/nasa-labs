@@ -11,7 +11,7 @@
       when: bind9_enabled
 
 - name: DNS Client Resolver Configuration
-  hosts: dmz-agent-01:dmz-client-01:internal-agent-01
+  hosts: "dmz:internal:!dns"
   gather_facts: false
   become: true
   pre_tasks:
@@ -28,3 +28,25 @@
       ansible.builtin.include_role:
         name: docker
       when: docker_enabled | default(false) | bool
+
+- name: DNS Hosts File Configuration
+  hosts: "router:dmz:internal"
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Assert managed /etc/hosts self entries exist
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - dns_hosts_file_self_entries[inventory_hostname] is defined
+          - dns_hosts_file_self_entries[inventory_hostname] | length > 0
+        fail_msg: >-
+          Missing dns_hosts_file_self_entries for {{ inventory_hostname }}.
+
+    - name: Deploy managed /etc/hosts
+      ansible.builtin.template:
+        src: etc_hosts.j2
+        dest: /etc/hosts
+        owner: root
+        group: root
+        mode: "0644"

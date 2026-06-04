@@ -1,0 +1,105 @@
+---
+# Per-VM /etc/hosts identity entries
+
+dns_hosts_file_router_dmz_ip: >-
+  {{ (hostvars['router-01'].network_interfaces
+      | selectattr('zone', 'equalto', 'dmz')
+      | first).ip4.split('/')[0] }}
+
+dns_hosts_file_router_internal_ip: >-
+  {{ (hostvars['router-01'].network_interfaces
+      | selectattr('zone', 'equalto', 'internal')
+      | first).ip4.split('/')[0] }}
+
+dns_hosts_file_self_entries:
+  router-01:
+    - view: private
+      address: "{{ dns_hosts_file_router_dmz_ip }}"
+      canonical: "router.{{ bind9_forward_zone_name }}"
+      aliases:
+        - router
+        - router-01
+    - view: private
+      address: "{{ dns_hosts_file_router_internal_ip }}"
+      canonical: "router.{{ bind9_forward_zone_name }}"
+      aliases: []
+
+  secondary-ns-01:
+    - view: private
+      address: "{{ hostvars['secondary-ns-01'].ansible_host }}"
+      canonical: "ns.{{ bind9_forward_zone_name }}"
+      aliases:
+        - ns
+        - secondary-ns-01
+
+  primary-ns-01:
+    - view: private
+      address: "{{ hostvars['primary-ns-01'].ansible_host }}"
+      canonical: "private-ns.{{ bind9_forward_zone_name }}"
+      aliases:
+        - private-ns
+        - primary-ns-01
+
+  dns-01:
+    - view: private
+      address: "{{ hostvars['dns-01'].ansible_host }}"
+      canonical: "dns.{{ bind9_forward_zone_name }}"
+      aliases:
+        - dns
+        - dns-01
+
+  dmz-client-01:
+    - view: private
+      address: "{{ hostvars['dmz-client-01'].ansible_host }}"
+      canonical: "client.{{ bind9_forward_zone_name }}"
+      aliases:
+        - client
+        - dmz-client-01
+    - view: private
+      address: "{{ hostvars['dmz-client-01'].ansible_host }}"
+      canonical: "smtp.{{ bind9_forward_zone_name }}"
+      aliases: []
+    - view: private
+      address: "{{ hostvars['dmz-client-01'].ansible_host }}"
+      canonical: "imap.{{ bind9_forward_zone_name }}"
+      aliases: []
+
+  dmz-agent-01:
+    - view: private
+      address: "{{ hostvars['dmz-agent-01'].ansible_host }}"
+      canonical: "agent.{{ bind9_forward_zone_name }}"
+      aliases:
+        - agent
+        - dmz-agent-01
+
+  internal-agent-01:
+    - view: private
+      address: "{{ hostvars['internal-agent-01'].ansible_host }}"
+      canonical: "internal-agent.{{ bind9_forward_zone_name }}"
+      aliases:
+        - internal-agent
+        - internal-agent-01
+
+  ldap-01:
+    - view: private
+      address: "{{ hostvars['ldap-01'].ansible_host }}"
+      canonical: "ldap.{{ bind9_forward_zone_name }}"
+      aliases:
+        - ldap
+        - ldap-01
+
+  workstation-01:
+    - view: private
+      address: "{{ hostvars['workstation-01'].ansible_host }}"
+      canonical: "workstation1.{{ bind9_forward_zone_name }}"
+      aliases:
+        - workstation1
+        - workstation-01
+
+  workstation-02:
+    - view: private
+      address: "{{ hostvars['workstation-02'].ansible_host }}"
+      canonical: "workstation2.{{ bind9_forward_zone_name }}"
+      aliases:
+        - workstation2
+        - workstation-02

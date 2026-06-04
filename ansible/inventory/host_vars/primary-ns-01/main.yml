@@ -75,6 +75,15 @@ bind9_zones:
       - name: "internal-agent"
         type: "A"
         value: "{{ bind9_internal_agent_ip }}"
+      - name: "ldap"
+        type: "A"
+        value: "{{ bind9_ldap_ip }}"
+      - name: "workstation1"
+        type: "A"
+        value: "{{ bind9_workstation1_ip }}"
+      - name: "workstation2"
+        type: "A"
+        value: "{{ bind9_workstation2_ip }}"
 
       # Delegation for signed mail child zone
       - name: "mail"
@@ -260,6 +269,12 @@ bind9_zones:
     records:
       - name: "1"
         type: "PTR"
+        value: "workstation1.{{ bind9_forward_zone_name }}."
+      - name: "2"
+        type: "PTR"
+        value: "workstation2.{{ bind9_forward_zone_name }}."
+      - name: "25"
+        type: "PTR"
         value: "client.{{ bind9_forward_zone_name }}."
       - name: "53"
         type: "PTR"
@@ -292,6 +307,9 @@ bind9_zones:
       - "private-ns.{{ bind9_forward_zone_name }}."
       - "ns.{{ bind9_forward_zone_name }}."
     records:
+      - name: "10"
+        type: "PTR"
+        value: "ldap.{{ bind9_forward_zone_name }}."
       - name: "53"
         type: "PTR"
         value: "private-ns.{{ bind9_forward_zone_name }}."
