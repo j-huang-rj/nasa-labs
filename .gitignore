@@ -40,8 +40,6 @@ cloud-init/**/meta-data
 cloud-init/**/network-config
 
 # Agent artifacts
+.opencode/
 .planning/
 graphify-out/
-.graphifyignore
-opencode.json
-AGENTS.md
