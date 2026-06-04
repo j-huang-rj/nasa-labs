@@ -147,3 +147,67 @@
       become: false
       ansible.builtin.debug:
         msg: "Completed module inventory phase"
+
+    # ─── Non-invasive slaptest loadability stage ───
+    # Checks that slapd accepts ppolicy, otp, sssvlv load names
+    # and ppolicy_check_module linkage without creating final
+    # OLC state, overlays, DIT entries, or final config.
+    - name: "PHASE [loadability : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Test OpenLDAP module loadability"
+
+    - name: "PHASE [loadability : Probe OpenLDAP Module Loadability]"
+      block:
+        - name: "PHASE [loadability : Create Temporary DB Directory]"
+          ansible.builtin.file:
+            path: "{{ openldap_feasibility_temp_dir }}/db"
+            state: directory
+            mode: "0700"
+
+        - name: "PHASE [loadability : Write Temporary slaptest Config]"
+          ansible.builtin.copy:
+            content: |
+              modulepath {{ openldap_feasibility_module_dir }}
+              moduleload ppolicy
+              moduleload otp
+              moduleload sssvlv
+              database mdb
+              suffix "dc=example,dc=test"
+              rootdn "cn=admin,dc=example,dc=test"
+              rootpw secret
+              directory {{ openldap_feasibility_temp_dir }}/db
+              overlay ppolicy
+              ppolicy_default "cn=default,ou=Ppolicy,dc=example,dc=test"
+              ppolicy_check_module /usr/lib64/openldap/check_password.so
+              overlay otp
+              overlay sssvlv
+            dest: "{{ openldap_feasibility_temp_dir }}/slapd.conf"
+            mode: "0644"
+
+        - name: "PHASE [loadability : Test Module Loadability With slaptest]"
+          ansible.builtin.command:
+            argv:
+              - slaptest
+              - -f
+              - "{{ openldap_feasibility_temp_dir }}/slapd.conf"
+              - -u
+          changed_when: false
+          failed_when: false
+          register: openldap_slaptest_probe
+
+        - name: "PHASE [loadability : Compute Loadability Result]"
+          ansible.builtin.set_fact:
+            openldap_loadability_pass: "{{ openldap_slaptest_probe.rc == 0 }}"
+
+      always:
+        - name: "PHASE [loadability : Clean Up Temporary slaptest Config]"
+          ansible.builtin.file:
+            path: "{{ openldap_feasibility_temp_dir }}"
+            state: absent
+          changed_when: false
+
+    - name: "PHASE [loadability : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Completed loadability phase"
