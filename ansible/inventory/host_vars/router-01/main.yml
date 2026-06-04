@@ -56,13 +56,12 @@ firewall_policies:
 
   - name: dmz-to-internal-ldaps
     priority: -55
-    target: ACCEPT
+    target: CONTINUE
     ingress_zones:
       - dmz
     egress_zones:
       - internal
-    protocols:
-      - tcp
+    protocols: []
     ports:
       - port: 636
         proto: tcp
