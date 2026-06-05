@@ -20,6 +20,12 @@ wireguard_enabled: true
 # Mail Config
 mail_enabled: true
 
+# LDAP Client Config
+ldap_client_enabled: true
+
+# Mail LDAP Config
+mail_ldap_enabled: false
+
 # Firewall Config
 firewall_custom_zones:
   - vpn
