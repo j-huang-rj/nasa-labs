@@ -400,7 +400,7 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
-          '(olcDatabase=mdb)' dn olcSuffix olcDatabase
+          '(olcDatabase=mdb)' dn olcSuffix olcDatabase olcDbIndex
       changed_when: false
       register: _p11_olc_db
 
@@ -415,6 +415,30 @@
         fail_msg: >-
           OLC MDB database missing or suffix mismatch.
           Expected suffix: {{ ldap_base_dn }}.
+          stdout={{ _p11_olc_db.stdout | default('') }}
+
+    - name: "PHASE [olc : Assert Required MDB Indexes Configured]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_olc_db.stdout | default('')
+            | regex_search('olcDbIndex:\\s+objectClass\\s+eq') is not none
+          - _p11_olc_db.stdout | default('')
+            | regex_search('olcDbIndex:\\s+uid\\s+eq') is not none
+          - _p11_olc_db.stdout | default('')
+            | regex_search('olcDbIndex:\\s+cn\\s+eq') is not none
+          - _p11_olc_db.stdout | default('')
+            | regex_search('olcDbIndex:\\s+gidNumber\\s+eq') is not none
+          - _p11_olc_db.stdout | default('')
+            | regex_search('olcDbIndex:\\s+memberUid\\s+eq') is not none
+          - _p11_olc_db.stdout | default('')
+            | regex_search('olcDbIndex:\\s+mail\\s+eq') is not none
+          - _p11_olc_db.stdout | default('')
+            | regex_search('olcDbIndex:\\s+sshPublicKey\\s+eq') is not none
+        fail_msg: >-
+          OLC MDB database missing one or more required indexes.
+          Expected: objectClass eq, uid eq, cn eq, gidNumber eq,
+          memberUid eq, mail eq, sshPublicKey eq.
           stdout={{ _p11_olc_db.stdout | default('') }}
 
     - name: "PHASE [olc : Search OLC Loaded Modules]"

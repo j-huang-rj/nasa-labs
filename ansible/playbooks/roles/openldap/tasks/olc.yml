@@ -195,7 +195,8 @@
 - name: "PHASE [olc : Reconcile MDB Index objectClass If Missing]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and 'objectClass' not in _openldap_mdb_state.stdout
+    and _openldap_mdb_state.stdout | default('')
+        | regex_search('olcDbIndex:\\s+objectClass\\s+eq') is none
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
@@ -208,7 +209,8 @@
 - name: "PHASE [olc : Reconcile MDB Index uid If Missing]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and 'uid' not in _openldap_mdb_state.stdout
+    and _openldap_mdb_state.stdout | default('')
+        | regex_search('olcDbIndex:\\s+uid\\s+eq') is none
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
@@ -221,7 +223,8 @@
 - name: "PHASE [olc : Reconcile MDB Index cn If Missing]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and 'cn' not in _openldap_mdb_state.stdout
+    and _openldap_mdb_state.stdout | default('')
+        | regex_search('olcDbIndex:\\s+cn\\s+eq') is none
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
@@ -234,7 +237,8 @@
 - name: "PHASE [olc : Reconcile MDB Index gidNumber If Missing]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and 'gidNumber' not in _openldap_mdb_state.stdout
+    and _openldap_mdb_state.stdout | default('')
+        | regex_search('olcDbIndex:\\s+gidNumber\\s+eq') is none
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
@@ -247,7 +251,8 @@
 - name: "PHASE [olc : Reconcile MDB Index memberUid If Missing]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and 'memberUid' not in _openldap_mdb_state.stdout
+    and _openldap_mdb_state.stdout | default('')
+        | regex_search('olcDbIndex:\\s+memberUid\\s+eq') is none
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
@@ -260,7 +265,8 @@
 - name: "PHASE [olc : Reconcile MDB Index mail If Missing]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and 'mail' not in _openldap_mdb_state.stdout
+    and _openldap_mdb_state.stdout | default('')
+        | regex_search('olcDbIndex:\\s+mail\\s+eq') is none
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
@@ -273,7 +279,8 @@
 - name: "PHASE [olc : Reconcile MDB Index sshPublicKey If Missing]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and 'sshPublicKey' not in _openldap_mdb_state.stdout
+    and _openldap_mdb_state.stdout | default('')
+        | regex_search('olcDbIndex:\\s+sshPublicKey\\s+eq') is none
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
