@@ -102,26 +102,30 @@
 
     - name: "PHASE [preflight : Verify Module File Paths Exist]"
       ansible.builtin.stat:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
       changed_when: false
       register: _p11_module_stat
       loop:
-        - /usr/lib64/openldap/ppolicy.so
-        - /usr/lib64/openldap/otp.so
-        - /usr/lib64/openldap/sssvlv.so
-        - /usr/lib64/openldap/check_password.so
+        - path: /usr/lib64/openldap/ppolicy.so
+          label: "ppolicy.so (Phase 11 loaded module)"
+        - path: /usr/lib64/openldap/otp.so
+          label: "otp.so (Phase 11 loaded module)"
+        - path: /usr/lib64/openldap/sssvlv.so
+          label: "sssvlv.so (Phase 11 loaded module)"
+        - path: /usr/lib64/openldap/check_password.so
+          label: "check_password.so (password-quality file availability only; not a Phase 11 OLC load requirement)"
       loop_control:
-        label: "{{ item }}"
+        label: "{{ item.label }}"
 
     - name: "PHASE [preflight : Assert Required Module Files Present]"
       ansible.builtin.assert:
         quiet: true
         that:
           - item.stat.exists
-        fail_msg: "Required module file not found: {{ item.item }}"
+        fail_msg: "Required module file not found: {{ item.item.path }}"
       loop: "{{ _p11_module_stat.results }}"
       loop_control:
-        label: "{{ item.item }}"
+        label: "{{ item.item.label }}"
 
     - name: "PHASE [preflight : Inventory Installed OpenLDAP Schema Files]"
       ansible.builtin.shell:
@@ -298,9 +302,11 @@
         quiet: true
         that:
           - >-
-            _p11_forbidden_source_scan.results[6].stdout | length >= 0
+            _p11_forbidden_source_scan.results[6].stdout | length > 0
         fail_msg: >-
-          Unreachable assertion (ldap_users reference scan).
+          OpenLDAP role does not reference ldap_users — inventory identity model
+          may be unused. The openldap role must consume ldap_users from the shared
+          ldap_identity.yml model.
           Matches:
           {{ _p11_forbidden_source_scan.results[6].stdout }}
 
@@ -309,9 +315,11 @@
         quiet: true
         that:
           - >-
-            _p11_forbidden_source_scan.results[7].stdout | length >= 0
+            _p11_forbidden_source_scan.results[7].stdout | length > 0
         fail_msg: >-
-          Unreachable assertion (ldap_groups reference scan).
+          OpenLDAP role does not reference ldap_groups — inventory identity model
+          may be unused. The openldap role must consume ldap_groups from the shared
+          ldap_identity.yml model.
           Matches:
           {{ _p11_forbidden_source_scan.results[7].stdout }}
 
@@ -670,6 +678,11 @@
   become: false
   tags:
     - idempotency
+  vars:
+    _p11_inventory_file: >-
+      {{ inventory_file
+         | default(ansible_inventory_sources | first
+                   | default((playbook_dir + '/../inventory/hosts.yml'))) }}
   tasks:
     - name: "PHASE [idempotency : START]"
       ansible.builtin.debug:
@@ -678,7 +691,7 @@
     - name: "PHASE [idempotency : Run ldap_configure.yml Second Time]"
       ansible.builtin.command:
         cmd: >-
-          ansible-playbook -i {{ inventory_file }}
+          ansible-playbook -i {{ _p11_inventory_file }}
           {{ playbook_dir }}/ldap_configure.yml
           --limit ldap-01
           -e openldap_enabled=true

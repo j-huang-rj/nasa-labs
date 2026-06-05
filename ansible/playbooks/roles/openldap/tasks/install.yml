@@ -35,7 +35,14 @@
     regexp: '^\s*SLAPD_URLS='
     line: 'SLAPD_URLS="ldapi:/// ldaps:///"'
     state: present
-  notify: "PHASE [handler : Restart slapd]"
+  register: _openldap_slapd_urls_result
+
+- name: "PHASE [install : Restart OpenLDAP Immediately After Listener URL Change]"  # noqa: no-handler
+  when: _openldap_slapd_urls_result.changed
+  ansible.builtin.systemd_service:
+    name: "{{ openldap_service_name }}"
+    enabled: true
+    state: restarted
 
 - name: "PHASE [install : Enable And Start OpenLDAP Service]"
   ansible.builtin.systemd_service:
