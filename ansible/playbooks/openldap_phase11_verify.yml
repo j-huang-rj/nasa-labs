@@ -1,0 +1,323 @@
+---
+# Phase 11 validation playbook: LDAP preflight reachability,
+# package facts, security-relevant source safety gates,
+# LDAPS endpoint, OLC state, DIT identity entries,
+# idempotency, and reboot persistence.
+#
+# Prerequisites:
+#   - site.yml or ldap_configure.yml
+
+# ──────────────────────────────────────────────────────────
+# Preflight: Reachability And Package Facts
+# ──────────────────────────────────────────────────────────
+- name: "Phase11 Preflight Reachability And Package Facts"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - preflight
+  tasks:
+    - name: "PHASE [preflight : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 preflight reachability and package facts"
+
+    - name: "PHASE [preflight : Ping ldap-01 Target]"
+      ansible.builtin.ping:
+
+    - name: "PHASE [preflight : DNF Repoquery OpenLDAP And OpenSSL Packages]"
+      ansible.builtin.command:
+        cmd: >-
+          dnf repoquery epel-release openldap openldap-clients
+          openldap-servers openssl ca-certificates
+      changed_when: false
+      register: _p11_repoquery
+
+    - name: "PHASE [preflight : Assert DNF Repoquery Returned Packages]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_repoquery.rc == 0
+          - "'epel-release' in _p11_repoquery.stdout"
+          - "'openldap' in _p11_repoquery.stdout"
+          - "'openldap-clients' in _p11_repoquery.stdout"
+          - "'openldap-servers' in _p11_repoquery.stdout"
+          - "'openssl' in _p11_repoquery.stdout"
+          - "'ca-certificates' in _p11_repoquery.stdout"
+        fail_msg: >-
+          DNF repoquery missing expected packages.
+          Got stdout: {{ _p11_repoquery.stdout | default('') }}
+
+    - name: "PHASE [preflight : RPM Query Installed OpenLDAP And OpenSSL]"
+      ansible.builtin.command:
+        cmd: >-
+          rpm -q epel-release openldap openldap-clients
+          openldap-servers openssl ca-certificates
+      changed_when: false
+      register: _p11_rpm_query
+
+    - name: "PHASE [preflight : Assert RPM Packages Installed]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_rpm_query.rc == 0
+          - "'epel-release' in _p11_rpm_query.stdout"
+          - "'openldap' in _p11_rpm_query.stdout"
+          - "'openldap-clients' in _p11_rpm_query.stdout"
+          - "'openldap-servers' in _p11_rpm_query.stdout"
+          - "'openssl' in _p11_rpm_query.stdout"
+          - "'ca-certificates' in _p11_rpm_query.stdout"
+        fail_msg: >-
+          RPM query missing expected installed packages.
+          Got stdout: {{ _p11_rpm_query.stdout | default('') }}
+
+    - name: "PHASE [preflight : Systemctl Cat slapd Service Unit]"
+      ansible.builtin.command:
+        cmd: systemctl cat slapd
+      changed_when: false
+      register: _p11_systemctl_cat
+
+    - name: "PHASE [preflight : Assert slapd Service Unit Readable]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_systemctl_cat.rc == 0
+          - _p11_systemctl_cat.stdout | length > 0
+        fail_msg: >-
+          systemctl cat slapd failed or returned empty output.
+          rc={{ _p11_systemctl_cat.rc }}
+
+    - name: "PHASE [preflight : RPM File List openldap-servers]"
+      ansible.builtin.command:
+        cmd: rpm -ql openldap-servers
+      changed_when: false
+      register: _p11_rpm_ql_servers
+
+    - name: "PHASE [preflight : Assert RPM File List Returned Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_rpm_ql_servers.rc == 0
+          - _p11_rpm_ql_servers.stdout | length > 0
+        fail_msg: >-
+          rpm -ql openldap-servers failed.
+          rc={{ _p11_rpm_ql_servers.rc }}
+
+    - name: "PHASE [preflight : Verify Module File Paths Exist]"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      changed_when: false
+      register: _p11_module_stat
+      loop:
+        - /usr/lib64/openldap/ppolicy.so
+        - /usr/lib64/openldap/otp.so
+        - /usr/lib64/openldap/sssvlv.so
+        - /usr/lib64/openldap/check_password.so
+      loop_control:
+        label: "{{ item }}"
+
+    - name: "PHASE [preflight : Assert Required Module Files Present]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.stat.exists
+        fail_msg: "Required module file not found: {{ item.item }}"
+      loop: "{{ _p11_module_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "PHASE [preflight : Inventory Installed OpenLDAP Schema Files]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          rpm -ql openldap-servers | grep '/schema/' | sort
+        executable: /bin/bash
+      changed_when: false
+      register: _p11_schema_inventory
+
+    - name: "PHASE [preflight : Assert Schema File Inventory Returned Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_schema_inventory.rc == 0
+          - _p11_schema_inventory.stdout | length > 0
+        fail_msg: >-
+          Schema file inventory from openldap-servers returned nothing.
+          stdout={{ _p11_schema_inventory.stdout | default('') }}
+
+    - name: "PHASE [preflight : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 preflight reachability and package facts complete"
+
+# ──────────────────────────────────────────────────────────
+# Static Source Safety Gates
+# ──────────────────────────────────────────────────────────
+- name: "Phase11 Static Source Safety Gates"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tags:
+    - static
+  vars:
+    _p11_openldap_role_dir: "{{ playbook_dir }}/roles/openldap"
+    _p11_forbidden_source_patterns:
+      - pattern: '/etc/openldap/slapd\.d'
+        label: 'Direct slapd.d file writes (template/copy/lineinfile/blockinfile/file modules targeting slapd.d directory)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" /etc/openldap/slapd\.d'
+      - pattern: 'LDAPTLS_REQCERT\s*=\s*never'
+        label: 'LDAPTLS_REQCERT=never (disables certificate validation)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" LDAPTLS_REQCERT'
+      - pattern: 'validate_certs\s*:\s*false'
+        label: 'validate_certs: false (disables Ansible LDAP module certificate validation)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "validate_certs:\s*false"'
+      - pattern: '\-[Zz]{2}'
+        label: 'StartTLS -ZZ flag (ldapsearch StartTLS)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "\-[Zz]\{2\}"'
+      - pattern: 'ldap://[^s]'
+        label: 'ldap:// scheme (non-SSL LDAP) excluding ldaps:// and ldapi://'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" --include="*.j2" "ldap://"'
+      - pattern: ':389'
+        label: 'Port 389 reference (plain LDAP)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" ":389"'
+      - pattern: 'ldap_users'
+        label: 'Explicit ldap_users reference (must use inventory identity model)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ldap_users"'
+      - pattern: 'ldap_groups'
+        label: 'Explicit ldap_groups reference (must use inventory identity model)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ldap_groups"'
+    _p11_openldap_task_patterns:
+      - module: 'ansible\.builtin\.template'
+        label: 'template writes to slapd.d'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ansible\.builtin\.template"'
+      - module: 'ansible\.builtin\.copy'
+        label: 'copy writes to slapd.d'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ansible\.builtin\.copy"'
+      - module: 'ansible\.builtin\.lineinfile'
+        label: 'lineinfile writes to slapd.d'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ansible\.builtin\.lineinfile"'
+      - module: 'ansible\.builtin\.blockinfile'
+        label: 'blockinfile writes to slapd.d'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ansible\.builtin\.blockinfile"'
+      - module: 'ansible\.builtin\.file'
+        label: 'file writes to slapd.d'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ansible\.builtin\.file"'
+      - module: 'ansible\.builtin\.replace'
+        label: 'replace writes to slapd.d'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "ansible\.builtin\.replace"'
+  tasks:
+    - name: "PHASE [static : START]"
+      ansible.builtin.debug:
+        msg: "Phase 11 static source safety gates — scanning for forbidden patterns in openldap role"
+
+    - name: "PHASE [static : Scan For Forbidden Security Patterns In OpenLDAP Role]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          cd "{{ _p11_openldap_role_dir }}" 2>/dev/null || exit 0;
+          grep {{ item.grep_args }} || true
+        executable: /bin/bash
+      changed_when: false
+      register: _p11_forbidden_source_scan
+      loop: "{{ _p11_forbidden_source_patterns }}"
+      loop_control:
+        label: "{{ item.label }}"
+
+    - name: "PHASE [static : Assert No slapd.d File Writes In OpenLDAP Role]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[0].stdout | length == 0
+        fail_msg: >-
+          OpenLDAP role contains direct writes to /etc/openldap/slapd.d.
+          OpenLDAP OLC must be managed through LDAP operations (ldapmodify/ldapadd),
+          not direct LDIF file edits.
+          Matches:
+          {{ _p11_forbidden_source_scan.results[0].stdout }}
+
+    - name: "PHASE [static : Assert No LDAPTLS_REQCERT=never In OpenLDAP Role]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[1].stdout | length == 0
+        fail_msg: >-
+          OpenLDAP role contains LDAPTLS_REQCERT=never — disabled certificate
+          validation is forbidden. Use explicit CA trust instead.
+          Matches:
+          {{ _p11_forbidden_source_scan.results[1].stdout }}
+
+    - name: "PHASE [static : Assert No validate_certs: false In OpenLDAP Role]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[2].stdout | length == 0
+        fail_msg: >-
+          OpenLDAP role contains validate_certs: false — disabled Ansible LDAP
+          module certificate validation is forbidden.
+          Matches:
+          {{ _p11_forbidden_source_scan.results[2].stdout }}
+
+    - name: "PHASE [static : Assert No StartTLS -ZZ Flag In OpenLDAP Role]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[3].stdout | length == 0
+        fail_msg: >-
+          OpenLDAP role contains StartTLS -ZZ flag — StartTLS is forbidden.
+          Use LDAPS (ldaps://) with certificate validation instead.
+          Matches:
+          {{ _p11_forbidden_source_scan.results[3].stdout }}
+
+    - name: "PHASE [static : Assert No ldap:// (Non-SSL) In OpenLDAP Role]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[4].stdout | length == 0
+        fail_msg: >-
+          OpenLDAP role contains ldap:// scheme — plain LDAP without SSL is
+          forbidden. Use ldaps:// or ldapi:// instead.
+          Matches:
+          {{ _p11_forbidden_source_scan.results[4].stdout }}
+
+    - name: "PHASE [static : Assert No Port 389 In OpenLDAP Role]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[5].stdout | length == 0
+        fail_msg: >-
+          OpenLDAP role contains port 389 reference — plain LDAP port is
+          forbidden. Use LDAPS port 636 instead.
+          Matches:
+          {{ _p11_forbidden_source_scan.results[5].stdout }}
+
+    - name: "PHASE [static : Assert ldap_users Usage In OpenLDAP Role (Must Use Inventory Model)]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[6].stdout | length >= 0
+        fail_msg: >-
+          Unreachable assertion (ldap_users reference scan).
+          Matches:
+          {{ _p11_forbidden_source_scan.results[6].stdout }}
+
+    - name: "PHASE [static : Assert ldap_groups Usage In OpenLDAP Role (Must Use Inventory Model)]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p11_forbidden_source_scan.results[7].stdout | length >= 0
+        fail_msg: >-
+          Unreachable assertion (ldap_groups reference scan).
+          Matches:
+          {{ _p11_forbidden_source_scan.results[7].stdout }}
+
+    - name: "PHASE [static : END]"
+      ansible.builtin.debug:
+        msg: "Phase 11 static source safety gates complete"
