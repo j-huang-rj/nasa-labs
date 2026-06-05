@@ -321,3 +321,448 @@
     - name: "PHASE [static : END]"
       ansible.builtin.debug:
         msg: "Phase 11 static source safety gates complete"
+
+# ──────────────────────────────────────────────────────────
+# LDAPS Endpoint Validation
+# ──────────────────────────────────────────────────────────
+- name: "Phase11 LDAPS Endpoint Validation"
+  hosts: ldap-01
+  gather_facts: true
+  become: true
+  tags:
+    - ldaps
+  tasks:
+    - name: "PHASE [ldaps : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 LDAPS endpoint validation with certificate verification"
+
+    - name: "PHASE [ldaps : LDAPS Search Base DN With Certificate Validation]"
+      ansible.builtin.command:
+        cmd: >-
+          LDAPTLS_CACERT={{ openldap_tls_cert_path }}
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+      changed_when: false
+      register: _p11_ldaps_search
+
+    - name: "PHASE [ldaps : Assert LDAPS Search Returned Results]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_ldaps_search.rc == 0
+          - ldap_base_dn in _p11_ldaps_search.stdout
+        fail_msg: >-
+          LDAPS search on {{ ldap_server_uri }} failed or base DN not found.
+          rc={{ _p11_ldaps_search.rc }},
+          stdout={{ _p11_ldaps_search.stdout | default('') }}
+
+    - name: "PHASE [ldaps : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 LDAPS endpoint validation complete"
+
+# ──────────────────────────────────────────────────────────
+# OLC State Validation
+# ──────────────────────────────────────────────────────────
+- name: "Phase11 OLC State Validation"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - olc
+  tasks:
+    - name: "PHASE [olc : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 OLC cn=config state validation via ldapi"
+
+    - name: "PHASE [olc : Search OLC TLS Config]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
+          '(|(olcTLSCertificateFile=*)(olcTLSCertificateKeyFile=*))'
+          dn olcTLSCertificateFile olcTLSCertificateKeyFile
+      changed_when: false
+      register: _p11_olc_tls
+
+    - name: "PHASE [olc : Assert OLC TLS Certificate And Key Configured]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_olc_tls.rc == 0
+          - "'olcTLSCertificateFile' in _p11_olc_tls.stdout"
+          - "'olcTLSCertificateKeyFile' in _p11_olc_tls.stdout"
+        fail_msg: >-
+          OLC TLS configuration missing olcTLSCertificateFile or
+          olcTLSCertificateKeyFile.
+          stdout={{ _p11_olc_tls.stdout | default('') }}
+
+    - name: "PHASE [olc : Search OLC MDB Database Config]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
+          '(olcDatabase=mdb)' dn olcSuffix olcDatabase
+      changed_when: false
+      register: _p11_olc_db
+
+    - name: "PHASE [olc : Assert MDB Database Configured With Correct Suffix]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_olc_db.rc == 0
+          - "'olcDatabase' in _p11_olc_db.stdout"
+          - "'mdb' in _p11_olc_db.stdout"
+          - ldap_base_dn in _p11_olc_db.stdout
+        fail_msg: >-
+          OLC MDB database missing or suffix mismatch.
+          Expected suffix: {{ ldap_base_dn }}.
+          stdout={{ _p11_olc_db.stdout | default('') }}
+
+    - name: "PHASE [olc : Search OLC Loaded Modules]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
+          '(olcModuleLoad=*)' dn olcModuleLoad
+      changed_when: false
+      register: _p11_olc_modules
+
+    - name: "PHASE [olc : Assert Required Modules Loaded]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_olc_modules.rc == 0
+          - "'ppolicy' in _p11_olc_modules.stdout"
+          - "'otp' in _p11_olc_modules.stdout"
+          - "'sssvlv' in _p11_olc_modules.stdout"
+        fail_msg: >-
+          OLC modules missing ppolicy, otp, or sssvlv.
+          stdout={{ _p11_olc_modules.stdout | default('') }}
+
+    - name: "PHASE [olc : Search Loaded Schema Names]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=schema,cn=config
+          '(objectClass=olcSchemaConfig)' cn
+      changed_when: false
+      register: _p11_olc_schemas
+
+    - name: "PHASE [olc : Assert Required Schemas Loaded]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_olc_schemas.rc == 0
+          - "'core' in _p11_olc_schemas.stdout"
+          - "'cosine' in _p11_olc_schemas.stdout"
+          - "'inetorgperson' in _p11_olc_schemas.stdout"
+          - "'nis' in _p11_olc_schemas.stdout"
+          - "'ppolicy' in _p11_olc_schemas.stdout"
+        fail_msg: >-
+          Required schemas (core, cosine, inetorgperson, nis, ppolicy)
+          not found in cn=schema,cn=config.
+          stdout={{ _p11_olc_schemas.stdout | default('') }}
+
+    - name: "PHASE [olc : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 OLC state validation complete"
+
+# ──────────────────────────────────────────────────────────
+# DIT Identity Validation
+# ──────────────────────────────────────────────────────────
+- name: "Phase11 DIT Identity Validation"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - dit
+  tasks:
+    - name: "PHASE [dit : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 DIT identity validation — base DN, OUs, groups, users"
+
+    - name: "PHASE [dit : Search Base DN And Organizational Units]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "{{ ldap_base_dn }}" '(objectClass=organizationalUnit)' dn ou
+      changed_when: false
+      register: _p11_dit_ous
+
+    - name: "PHASE [dit : Assert Base DN OUs People Group Ppolicy SUDOers Fortune]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_dit_ous.rc == 0
+          - "'ou=People' in _p11_dit_ous.stdout"
+          - "'ou=Group' in _p11_dit_ous.stdout"
+          - "'ou=Ppolicy' in _p11_dit_ous.stdout"
+          - "'ou=SUDOers' in _p11_dit_ous.stdout"
+          - "'ou=Fortune' in _p11_dit_ous.stdout"
+        fail_msg: >-
+          DIT missing one or more required OUs.
+          Expected: People, Group, Ppolicy, SUDOers, Fortune.
+          stdout={{ _p11_dit_ous.stdout | default('') }}
+
+    - name: "PHASE [dit : Search TA Group Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "cn=ta,ou=Group,{{ ldap_base_dn }}" '(objectClass=posixGroup)'
+          cn gidNumber memberUid
+      changed_when: false
+      register: _p11_dit_ta_group
+
+    - name: "PHASE [dit : Assert TA Group Exists With Correct GID And Members]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_dit_ta_group.rc == 0
+          - "'cn: ta' in _p11_dit_ta_group.stdout"
+          - "'gidNumber: 10000' in _p11_dit_ta_group.stdout"
+          - "'memberUid: generalta' in _p11_dit_ta_group.stdout"
+          - "'memberUid: mailta' in _p11_dit_ta_group.stdout"
+        fail_msg: >-
+          TA group (cn=ta,ou=Group) missing or has wrong GID/members.
+          Expected: gidNumber=10000, members=generalta,mailta.
+          stdout={{ _p11_dit_ta_group.stdout | default('') }}
+
+    - name: "PHASE [dit : Search STU Group Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "cn=stu,ou=Group,{{ ldap_base_dn }}" '(objectClass=posixGroup)'
+          cn gidNumber memberUid
+      changed_when: false
+      register: _p11_dit_stu_group
+
+    - name: "PHASE [dit : Assert STU Group Exists With Correct GID And Member]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_dit_stu_group.rc == 0
+          - "'cn: stu' in _p11_dit_stu_group.stdout"
+          - "'gidNumber: 20000' in _p11_dit_stu_group.stdout"
+          - "'memberUid: stu' in _p11_dit_stu_group.stdout"
+        fail_msg: >-
+          STU group (cn=stu,ou=Group) missing or has wrong GID/member.
+          Expected: gidNumber=20000, member=stu.
+          stdout={{ _p11_dit_stu_group.stdout | default('') }}
+
+    - name: "PHASE [dit : Search Generalta User Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "uid=generalta,ou=People,{{ ldap_base_dn }}"
+          '(objectClass=posixAccount)'
+          uid uidNumber gidNumber homeDirectory mail sshPublicKey userPassword
+      changed_when: false
+      register: _p11_dit_generalta
+
+    - name: "PHASE [dit : Assert Generalta User Attributes]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_dit_generalta.rc == 0
+          - "'uid: generalta' in _p11_dit_generalta.stdout"
+          - "'uidNumber: 10000' in _p11_dit_generalta.stdout"
+          - "'gidNumber: 10000' in _p11_dit_generalta.stdout"
+          - "'homeDirectory' in _p11_dit_generalta.stdout"
+          - "'mail' in _p11_dit_generalta.stdout"
+          - "'sshPublicKey' in _p11_dit_generalta.stdout"
+          - "'userPassword' in _p11_dit_generalta.stdout"
+        fail_msg: >-
+          Generalta user entry missing or missing required attributes
+          (uid, uidNumber=10000, gidNumber=10000, homeDirectory, mail,
+          sshPublicKey, userPassword).
+          stdout={{ _p11_dit_generalta.stdout | default('') }}
+
+    - name: "PHASE [dit : Search Mailta User Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "uid=mailta,ou=People,{{ ldap_base_dn }}"
+          '(objectClass=posixAccount)'
+          uid uidNumber gidNumber homeDirectory mail sshPublicKey userPassword
+      changed_when: false
+      register: _p11_dit_mailta
+
+    - name: "PHASE [dit : Assert Mailta User Attributes]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_dit_mailta.rc == 0
+          - "'uid: mailta' in _p11_dit_mailta.stdout"
+          - "'uidNumber: 10001' in _p11_dit_mailta.stdout"
+          - "'gidNumber: 10000' in _p11_dit_mailta.stdout"
+          - "'homeDirectory' in _p11_dit_mailta.stdout"
+          - "'mail' in _p11_dit_mailta.stdout"
+          - "'sshPublicKey' in _p11_dit_mailta.stdout"
+          - "'userPassword' in _p11_dit_mailta.stdout"
+        fail_msg: >-
+          Mailta user entry missing or missing required attributes
+          (uid, uidNumber=10001, gidNumber=10000, homeDirectory, mail,
+          sshPublicKey, userPassword).
+          stdout={{ _p11_dit_mailta.stdout | default('') }}
+
+    - name: "PHASE [dit : Search Stu User Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "uid=stu,ou=People,{{ ldap_base_dn }}"
+          '(objectClass=posixAccount)'
+          uid uidNumber gidNumber homeDirectory mail sshPublicKey userPassword
+      changed_when: false
+      register: _p11_dit_stu
+
+    - name: "PHASE [dit : Assert Stu User Attributes]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_dit_stu.rc == 0
+          - "'uid: stu' in _p11_dit_stu.stdout"
+          - "'uidNumber: 20000' in _p11_dit_stu.stdout"
+          - "'gidNumber: 20000' in _p11_dit_stu.stdout"
+          - "'homeDirectory' in _p11_dit_stu.stdout"
+          - "'mail' in _p11_dit_stu.stdout"
+          - "'sshPublicKey' in _p11_dit_stu.stdout"
+          - "'userPassword' in _p11_dit_stu.stdout"
+        fail_msg: >-
+          Stu user entry missing or missing required attributes
+          (uid, uidNumber=20000, gidNumber=20000, homeDirectory, mail,
+          sshPublicKey, userPassword).
+          stdout={{ _p11_dit_stu.stdout | default('') }}
+
+    - name: "PHASE [dit : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 DIT identity validation complete"
+
+# ──────────────────────────────────────────────────────────
+# Idempotency Check
+# ──────────────────────────────────────────────────────────
+- name: "Phase11 Idempotency Check"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tags:
+    - idempotency
+  tasks:
+    - name: "PHASE [idempotency : START]"
+      ansible.builtin.debug:
+        msg: "Phase 11 idempotency: re-run ldap_configure.yml limited to ldap-01"
+
+    - name: "PHASE [idempotency : Run ldap_configure.yml Second Time]"
+      ansible.builtin.command:
+        cmd: >-
+          ansible-playbook -i {{ inventory_file }}
+          {{ playbook_dir }}/ldap_configure.yml
+          --limit ldap-01
+          -e openldap_enabled=true
+      changed_when: false
+      register: _p11_idempotency_rerun
+
+    - name: "PHASE [idempotency : Assert No Changes Failures Or Unreachable On Rerun]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'unreachable=0' in _p11_idempotency_rerun.stdout"
+          - "'failed=0' in _p11_idempotency_rerun.stdout"
+          - "'changed=0' in _p11_idempotency_rerun.stdout"
+        fail_msg: >-
+          Second ldap_configure.yml run reported unreachable, failed, or changed tasks.
+          stdout={{ _p11_idempotency_rerun.stdout | default('') }}
+
+    - name: "PHASE [idempotency : END]"
+      ansible.builtin.debug:
+        msg: "Phase 11 idempotency check complete"
+
+# ──────────────────────────────────────────────────────────
+# Reboot Persistence Check
+# ──────────────────────────────────────────────────────────
+- name: "Phase11 Reboot Persistence Check"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  serial: 1
+  tags:
+    - reboot
+  tasks:
+    - name: "PHASE [reboot : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 reboot persistence check — reboot, then re-assert LDAPS, OLC, and DIT state"
+
+    - name: "PHASE [reboot : Reboot ldap-01 And Wait For Return]"
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        pre_reboot_delay: 5
+        post_reboot_delay: 15
+
+    - name: "PHASE [reboot : Post-Reboot LDAPS Search Base DN With Certificate Validation]"
+      ansible.builtin.command:
+        cmd: >-
+          LDAPTLS_CACERT={{ openldap_tls_cert_path }}
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+      changed_when: false
+      register: _p11_reboot_ldaps
+
+    - name: "PHASE [reboot : Assert Post-Reboot LDAPS Search Works]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_reboot_ldaps.rc == 0
+          - ldap_base_dn in _p11_reboot_ldaps.stdout
+        fail_msg: >-
+          Post-reboot LDAPS search failed.
+          rc={{ _p11_reboot_ldaps.rc }},
+          stdout={{ _p11_reboot_ldaps.stdout | default('') }}
+
+    - name: "PHASE [reboot : Post-Reboot OLC Module Search]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
+          '(olcModuleLoad=*)' dn olcModuleLoad
+      changed_when: false
+      register: _p11_reboot_olc
+
+    - name: "PHASE [reboot : Assert Post-Reboot OLC Modules Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_reboot_olc.rc == 0
+          - "'ppolicy' in _p11_reboot_olc.stdout"
+          - "'otp' in _p11_reboot_olc.stdout"
+          - "'sssvlv' in _p11_reboot_olc.stdout"
+        fail_msg: >-
+          Post-reboot OLC module check failed or modules missing.
+          stdout={{ _p11_reboot_olc.stdout | default('') }}
+
+    - name: "PHASE [reboot : Post-Reboot DIT OU Search]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "{{ ldap_base_dn }}" '(objectClass=organizationalUnit)' dn ou
+      changed_when: false
+      register: _p11_reboot_dit
+
+    - name: "PHASE [reboot : Assert Post-Reboot DIT OUs Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p11_reboot_dit.rc == 0
+          - "'ou=People' in _p11_reboot_dit.stdout"
+          - "'ou=Group' in _p11_reboot_dit.stdout"
+          - "'ou=Ppolicy' in _p11_reboot_dit.stdout"
+          - "'ou=SUDOers' in _p11_reboot_dit.stdout"
+          - "'ou=Fortune' in _p11_reboot_dit.stdout"
+        fail_msg: >-
+          Post-reboot DIT OU check failed or OUs missing.
+          stdout={{ _p11_reboot_dit.stdout | default('') }}
+
+    - name: "PHASE [reboot : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 11 reboot persistence check complete"
