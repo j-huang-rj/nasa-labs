@@ -1,0 +1,74 @@
+---
+argument_specs:
+  main:
+    short_description: Validate openldap role variables
+
+    options:
+      openldap_enabled:
+        type: bool
+        required: true
+        description: Whether the openldap role should be active on this host
+
+      ldap_domain:
+        type: str
+        required: false
+        description: >-
+          LDAP domain name, derived from DNS identity (e.g. "<lab_id>.nasa").
+          Shape-only in Phase 9.
+
+      ldap_base_dn:
+        type: str
+        required: false
+        description: >-
+          LDAP base DN derived from ldap_domain (e.g. "dc=<lab_id>,dc=nasa").
+          Shape-only in Phase 9.
+
+      ldap_server_host:
+        type: str
+        required: false
+        description: Inventory hostname of the LDAP server (ldap-01)
+
+      ldap_server_fqdn:
+        type: str
+        required: false
+        description: >-
+          FQDN of the LDAP service (e.g. "ldap.<lab_id>.nasa").
+          Shape-only in Phase 9.
+
+      ldap_server_uri:
+        type: str
+        required: false
+        description: >-
+          LDAPS URI for the LDAP server (e.g. "ldaps://ldap.<lab_id>.nasa:636").
+          Shape-only in Phase 9.
+
+      ldap_unix_groups:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Unix group definitions for LDAP. Shape-only in Phase 9;
+          expanded in Phase 11.
+
+      ldap_users:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          User definitions for LDAP. Shape-only in Phase 9;
+          expanded in Phase 11.
+
+      ldap_consumer_bind_identities:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Consumer-facing LDAP bind identity references.
+          Shape-only in Phase 9.
+
+      ldap_tls_ca_certificate:
+        type: str
+        required: false
+        description: >-
+          LDAP CA certificate PEM content. Placeholder in Phase 9;
+          populated from secrets in Phase 11.
