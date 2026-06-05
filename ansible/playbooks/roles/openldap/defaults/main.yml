@@ -1,14 +1,64 @@
 ---
 # ───────────────────────────── Feature flag ─────────────────────────────
-# openldap_enabled is set in inventory; default here provides a safe
-# fallback so the role can be unconditionally included in playbooks.
 openldap_enabled: false
 
-# ───────────────────────────── LDAP identity ─────────────────────────────
-# These shape variables are populated by group_vars/all/ldap_identity.yml
-# and define the LDAP server's DN and service endpoints. They are shape-only
-# in Phase 9; real service configuration happens in Phase 11.
-#
+# ───────────────────────────── Package and service defaults ─────────────
+openldap_epel_package: epel-release
+openldap_packages:
+  - openldap-servers
+  - openldap-clients
+  - openssl
+  - ca-certificates
+openldap_service_name: slapd
+openldap_sysconfig_path: /etc/sysconfig/slapd
+
+# ───────────────────────────── Module paths ─────────────────────────────
+openldap_module_dir: /usr/lib64/openldap
+openldap_required_modules:
+  - load: ppolicy.la
+    path: /usr/lib64/openldap/ppolicy.la
+  - load: otp.la
+    path: /usr/lib64/openldap/otp.la
+  - load: sssvlv.la
+    path: /usr/lib64/openldap/sssvlv.la
+
+# ───────────────────────────── Filesystem paths ─────────────────────────
+openldap_tls_cert_dir: /etc/openldap/certs
+openldap_tls_key_dir: /etc/openldap/private
+openldap_tls_cert_path: "{{ openldap_tls_cert_dir }}/ldap.crt"
+openldap_tls_key_path: "{{ openldap_tls_key_dir }}/ldap.key"
+openldap_data_dir: /var/lib/ldap
+
+# ───────────────────────────── OLC / database identity ──────────────────
+openldap_database_suffix: "{{ ldap_base_dn }}"
+openldap_root_dn: "cn=admin,{{ ldap_base_dn }}"
+openldap_olc_database_dn: olcDatabase={1}mdb,cn=config
+
+# ───────────────────────────── Schema defaults ──────────────────────────
+openldap_schema_files:
+  - name: cosine
+    path: /etc/openldap/schema/cosine.ldif
+  - name: inetorgperson
+    path: /etc/openldap/schema/inetorgperson.ldif
+  - name: nis
+    path: /etc/openldap/schema/nis.ldif
+  - name: ppolicy
+    path: /etc/openldap/schema/ppolicy.ldif
+  - name: sudo
+    path: /usr/share/doc/sudo/schema.OpenLDAP
+  - name: otp
+    path: /etc/openldap/schema/otp.ldif
+
+openldap_custom_schema_templates:
+  - name: openssh-lpk
+    description: OpenSSH LDAP public key schema
+  - name: fortune
+    description: Fortune custom objectClass schema
+
+openldap_fortune_schema_oid_root: "2.25.109749598841848522681210166878566339431"
+
+# ───────────────────────────── LDAP identity shapes ──────────────────────
+# Populated from group_vars/all/ldap_identity.yml.
 # All ldap_* variables use a shared prefix (not openldap_) because these
 # identity shapes are consumed across multiple component roles (openldap,
 # ldap-client, nfs, mail) per the project's generic-variable-naming convention.
@@ -18,12 +68,12 @@ ldap_server_host: ldap-01  # noqa: var-naming[no-role-prefix]
 ldap_server_fqdn: ""  # noqa: var-naming[no-role-prefix]
 ldap_server_uri: ""  # noqa: var-naming[no-role-prefix]
 
-# ───────────────────────────── Data shapes ──────────────────────────────
-# Shape-only in Phase 9. Populated by later phases.
-ldap_unix_groups: []  # noqa: var-naming[no-role-prefix]
-ldap_users: []  # noqa: var-naming[no-role-prefix]
-ldap_consumer_bind_identities: []  # noqa: var-naming[no-role-prefix]
+ldap_ous: []  # noqa: var-naming[no-role-prefix]
+ldap_groups: {}  # noqa: var-naming[no-role-prefix]
+ldap_users: {}  # noqa: var-naming[no-role-prefix]
 
-# ───────────────────────────── TLS shapes ───────────────────────────────
-# Placeholder only in Phase 9.
-ldap_tls_ca_certificate: ""  # noqa: var-naming[no-role-prefix]
+# ───────────────────────────── Secret shapes ─────────────────────────────
+# Populated from gitignored host_vars/*/secrets.yml.
+openldap_user_password_hashes: {}
+openldap_tls_private_key: ""
+openldap_tls_certificate: ""

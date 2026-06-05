@@ -9,19 +9,112 @@ argument_specs:
         required: true
         description: Whether the openldap role should be active on this host
 
-      ldap_domain:
+      openldap_epel_package:
+        type: str
+        required: false
+        description: EPEL release package name for OpenLDAP server availability
+
+      openldap_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for OpenLDAP server and client tools
+
+      openldap_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the OpenLDAP service (slapd)
+
+      openldap_sysconfig_path:
+        type: str
+        required: false
+        description: Path to the slapd sysconfig file for listener URL configuration
+
+      openldap_module_dir:
+        type: str
+        required: false
+        description: Directory containing OpenLDAP dynamically-loadable modules
+
+      openldap_required_modules:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          OpenLDAP modules to load idempotently. Each entry defines load (la name)
+          and path (absolute filesystem path).
+
+      openldap_tls_cert_dir:
+        type: str
+        required: false
+        description: Directory for the LDAPS TLS certificate file
+
+      openldap_tls_key_dir:
+        type: str
+        required: false
+        description: Directory for the LDAPS TLS private key file
+
+      openldap_tls_cert_path:
+        type: str
+        required: false
+        description: Absolute path to the LDAPS TLS certificate file
+
+      openldap_tls_key_path:
+        type: str
+        required: false
+        description: Absolute path to the LDAPS TLS private key file
+
+      openldap_data_dir:
+        type: str
+        required: false
+        description: Directory for the OpenLDAP MDB database files
+
+      openldap_database_suffix:
+        type: str
+        required: false
+        description: MDB database suffix (equal to ldap_base_dn)
+
+      openldap_root_dn:
+        type: str
+        required: false
+        description: Root DN for the MDB database (cn=admin,<suffix>)
+
+      openldap_olc_database_dn:
+        type: str
+        required: false
+        description: OLC entry DN for the MDB database
+
+      openldap_schema_files:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          LDAP schema files to load idempotently. Each entry defines name (schema label)
+          and path (absolute path to the LDIF schema file).
+
+      openldap_custom_schema_templates:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Custom OLC schema definitions to load idempotently. Each entry defines
+          a name and description for schema template rendering.
+
+      openldap_fortune_schema_oid_root:
         type: str
         required: false
         description: >-
-          LDAP domain name, derived from DNS identity (e.g. "<lab_id>.nasa").
-          Shape-only in Phase 9.
+          UUID-based OID root for the custom Fortune objectClass schema branch
+          (2.25.109749598841848522681210166878566339431).
+
+      ldap_domain:
+        type: str
+        required: false
+        description: LDAP domain name derived from DNS identity
 
       ldap_base_dn:
         type: str
         required: false
-        description: >-
-          LDAP base DN derived from ldap_domain (e.g. "dc=<lab_id>,dc=nasa").
-          Shape-only in Phase 9.
+        description: LDAP base DN derived from ldap_domain
 
       ldap_server_host:
         type: str
@@ -31,44 +124,46 @@ argument_specs:
       ldap_server_fqdn:
         type: str
         required: false
-        description: >-
-          FQDN of the LDAP service (e.g. "ldap.<lab_id>.nasa").
-          Shape-only in Phase 9.
+        description: FQDN of the LDAP service
 
       ldap_server_uri:
         type: str
         required: false
-        description: >-
-          LDAPS URI for the LDAP server (e.g. "ldaps://ldap.<lab_id>.nasa:636").
-          Shape-only in Phase 9.
+        description: LDAPS URI for the LDAP server
 
-      ldap_unix_groups:
+      ldap_ous:
         type: list
-        elements: dict
+        elements: str
         required: false
-        description: >-
-          Unix group definitions for LDAP. Shape-only in Phase 9;
-          expanded in Phase 11.
+        description: Organizational Unit names for DIT containers
+
+      ldap_groups:
+        type: dict
+        required: false
+        description: posixGroup definitions keyed by group name (e.g. ta, stu)
 
       ldap_users:
-        type: list
-        elements: dict
+        type: dict
+        required: false
+        description: posixAccount definitions keyed by username (e.g. generalta, mailta, stu)
+
+      openldap_user_password_hashes:
+        type: dict
         required: false
         description: >-
-          User definitions for LDAP. Shape-only in Phase 9;
-          expanded in Phase 11.
+          User password hashes keyed by username (e.g. generalta, mailta, stu).
+          Populated from gitignored host_vars/*/secrets.yml.
 
-      ldap_consumer_bind_identities:
-        type: list
-        elements: dict
-        required: false
-        description: >-
-          Consumer-facing LDAP bind identity references.
-          Shape-only in Phase 9.
-
-      ldap_tls_ca_certificate:
+      openldap_tls_private_key:
         type: str
         required: false
         description: >-
-          LDAP CA certificate PEM content. Placeholder in Phase 9;
-          populated from secrets in Phase 11.
+          LDAPS TLS private key PEM content.
+          Populated from gitignored host_vars/*/secrets.yml.
+
+      openldap_tls_certificate:
+        type: str
+        required: false
+        description: >-
+          LDAPS TLS certificate PEM content.
+          Populated from gitignored host_vars/*/secrets.yml.
