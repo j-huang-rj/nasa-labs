@@ -1,0 +1,34 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate openldap role variables"
+
+- name: "PHASE [assert : Check openldap_enabled Is True]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - openldap_enabled | bool
+      - inventory_hostname in groups['ldap_servers']
+    fail_msg: "openldap role must run only on hosts in ldap_servers with openldap_enabled=true"
+
+- name: "PHASE [assert : Check Required LDAP Identity Variables Are Defined]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ldap_domain is defined
+      - ldap_domain | length > 0
+      - ldap_base_dn is defined
+      - ldap_base_dn | length > 0
+      - ldap_server_fqdn is defined
+      - ldap_server_fqdn | length > 0
+      - ldap_server_uri is defined
+      - ldap_server_uri | length > 0
+    fail_msg: "Required LDAP identity variables (ldap_domain, ldap_base_dn, ldap_server_fqdn, ldap_server_uri) must be defined and non-empty"
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"
