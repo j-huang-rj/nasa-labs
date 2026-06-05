@@ -1,0 +1,66 @@
+# {{ ansible_managed }}
+#
+# OpenLDAP schema for sudo LDAP support.
+# cn: sudo
+# Symbols: sudoRole, sudoUser, sudoHost, sudoCommand, sudoOption,
+#          sudoRunAsUser, sudoRunAsGroup
+
+dn: cn=sudo,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: sudo
+
+# ── Attributes ───────────────────────────────────────────────────────────
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.1
+  NAME 'sudoUser'
+  DESC 'User(s) who may run sudo'
+  EQUALITY caseExactMatch
+  SUBSTR caseExactSubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+)
+
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.2
+  NAME 'sudoHost'
+  DESC 'Host(s) who may run sudo'
+  EQUALITY caseExactMatch
+  SUBSTR caseExactSubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+)
+
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.3
+  NAME 'sudoCommand'
+  DESC 'Command(s) to be executed by sudo'
+  EQUALITY caseExactMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+)
+
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.4
+  NAME 'sudoOption'
+  DESC 'Options(s) followed by sudo'
+  EQUALITY caseExactMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+)
+
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.5
+  NAME 'sudoRunAsUser'
+  DESC 'User(s) impersonated by sudo (runas-user)'
+  EQUALITY caseExactMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+)
+
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.6
+  NAME 'sudoRunAsGroup'
+  DESC 'Group(s) impersonated by sudo (runas-group)'
+  EQUALITY caseExactMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+)
+
+# ── ObjectClass ──────────────────────────────────────────────────────────
+olcObjectClasses: ( 1.3.6.1.4.1.15953.9.2.1
+  NAME 'sudoRole'
+  DESC 'Sudoer entries'
+  SUP top
+  STRUCTURAL
+  MUST cn
+  MAY ( sudoUser $ sudoHost $ sudoCommand $ sudoOption
+        $ sudoRunAsUser $ sudoRunAsGroup $ description )
+)
