@@ -1,0 +1,26 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate nfs role variables"
+
+- name: "PHASE [assert : Check nfs_enabled Is True]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - nfs_enabled | bool
+    fail_msg: "nfs_enabled must be true when the nfs role is invoked"
+
+- name: "PHASE [assert : Check Host Belongs To NFS Server Or Client Groups]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - inventory_hostname in groups['nfs_servers'] or inventory_hostname in groups['nfs_clients']
+    fail_msg: "nfs role must run only on hosts in nfs_servers or nfs_clients"
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

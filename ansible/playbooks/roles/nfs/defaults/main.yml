@@ -1,0 +1,11 @@
+---
+# ───────────────────────────── Feature flag ─────────────────────────────
+nfs_enabled: false
+
+# ───────────────────────────── Export shapes ────────────────────────────
+# Shape-only in Phase 9. Populated by Phase 13.
+nfs_exports: []
+
+# ───────────────────────────── Mount shapes ─────────────────────────────
+# Shape-only in Phase 9. Populated by Phase 13.
+nfs_mounts: []
