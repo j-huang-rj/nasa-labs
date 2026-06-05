@@ -139,6 +139,7 @@
         mail_address: "{{ _ident_user.value.mail }}"
         ssh_public_key: "{{ _ident_user.value.ssh_public_key }}"
         password_hash: "{{ openldap_user_password_hashes[_ident_user.value.password_hash_key] }}"
+      no_log: true
 
     - name: "PHASE [identities : Search Existing User] | {{ _ident_user.key }}"
       ansible.builtin.command:
@@ -200,6 +201,7 @@
                                ~ (_ident_user.value.ssh_public_key | regex_escape()) ~ '\\s') is none
              or _openldap_user_current.stdout | default('')
                 | regex_search('userPassword:\\s*' ~ _openldap_user_expected_pw_hash) is none }}
+      no_log: true
 
     - name: "PHASE [identities : Modify User To Exact Managed Attributes] | {{ _ident_user.key }}"
       when: _openldap_user_needs_modify | default(false) | bool
