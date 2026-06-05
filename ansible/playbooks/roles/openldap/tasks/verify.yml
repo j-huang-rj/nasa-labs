@@ -1,0 +1,333 @@
+---
+- name: "PHASE [verify : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Verify OpenLDAP service, LDAPS, OLC, schema, DIT, group, and user state"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Service state verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Gather Service Facts]"
+  ansible.builtin.service_facts:
+
+- name: "PHASE [verify : Assert slapd Service Is Enabled]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.services[openldap_service_name ~ '.service'] is defined
+      - ansible_facts.services[openldap_service_name ~ '.service'].status == "enabled"
+    fail_msg: >-
+      {{ openldap_service_name }} service is not enabled.
+      Current status: {{ ansible_facts.services[openldap_service_name ~ '.service'].status | default("not found") }}
+
+- name: "PHASE [verify : Assert slapd Service Is Running]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.services[openldap_service_name ~ '.service'] is defined
+      - ansible_facts.services[openldap_service_name ~ '.service'].state == "running"
+    fail_msg: >-
+      {{ openldap_service_name }} service is not running.
+      Current state: {{ ansible_facts.services[openldap_service_name ~ '.service'].state | default("not found") }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# LDAPS listener verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Wait For LDAPS Port 636]"
+  ansible.builtin.wait_for:
+    host: "{{ ldap_server_ip }}"
+    port: 636
+    timeout: 10
+    state: started
+
+- name: "PHASE [verify : LDAPS Search Base DN With Certificate Validation]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -H {{ ldap_server_uri }}
+      -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+  changed_when: false
+  register: _openldap_ldaps_search
+
+- name: "PHASE [verify : Assert LDAPS Base DN Search Returned Results]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_ldaps_search.rc == 0
+      - ldap_base_dn in _openldap_ldaps_search.stdout
+    fail_msg: >-
+      LDAPS search on {{ ldap_server_uri }} failed or base DN not found.
+      rc={{ _openldap_ldaps_search.rc }},
+      stdout={{ _openldap_ldaps_search.stdout | default('') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# OLC state verification (cn=config via ldapi)
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search OLC TLS Configuration]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
+      '(|(olcTLSCertificateFile=*)(olcTLSCertificateKeyFile=*))'
+      dn olcTLSCertificateFile olcTLSCertificateKeyFile
+  changed_when: false
+  register: _openldap_olc_tls_search
+
+- name: "PHASE [verify : Assert OLC TLS Certificate And Key Configured]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_olc_tls_search.rc == 0
+      - "'olcTLSCertificateFile' in _openldap_olc_tls_search.stdout"
+      - "'olcTLSCertificateKeyFile' in _openldap_olc_tls_search.stdout"
+    fail_msg: >-
+      OLC TLS configuration missing olcTLSCertificateFile or
+      olcTLSCertificateKeyFile.
+      stdout={{ _openldap_olc_tls_search.stdout | default('') }}
+
+- name: "PHASE [verify : Search OLC Loaded Modules]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
+      '(olcModuleLoad=*)' dn olcModuleLoad
+  changed_when: false
+  register: _openldap_olc_module_search
+
+- name: "PHASE [verify : Assert Required Modules Loaded (ppolicy otp sssvlv)]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_olc_module_search.rc == 0
+      - "'ppolicy' in _openldap_olc_module_search.stdout"
+      - "'otp' in _openldap_olc_module_search.stdout"
+      - "'sssvlv' in _openldap_olc_module_search.stdout"
+    fail_msg: >-
+      OLC modules missing ppolicy, otp, or sssvlv.
+      stdout={{ _openldap_olc_module_search.stdout | default('') }}
+
+- name: "PHASE [verify : Search OLC MDB Database Config]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=config
+      '(olcDatabase=mdb)' dn olcSuffix olcDatabase
+  changed_when: false
+  register: _openldap_olc_db_search
+
+- name: "PHASE [verify : Assert MDB Database Configured With Correct Suffix]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_olc_db_search.rc == 0
+      - "'olcDatabase' in _openldap_olc_db_search.stdout"
+      - "'mdb' in _openldap_olc_db_search.stdout"
+      - ldap_base_dn in _openldap_olc_db_search.stdout
+    fail_msg: >-
+      OLC MDB database missing or suffix mismatch.
+      Expected suffix: {{ ldap_base_dn }}.
+      stdout={{ _openldap_olc_db_search.stdout | default('') }}
+
+- name: "PHASE [verify : Search Loaded Schema Names]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:/// -b cn=schema,cn=config
+      '(objectClass=olcSchemaConfig)' cn
+  changed_when: false
+  register: _openldap_schema_search
+
+- name: "PHASE [verify : Assert Required Schemas Loaded]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_schema_search.rc == 0
+      - "'core' in _openldap_schema_search.stdout"
+      - "'cosine' in _openldap_schema_search.stdout"
+      - "'inetorgperson' in _openldap_schema_search.stdout"
+      - "'nis' in _openldap_schema_search.stdout"
+      - "'ppolicy' in _openldap_schema_search.stdout"
+      - "'sudo' in _openldap_schema_search.stdout"
+      - "'openssh-lpk' in _openldap_schema_search.stdout"
+      - "'oath' in _openldap_schema_search.stdout or 'otp' in _openldap_schema_search.stdout"
+      - "'fortune' in _openldap_schema_search.stdout"
+    fail_msg: >-
+      Required schemas not found in cn=schema,cn=config.
+      Expected: core, cosine, inetorgperson, nis, ppolicy, sudo,
+      openssh-lpk, oath/otp, fortune.
+      stdout={{ _openldap_schema_search.stdout | default('') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# DIT Organizational Unit verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search Base DN Organizational Units]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "{{ ldap_base_dn }}" '(objectClass=organizationalUnit)' dn ou
+  changed_when: false
+  register: _openldap_ou_search
+
+- name: "PHASE [verify : Assert Base DN OUs People Group Ppolicy SUDOers Fortune]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_ou_search.rc == 0
+      - "'ou=People' in _openldap_ou_search.stdout"
+      - "'ou=Group' in _openldap_ou_search.stdout"
+      - "'ou=Ppolicy' in _openldap_ou_search.stdout"
+      - "'ou=SUDOers' in _openldap_ou_search.stdout"
+      - "'ou=Fortune' in _openldap_ou_search.stdout"
+    fail_msg: >-
+      DIT missing one or more required OUs.
+      Expected: People, Group, Ppolicy, SUDOers, Fortune.
+      stdout={{ _openldap_ou_search.stdout | default('') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# DIT Group verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search TA Group Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "cn=ta,ou=Group,{{ ldap_base_dn }}" '(objectClass=posixGroup)'
+      cn gidNumber memberUid
+  changed_when: false
+  register: _openldap_group_search_ta
+
+- name: "PHASE [verify : Assert TA Group Exists With Correct GID And Members]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_group_search_ta.rc == 0
+      - "'cn: ta' in _openldap_group_search_ta.stdout"
+      - "'gidNumber: 10000' in _openldap_group_search_ta.stdout"
+      - "'memberUid: generalta' in _openldap_group_search_ta.stdout"
+      - "'memberUid: mailta' in _openldap_group_search_ta.stdout"
+    fail_msg: >-
+      TA group (cn=ta,ou=Group) missing or has wrong GID/members.
+      Expected: gidNumber=10000, members=generalta,mailta.
+      stdout={{ _openldap_group_search_ta.stdout | default('') }}
+
+- name: "PHASE [verify : Search STU Group Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "cn=stu,ou=Group,{{ ldap_base_dn }}" '(objectClass=posixGroup)'
+      cn gidNumber memberUid
+  changed_when: false
+  register: _openldap_group_search_stu
+
+- name: "PHASE [verify : Assert STU Group Exists With Correct GID And Member]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_group_search_stu.rc == 0
+      - "'cn: stu' in _openldap_group_search_stu.stdout"
+      - "'gidNumber: 20000' in _openldap_group_search_stu.stdout"
+      - "'memberUid: stu' in _openldap_group_search_stu.stdout"
+    fail_msg: >-
+      STU group (cn=stu,ou=Group) missing or has wrong GID/member.
+      Expected: gidNumber=20000, member=stu.
+      stdout={{ _openldap_group_search_stu.stdout | default('') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# DIT User verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search Generalta User Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "uid=generalta,ou=People,{{ ldap_base_dn }}"
+      '(objectClass=posixAccount)'
+      uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
+  changed_when: false
+  register: _openldap_user_search_generalta
+
+- name: "PHASE [verify : Assert Generalta User Attributes]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_user_search_generalta.rc == 0
+      - "'uid: generalta' in _openldap_user_search_generalta.stdout"
+      - "'uidNumber: 10000' in _openldap_user_search_generalta.stdout"
+      - "'gidNumber: 10000' in _openldap_user_search_generalta.stdout"
+      - "'homeDirectory: /u/ta/generalta' in _openldap_user_search_generalta.stdout"
+      - "'mail: generalta@{{ ldap_domain }}' in _openldap_user_search_generalta.stdout"
+      - "'loginShell: /bin/bash' in _openldap_user_search_generalta.stdout"
+      - "'sshPublicKey' in _openldap_user_search_generalta.stdout"
+      - "'userPassword' in _openldap_user_search_generalta.stdout"
+    fail_msg: >-
+      Generalta user entry missing or has wrong attributes.
+      Expected: uid=generalta, uidNumber=10000, gidNumber=10000,
+      homeDirectory=/u/ta/generalta, mail=generalta@{{ ldap_domain }},
+      loginShell=/bin/bash, sshPublicKey present, userPassword present.
+      stdout={{ _openldap_user_search_generalta.stdout | default('') }}
+
+- name: "PHASE [verify : Search Mailta User Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "uid=mailta,ou=People,{{ ldap_base_dn }}"
+      '(objectClass=posixAccount)'
+      uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
+  changed_when: false
+  register: _openldap_user_search_mailta
+
+- name: "PHASE [verify : Assert Mailta User Attributes]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_user_search_mailta.rc == 0
+      - "'uid: mailta' in _openldap_user_search_mailta.stdout"
+      - "'uidNumber: 10001' in _openldap_user_search_mailta.stdout"
+      - "'gidNumber: 10000' in _openldap_user_search_mailta.stdout"
+      - "'homeDirectory: /u/ta/mailta' in _openldap_user_search_mailta.stdout"
+      - "'mail: mailta@{{ ldap_domain }}' in _openldap_user_search_mailta.stdout"
+      - "'loginShell: /bin/bash' in _openldap_user_search_mailta.stdout"
+      - "'sshPublicKey' in _openldap_user_search_mailta.stdout"
+      - "'userPassword' in _openldap_user_search_mailta.stdout"
+    fail_msg: >-
+      Mailta user entry missing or has wrong attributes.
+      Expected: uid=mailta, uidNumber=10001, gidNumber=10000,
+      homeDirectory=/u/ta/mailta, mail=mailta@{{ ldap_domain }},
+      loginShell=/bin/bash, sshPublicKey present, userPassword present.
+      stdout={{ _openldap_user_search_mailta.stdout | default('') }}
+
+- name: "PHASE [verify : Search Stu User Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "uid=stu,ou=People,{{ ldap_base_dn }}"
+      '(objectClass=posixAccount)'
+      uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
+  changed_when: false
+  register: _openldap_user_search_stu
+
+- name: "PHASE [verify : Assert Stu User Attributes]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_user_search_stu.rc == 0
+      - "'uid: stu' in _openldap_user_search_stu.stdout"
+      - "'uidNumber: 20000' in _openldap_user_search_stu.stdout"
+      - "'gidNumber: 20000' in _openldap_user_search_stu.stdout"
+      - "'homeDirectory: /u/stu/stu' in _openldap_user_search_stu.stdout"
+      - "'mail: stu@{{ ldap_domain }}' in _openldap_user_search_stu.stdout"
+      - "'loginShell: /bin/bash' in _openldap_user_search_stu.stdout"
+      - "'sshPublicKey' in _openldap_user_search_stu.stdout"
+      - "'userPassword' in _openldap_user_search_stu.stdout"
+    fail_msg: >-
+      Stu user entry missing or has wrong attributes.
+      Expected: uid=stu, uidNumber=20000, gidNumber=20000,
+      homeDirectory=/u/stu/stu, mail=stu@{{ ldap_domain }},
+      loginShell=/bin/bash, sshPublicKey present, userPassword present.
+      stdout={{ _openldap_user_search_stu.stdout | default('') }}
+
+- name: "PHASE [verify : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed verify phase"
