@@ -9,6 +9,9 @@ ldap_base_dn: "dc={{ ldap_domain | regex_replace('\\.', ',dc=') }}"
 ldap_server_fqdn: "ldap.{{ ldap_domain }}"
 ldap_server_uri: "ldaps://{{ ldap_server_fqdn }}:636"
 
+# SSH public key shared by all LDAP users (lab-provided key, 2026 NAP).
+ldap_default_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXop004xu2hOBxNY 2026 NAP"
+
 # Directory Information Tree containers
 ldap_ous:
   - People
@@ -35,6 +38,8 @@ ldap_users:
     mail: "generalta@{{ ldap_domain }}"
     groups: [ta]
     totp_required: true
+    ssh_public_key: "{{ ldap_default_ssh_public_key }}"
+    password_hash_key: generalta
   mailta:
     uid_number: 10001
     gid_number: 10000
@@ -42,6 +47,8 @@ ldap_users:
     mail: "mailta@{{ ldap_domain }}"
     groups: [ta]
     totp_required: false
+    ssh_public_key: "{{ ldap_default_ssh_public_key }}"
+    password_hash_key: mailta
   stu:
     uid_number: 20000
     gid_number: 20000
@@ -49,3 +56,5 @@ ldap_users:
     mail: "stu@{{ ldap_domain }}"
     groups: [stu]
     totp_required: true
+    ssh_public_key: "{{ ldap_default_ssh_public_key }}"
+    password_hash_key: stu
