@@ -16,6 +16,12 @@
 - name: "PHASE [setup : Load Required Schemas]"
   ansible.builtin.import_tasks: schemas.yml
 
+- name: "PHASE [setup : Create Base DIT]"
+  ansible.builtin.import_tasks: dit.yml
+
+- name: "PHASE [setup : Populate Identities]"
+  ansible.builtin.import_tasks: identities.yml
+
 - name: "PHASE [setup : END]"
   become: false
   ansible.builtin.debug:
