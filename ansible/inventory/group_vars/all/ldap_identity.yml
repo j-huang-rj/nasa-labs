@@ -1,0 +1,51 @@
+---
+# Shared LDAP identity shapes consumed by server, DNS, NFS, clients, and mail.
+
+ldap_server_host: ldap-01
+ldap_server_ip: "{{ hostvars[ldap_server_host].ansible_host }}"
+ldap_domain: "{{ bind9_forward_zone_name }}"
+
+ldap_base_dn: "dc={{ ldap_domain | regex_replace('\\.', ',dc=') }}"
+ldap_fqdn: "ldap.{{ ldap_domain }}"
+ldap_uri: "ldaps://{{ ldap_fqdn }}:636"
+
+# Directory Information Tree containers
+ldap_ous:
+  - People
+  - Group
+  - Ppolicy
+  - SUDOers
+  - Fortune
+
+# LDAP groups (posixGroup)
+ldap_groups:
+  ta:
+    gid: 10000
+    member_uids: [generalta, mailta]
+  stu:
+    gid: 20000
+    member_uids: [stu]
+
+# LDAP users
+ldap_users:
+  generalta:
+    uid_number: 10000
+    gid_number: 10000
+    home: /u/ta/generalta
+    mail: "generalta@{{ ldap_domain }}"
+    groups: [ta]
+    totp_required: true
+  mailta:
+    uid_number: 10001
+    gid_number: 10000
+    home: /u/ta/mailta
+    mail: "mailta@{{ ldap_domain }}"
+    groups: [ta]
+    totp_required: false
+  stu:
+    uid_number: 20000
+    gid_number: 20000
+    home: /u/stu/stu
+    mail: "stu@{{ ldap_domain }}"
+    groups: [stu]
+    totp_required: true

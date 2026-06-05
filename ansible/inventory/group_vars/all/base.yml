@@ -3,5 +3,6 @@
 base_upgrade_enabled: false
 bind9_enabled: false
 docker_enabled: false
+ldap_enabled: false
 mail_enabled: false
 wireguard_enabled: false
