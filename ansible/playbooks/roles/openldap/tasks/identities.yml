@@ -81,6 +81,12 @@
           {{ _openldap_group_current.stdout | default('')
              | regex_findall('^memberUid:', multiline=true)
              | length }}
+        _openldap_group_current_members_sorted: >-
+          {{ _openldap_group_current.stdout | default('')
+             | regex_findall('^memberUid:\\s+(\\S+)', multiline=true)
+             | sort }}
+        _openldap_group_expected_members_sorted: >-
+          {{ _ident_group.value.member_uids | sort }}
 
     - name: "PHASE [identities : Evaluate Group Modify Gate] | {{ _ident_group.key }}"
       ansible.builtin.set_fact:
@@ -88,7 +94,7 @@
           {{ _openldap_group_current.rc != 0
              or _openldap_group_current.stdout | default('') | regex_search('cn:\\s*' ~ _ident_group.key ~ '\\b') is none
              or _openldap_group_current.stdout | default('') | regex_search('gidNumber:\\s*' ~ (_ident_group.value.gid | string) ~ '\\s') is none
-             or (_openldap_group_current_member_count | int) != (_openldap_group_expected_member_count | int) }}
+             or (_openldap_group_current_members_sorted | default([])) != (_openldap_group_expected_members_sorted | default([])) }}
 
     - name: "PHASE [identities : Modify Group To Exact State] | {{ _ident_group.key }}"
       when: _openldap_group_needs_modify | default(false) | bool
