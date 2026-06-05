@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+dn: cn={{ group_name }},ou=Group,{{ ldap_base_dn }}
+objectClass: top
+objectClass: posixGroup
+cn: {{ group_name }}
+gidNumber: {{ group_gid }}
+{% for uid in member_uids %}
+memberUid: {{ uid }}
+{% endfor %}

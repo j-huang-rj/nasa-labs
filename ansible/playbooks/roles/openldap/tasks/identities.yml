@@ -1,0 +1,191 @@
+---
+- name: "PHASE [identities : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Populate LDAP groups and users from shared ldap_identity model"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary directory for rendered identity LDIF files
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [identities : Create Temporary Identity LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-phase11-identities
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+# ─────────────────────────────────────────────────────────────────────────
+# posixGroup entries: search before add, modify to exact state
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [identities : Reconcile posixGroup Entries]"
+  loop: "{{ ldap_groups | dict2items }}"
+  loop_control:
+    loop_var: _ident_group
+    label: "cn={{ _ident_group.key }}"
+  block:
+    - name: "PHASE [identities : Render Group LDIF] | {{ _ident_group.key }}"
+      ansible.builtin.template:
+        src: openldap/group.ldif.j2
+        dest: "/tmp/openldap-phase11-identities/group-{{ _ident_group.key }}.ldif"
+        owner: root
+        group: root
+        mode: "0600"
+      vars:
+        group_name: "{{ _ident_group.key }}"
+        group_gid: "{{ _ident_group.value.gid }}"
+        member_uids: "{{ _ident_group.value.member_uids }}"
+
+    - name: "PHASE [identities : Search Existing Group] | {{ _ident_group.key }}"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }} -b "cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}" -s base '(objectClass=posixGroup)' dn
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _openldap_group_exists
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [identities : Create Group If Missing] | {{ _ident_group.key }}"
+      when: _openldap_group_exists.rc != 0
+      ansible.builtin.command:
+        cmd: >-
+          ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }} -f /tmp/openldap-phase11-identities/group-{{ _ident_group.key }}.ldif
+      changed_when: true
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [identities : Modify Group To Exact State] | {{ _ident_group.key }}"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}
+          changetype: modify
+          replace: cn
+          cn: {{ _ident_group.key }}
+          -
+          replace: gidNumber
+          gidNumber: {{ _ident_group.value.gid }}
+          -
+          replace: memberUid
+          {% for uid in _ident_group.value.member_uids %}
+          memberUid: {{ uid }}
+          {% endfor %}
+      changed_when: true
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# posixAccount user entries: search before add, modify managed attributes
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [identities : Reconcile posixAccount Entries]"
+  loop: "{{ ldap_users | dict2items }}"
+  loop_control:
+    loop_var: _ident_user
+    label: "uid={{ _ident_user.key }}"
+  block:
+    - name: "PHASE [identities : Render User LDIF] | {{ _ident_user.key }}"
+      ansible.builtin.template:
+        src: openldap/user.ldif.j2
+        dest: "/tmp/openldap-phase11-identities/user-{{ _ident_user.key }}.ldif"
+        owner: root
+        group: root
+        mode: "0600"
+      vars:
+        username: "{{ _ident_user.key }}"
+        uid_number: "{{ _ident_user.value.uid_number }}"
+        gid_number: "{{ _ident_user.value.gid_number }}"
+        home: "{{ _ident_user.value.home }}"
+        mail_address: "{{ _ident_user.value.mail }}"
+        ssh_public_key: "{{ _ident_user.value.ssh_public_key }}"
+        password_hash: "{{ openldap_user_password_hashes[_ident_user.value.password_hash_key] }}"
+
+    - name: "PHASE [identities : Search Existing User] | {{ _ident_user.key }}"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }} -b "uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}" -s base '(objectClass=posixAccount)' dn
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _openldap_user_exists
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [identities : Create User If Missing] | {{ _ident_user.key }}"
+      when: _openldap_user_exists.rc != 0
+      ansible.builtin.command:
+        cmd: >-
+          ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }} -f /tmp/openldap-phase11-identities/user-{{ _ident_user.key }}.ldif
+      changed_when: true
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [identities : Modify User To Exact Managed Attributes] | {{ _ident_user.key }}"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}
+          changetype: modify
+          replace: uid
+          uid: {{ _ident_user.key }}
+          -
+          replace: cn
+          cn: {{ _ident_user.key }}
+          -
+          replace: sn
+          sn: {{ _ident_user.key }}
+          -
+          replace: uidNumber
+          uidNumber: {{ _ident_user.value.uid_number }}
+          -
+          replace: gidNumber
+          gidNumber: {{ _ident_user.value.gid_number }}
+          -
+          replace: homeDirectory
+          homeDirectory: {{ _ident_user.value.home }}
+          -
+          replace: loginShell
+          loginShell: /bin/bash
+          -
+          replace: mail
+          mail: {{ _ident_user.value.mail }}
+          -
+          replace: sshPublicKey
+          sshPublicKey: {{ _ident_user.value.ssh_public_key }}
+          -
+          replace: userPassword
+          userPassword: {{ openldap_user_password_hashes[_ident_user.value.password_hash_key] }}
+      changed_when: true
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clean up temporary render directory
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [identities : Remove Temporary Identity LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-phase11-identities
+    state: absent
+  changed_when: false
+
+- name: "PHASE [identities : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed identities phase"
