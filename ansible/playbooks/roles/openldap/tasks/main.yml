@@ -7,6 +7,9 @@
 - name: "PHASE [main : Validate Variables]"
   ansible.builtin.import_tasks: assert.yml
 
+- name: "PHASE [main : Configure OpenLDAP]"
+  ansible.builtin.import_tasks: setup.yml
+
 - name: "END"
   become: false
   ansible.builtin.debug:

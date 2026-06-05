@@ -1,0 +1,16 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up openldap configuration workflow"
+
+- name: "PHASE [setup : Install OpenLDAP Packages And Start Service]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Configure TLS And LDAPS Listener]"
+  ansible.builtin.import_tasks: tls.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"
