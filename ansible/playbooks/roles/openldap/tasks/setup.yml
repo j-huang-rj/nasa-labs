@@ -10,6 +10,9 @@
 - name: "PHASE [setup : Configure TLS And LDAPS Listener]"
   ansible.builtin.import_tasks: tls.yml
 
+- name: "PHASE [setup : Configure OLC Modules And Database]"
+  ansible.builtin.import_tasks: olc.yml
+
 - name: "PHASE [setup : END]"
   become: false
   ansible.builtin.debug:
