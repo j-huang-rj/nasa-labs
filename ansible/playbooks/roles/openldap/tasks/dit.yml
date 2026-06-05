@@ -1,0 +1,113 @@
+---
+- name: "PHASE [dit : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Create base DN and required OUs idempotently from ldap_identity model"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary directory for rendered DIT LDIF files
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [dit : Create Temporary DIT LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-phase11-dit
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Base DN: search before add
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [dit : Render Base DN Entry LDIF]"
+  ansible.builtin.template:
+    src: openldap/dit-entry.ldif.j2
+    dest: /tmp/openldap-phase11-dit/base.ldif
+    owner: root
+    group: root
+    mode: "0600"
+  vars:
+    entry_type: base
+
+- name: "PHASE [dit : Search Base DN]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }} -b "{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _openldap_dit_base
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [dit : Create Base DN If Missing]"
+  when: _openldap_dit_base.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }} -f /tmp/openldap-phase11-dit/base.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Organizational Units: search before add for each required OU
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [dit : Reconcile Organizational Units]"
+  loop: "{{ ldap_ous }}"
+  loop_control:
+    loop_var: _dit_ou_name
+    label: "ou={{ _dit_ou_name }}"
+  block:
+    - name: "PHASE [dit : Render OU Entry LDIF] | {{ _dit_ou_name }}"
+      ansible.builtin.template:
+        src: openldap/dit-entry.ldif.j2
+        dest: "/tmp/openldap-phase11-dit/ou-{{ _dit_ou_name }}.ldif"
+        owner: root
+        group: root
+        mode: "0600"
+      vars:
+        entry_type: ou
+        ou_name: "{{ _dit_ou_name }}"
+
+    - name: "PHASE [dit : Search OU] | {{ _dit_ou_name }}"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }} -b "ou={{ _dit_ou_name }},{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _openldap_dit_ou_check
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [dit : Create OU If Missing] | {{ _dit_ou_name }}"
+      when: _openldap_dit_ou_check.rc != 0
+      ansible.builtin.command:
+        cmd: >-
+          ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }} -f /tmp/openldap-phase11-dit/ou-{{ _dit_ou_name }}.ldif
+      changed_when: true
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clean up temporary render directory
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [dit : Remove Temporary DIT LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-phase11-dit
+    state: absent
+  changed_when: false
+
+- name: "PHASE [dit : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed DIT phase"
