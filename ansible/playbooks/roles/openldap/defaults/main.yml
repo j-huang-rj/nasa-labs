@@ -44,12 +44,12 @@ openldap_schema_files:
     path: /etc/openldap/schema/nis.ldif
   - name: ppolicy
     path: /etc/openldap/schema/ppolicy.ldif
-  - name: sudo
-    path: /usr/share/doc/sudo/schema.OpenLDAP
   - name: otp
     path: /etc/openldap/schema/otp.ldif
 
 openldap_custom_schema_templates:
+  - name: sudo
+    description: Sudo LDAP schema
   - name: openssh-lpk
     description: OpenSSH LDAP public key schema
   - name: fortune
