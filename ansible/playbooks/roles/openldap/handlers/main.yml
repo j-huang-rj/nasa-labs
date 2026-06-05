@@ -1,0 +1,5 @@
+---
+- name: "PHASE [handler : Restart slapd]"
+  ansible.builtin.systemd_service:
+    name: "{{ openldap_service_name }}"
+    state: restarted

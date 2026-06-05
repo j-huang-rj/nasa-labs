@@ -1,0 +1,49 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install and start OpenLDAP services"
+
+- name: "PHASE [install : Ensure EPEL Repository Is Present]"
+  ansible.builtin.dnf:
+    name: "{{ openldap_epel_package }}"
+    state: present
+
+- name: "PHASE [install : Install OpenLDAP Packages]"
+  ansible.builtin.dnf:
+    name: "{{ openldap_packages }}"
+    state: present
+
+- name: "PHASE [install : Assert Sysconfig File Exists]"
+  ansible.builtin.stat:
+    path: "{{ openldap_sysconfig_path }}"
+  register: _openldap_sysconfig_stat
+
+- name: "PHASE [install : Fail If Sysconfig File Is Missing]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_sysconfig_stat.stat.exists
+    fail_msg: >-
+      {{ openldap_sysconfig_path }} does not exist.
+      The installed OpenLDAP package does not use the expected sysconfig path.
+      Verify that Wave 0 preflight confirmed this package uses /etc/sysconfig/slapd.
+
+- name: "PHASE [install : Configure SLAPD_URLS For ldapi And LDAPS Only]"
+  ansible.builtin.lineinfile:
+    path: "{{ openldap_sysconfig_path }}"
+    regexp: '^\s*SLAPD_URLS='
+    line: 'SLAPD_URLS="ldapi:/// ldaps:///"'
+    state: present
+  notify: "PHASE [handler : Restart slapd]"
+
+- name: "PHASE [install : Enable And Start OpenLDAP Service]"
+  ansible.builtin.systemd_service:
+    name: "{{ openldap_service_name }}"
+    enabled: true
+    state: started
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"
