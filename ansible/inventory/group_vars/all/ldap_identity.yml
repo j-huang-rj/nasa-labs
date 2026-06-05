@@ -6,8 +6,8 @@ ldap_server_ip: "{{ hostvars[ldap_server_host].ansible_host }}"
 ldap_domain: "{{ bind9_forward_zone_name }}"
 
 ldap_base_dn: "dc={{ ldap_domain | regex_replace('\\.', ',dc=') }}"
-ldap_fqdn: "ldap.{{ ldap_domain }}"
-ldap_uri: "ldaps://{{ ldap_fqdn }}:636"
+ldap_server_fqdn: "ldap.{{ ldap_domain }}"
+ldap_server_uri: "ldaps://{{ ldap_server_fqdn }}:636"
 
 # Directory Information Tree containers
 ldap_ous:

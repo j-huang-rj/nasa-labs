@@ -26,3 +26,4 @@ firewall_zone_ports:
 # Service enablement
 openldap_enabled: true
 nfs_server_enabled: true
+nfs_enabled: true
