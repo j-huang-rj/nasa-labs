@@ -1,0 +1,40 @@
+---
+argument_specs:
+  main:
+    short_description: Validate ldap-client role variables
+
+    options:
+      ldap_client_enabled:
+        type: bool
+        required: true
+        description: Whether the ldap-client role should be active on this host
+
+      ldap_server_fqdn:
+        type: str
+        required: false
+        description: >-
+          FQDN of the LDAP service. Shape-only in Phase 9.
+
+      ldap_server_uri:
+        type: str
+        required: false
+        description: >-
+          LDAPS URI for the LDAP server. Shape-only in Phase 9.
+
+      ldap_base_dn:
+        type: str
+        required: false
+        description: >-
+          LDAP base DN for consumer searches. Shape-only in Phase 9.
+
+      ldap_tls_ca_certificate:
+        type: str
+        required: false
+        description: >-
+          LDAP CA certificate PEM content. Shape-only in Phase 9.
+
+      ldap_client_sssd_config:
+        type: dict
+        required: false
+        description: >-
+          SSSD configuration override. Shape-only in Phase 9; expanded in Phase 14.

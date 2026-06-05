@@ -1,0 +1,14 @@
+---
+# ───────────────────────────── Feature flag ─────────────────────────────
+ldap_client_enabled: false
+
+# ───────────────────────────── Consumer identity ────────────────────────
+# Populated by group_vars/all/ldap_identity.yml; shape-only in Phase 9.
+ldap_server_fqdn: ""
+ldap_server_uri: ""
+ldap_base_dn: ""
+ldap_tls_ca_certificate: ""
+
+# ───────────────────────────── SSSD shapes ─────────────────────────────
+# Shape-only in Phase 9. Expanded in Phase 14.
+ldap_client_sssd_config: {}
