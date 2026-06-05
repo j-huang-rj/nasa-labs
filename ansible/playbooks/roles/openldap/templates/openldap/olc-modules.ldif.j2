@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+dn: cn=module{0},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: ppolicy.la
+-
+add: olcModuleLoad
+olcModuleLoad: otp.la
+-
+add: olcModuleLoad
+olcModuleLoad: sssvlv.la

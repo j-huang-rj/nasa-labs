@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+dn: olcDatabase=mdb,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcMdbConfig
+olcDatabase: mdb
+olcDbDirectory: {{ openldap_data_dir }}
+olcSuffix: {{ ldap_base_dn }}
+olcRootDN: cn=admin,{{ ldap_base_dn }}
+olcRootPW: {{ openldap_admin_password_hash }}
+olcDbIndex: objectClass eq
+olcDbIndex: uid eq
+olcDbIndex: cn eq
+olcDbIndex: gidNumber eq
+olcDbIndex: memberUid eq
+olcDbIndex: mail eq
+olcDbIndex: sshPublicKey eq

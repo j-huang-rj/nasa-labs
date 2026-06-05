@@ -1,0 +1,283 @@
+---
+- name: "PHASE [olc : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure OLC module path, module loads, and MDB database"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create LDAP data directory
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [olc : Create LDAP Data Directory]"
+  ansible.builtin.file:
+    path: "{{ openldap_data_dir }}"
+    state: directory
+    owner: ldap
+    group: ldap
+    mode: "0700"
+
+# ─────────────────────────────────────────────────────────────────────────
+# OLC module path and module load reconciliation
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [olc : Search Existing OLC Module Path]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=module{0},cn=config -s base
+      '(objectClass=*)' olcModulePath
+  changed_when: false
+  register: _openldap_module_path_search
+
+- name: "PHASE [olc : Reconcile OLC Module Path]"
+  when: >-
+    openldap_module_dir not in _openldap_module_path_search.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: cn=module{0},cn=config
+      changetype: modify
+      replace: olcModulePath
+      olcModulePath: {{ openldap_module_dir }}
+  changed_when: true
+
+- name: "PHASE [olc : Search Existing OLC Module Loads]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config
+      '(olcModuleLoad=*)' dn olcModuleLoad
+  changed_when: false
+  register: _openldap_module_loads
+
+- name: "PHASE [olc : Load ppolicy Module If Missing]"
+  when: "'ppolicy.la' not in _openldap_module_loads.stdout"
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: cn=module{0},cn=config
+      changetype: modify
+      add: olcModuleLoad
+      olcModuleLoad: ppolicy.la
+  changed_when: true
+
+- name: "PHASE [olc : Load otp Module If Missing]"
+  when: "'otp.la' not in _openldap_module_loads.stdout"
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: cn=module{0},cn=config
+      changetype: modify
+      add: olcModuleLoad
+      olcModuleLoad: otp.la
+  changed_when: true
+
+- name: "PHASE [olc : Load sssvlv Module If Missing]"
+  when: "'sssvlv.la' not in _openldap_module_loads.stdout"
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: cn=module{0},cn=config
+      changetype: modify
+      add: olcModuleLoad
+      olcModuleLoad: sssvlv.la
+  changed_when: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# MDB database creation or reconciliation
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [olc : Search Existing MDB Database For Suffix]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config
+      '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+      dn
+  changed_when: false
+  failed_when: false
+  register: _openldap_mdb_search
+
+- name: "PHASE [olc : Extract MDB Database DN]"
+  when: _openldap_mdb_search.rc == 0
+  ansible.builtin.set_fact:
+    _openldap_mdb_dn: >-
+      {{ _openldap_mdb_search.stdout
+         | regex_search('dn:\\s*(olcDatabase=\\{?\\d+\\}?mdb,\\s*cn=config)', '\\1')
+         | first
+         | default('')
+         | trim }}
+
+- name: "PHASE [olc : Render MDB Database LDIF]"
+  ansible.builtin.template:
+    src: openldap/olc-mdb.ldif.j2
+    dest: /tmp/openldap-olc-mdb.ldif
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  changed_when: true
+
+- name: "PHASE [olc : Create MDB Database If Missing]"
+  when: >-
+    _openldap_mdb_search.rc != 0
+    or _openldap_mdb_dn | default('') | length == 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -Y EXTERNAL -H ldapi:///
+      -f /tmp/openldap-olc-mdb.ldif
+  changed_when: true
+  no_log: true
+
+- name: "PHASE [olc : Search MDB Database Current State For Reconciliation]"
+  when: >-
+    _openldap_mdb_search.rc == 0
+    and _openldap_mdb_dn | default('') | length > 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "{{ _openldap_mdb_dn }}" -s base
+      '(objectClass=*)' olcRootDN olcRootPW olcDbDirectory olcDbIndex
+  changed_when: false
+  register: _openldap_mdb_state
+
+- name: "PHASE [olc : Reconcile MDB RootDN]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and (openldap_root_dn | string) not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      replace: olcRootDN
+      olcRootDN: {{ openldap_root_dn }}
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB RootPW]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      replace: olcRootPW
+      olcRootPW: {{ openldap_admin_password_hash }}
+  changed_when: true
+  no_log: true
+
+- name: "PHASE [olc : Reconcile MDB DbDirectory]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and openldap_data_dir not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      replace: olcDbDirectory
+      olcDbDirectory: {{ openldap_data_dir }}
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB Index objectClass If Missing]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and 'objectClass' not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      add: olcDbIndex
+      olcDbIndex: objectClass eq
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB Index uid If Missing]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and 'uid' not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      add: olcDbIndex
+      olcDbIndex: uid eq
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB Index cn If Missing]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and 'cn' not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      add: olcDbIndex
+      olcDbIndex: cn eq
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB Index gidNumber If Missing]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and 'gidNumber' not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      add: olcDbIndex
+      olcDbIndex: gidNumber eq
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB Index memberUid If Missing]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and 'memberUid' not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      add: olcDbIndex
+      olcDbIndex: memberUid eq
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB Index mail If Missing]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and 'mail' not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      add: olcDbIndex
+      olcDbIndex: mail eq
+  changed_when: true
+
+- name: "PHASE [olc : Reconcile MDB Index sshPublicKey If Missing]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+    and 'sshPublicKey' not in _openldap_mdb_state.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: {{ _openldap_mdb_dn }}
+      changetype: modify
+      add: olcDbIndex
+      olcDbIndex: sshPublicKey eq
+  changed_when: true
+
+- name: "PHASE [olc : Remove Temporary MDB LDIF File]"
+  ansible.builtin.file:
+    path: /tmp/openldap-olc-mdb.ldif
+    state: absent
+  changed_when: false
+
+- name: "PHASE [olc : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed OLC module and MDB database configuration"
