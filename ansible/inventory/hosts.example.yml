@@ -78,3 +78,27 @@ all:
     mail:
       hosts:
         dmz-client-01:
+
+    ldap_servers:
+      hosts:
+        ldap-01:
+
+    workstations:
+      hosts:
+        workstation-01:
+        workstation-02:
+
+    ldap_clients:
+      hosts:
+        workstation-01:
+        workstation-02:
+        dmz-client-01:
+
+    nfs_servers:
+      hosts:
+        ldap-01:
+
+    nfs_clients:
+      hosts:
+        workstation-01:
+        workstation-02:
