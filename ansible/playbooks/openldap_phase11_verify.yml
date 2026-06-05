@@ -48,29 +48,25 @@
           DNF repoquery missing expected packages.
           Got stdout: {{ _p11_repoquery.stdout | default('') }}
 
-    - name: "PHASE [preflight : RPM Query Installed OpenLDAP And OpenSSL]"
-      ansible.builtin.command:
-        cmd: >-
-          rpm -q epel-release openldap openldap-clients
-          openldap-servers openssl ca-certificates
-      changed_when: false
-      register: _p11_rpm_query
+    - name: "PHASE [preflight : Gather Package Facts For OpenLDAP And OpenSSL]"
+      ansible.builtin.package_facts:
+        manager: rpm
 
-    - name: "PHASE [preflight : Assert RPM Packages Installed]"
+    - name: "PHASE [preflight : Assert Required Packages Installed]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - _p11_rpm_query.rc == 0
-          - "'epel-release' in _p11_rpm_query.stdout"
-          - "'openldap' in _p11_rpm_query.stdout"
-          - "'openldap-clients' in _p11_rpm_query.stdout"
-          - "'openldap-servers' in _p11_rpm_query.stdout"
-          - "'openssl' in _p11_rpm_query.stdout"
-          - "'ca-certificates' in _p11_rpm_query.stdout"
+          - "'epel-release' in ansible_facts.packages"
+          - "'openldap' in ansible_facts.packages"
+          - "'openldap-clients' in ansible_facts.packages"
+          - "'openldap-servers' in ansible_facts.packages"
+          - "'openssl' in ansible_facts.packages"
+          - "'ca-certificates' in ansible_facts.packages"
         fail_msg: >-
-          RPM query missing expected installed packages.
-          Got stdout: {{ _p11_rpm_query.stdout | default('') }}
+          Required packages not installed.
+          Installed packages: {{ ansible_facts.packages.keys() | list }}
 
+    # noqa: command-instead-of-module
     - name: "PHASE [preflight : Systemctl Cat slapd Service Unit]"
       ansible.builtin.command:
         cmd: systemctl cat slapd
@@ -87,6 +83,7 @@
           systemctl cat slapd failed or returned empty output.
           rc={{ _p11_systemctl_cat.rc }}
 
+    # noqa: command-instead-of-module
     - name: "PHASE [preflight : RPM File List openldap-servers]"
       ansible.builtin.command:
         cmd: rpm -ql openldap-servers
@@ -340,9 +337,10 @@
     - name: "PHASE [ldaps : LDAPS Search Base DN With Certificate Validation]"
       ansible.builtin.command:
         cmd: >-
-          LDAPTLS_CACERT={{ openldap_tls_cert_path }}
           ldapsearch -H {{ ldap_server_uri }}
           -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
       register: _p11_ldaps_search
 
@@ -703,9 +701,10 @@
     - name: "PHASE [reboot : Post-Reboot LDAPS Search Base DN With Certificate Validation]"
       ansible.builtin.command:
         cmd: >-
-          LDAPTLS_CACERT={{ openldap_tls_cert_path }}
           ldapsearch -H {{ ldap_server_uri }}
           -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
       register: _p11_reboot_ldaps
 
