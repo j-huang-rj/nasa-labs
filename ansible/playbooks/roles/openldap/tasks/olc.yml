@@ -140,6 +140,7 @@
       '(objectClass=*)' olcRootDN olcRootPW olcDbDirectory olcDbIndex
   changed_when: false
   register: _openldap_mdb_state
+  no_log: true
 
 - name: "PHASE [olc : Reconcile MDB RootDN]"
   when: >-
@@ -164,6 +165,7 @@
          | regex_search('olcRootPW:\\s*(\\S+)', '\\1')
          | first
          | default('') }}
+  no_log: true
 
 - name: "PHASE [olc : Reconcile MDB RootPW]"
   when: >-
