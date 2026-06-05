@@ -13,3 +13,9 @@ network_interfaces:
 
 network_bootstrap_dns4:
   - 1.1.1.1
+
+# LDAP Client Config
+ldap_client_enabled: true
+
+# NFS Config
+nfs_enabled: true
