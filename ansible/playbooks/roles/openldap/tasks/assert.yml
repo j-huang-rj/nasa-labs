@@ -28,6 +28,149 @@
       - ldap_server_uri | length > 0
     fail_msg: "Required LDAP identity variables (ldap_domain, ldap_base_dn, ldap_server_fqdn, ldap_server_uri) must be defined and non-empty"
 
+# ─────────────────────────────────────────────────────────────────────────
+# Check Required LDAP Data Model
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [assert : Check Required LDAP Data Model]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      # Organizational Units must contain exactly the five required containers
+      - ldap_ous | select('equalto', 'People') | list | length == 1
+      - ldap_ous | select('equalto', 'Group') | list | length == 1
+      - ldap_ous | select('equalto', 'Ppolicy') | list | length == 1
+      - ldap_ous | select('equalto', 'SUDOers') | list | length == 1
+      - ldap_ous | select('equalto', 'Fortune') | list | length == 1
+
+      # ta group: GID 10000 with members generalta and mailta
+      - ldap_groups.ta.gid | default(-1) == 10000
+      - "'generalta' in (ldap_groups.ta.member_uids | default([]))"
+      - "'mailta' in (ldap_groups.ta.member_uids | default([]))"
+
+      # stu group: GID 20000 with member stu
+      - ldap_groups.stu.gid | default(-1) == 20000
+      - "'stu' in (ldap_groups.stu.member_uids | default([]))"
+
+      # generalta: exact uid_number, gid_number, home, groups, ssh_public_key, password_hash_key
+      - ldap_users.generalta.uid_number | default(-1) == 10000
+      - ldap_users.generalta.gid_number | default(-1) == 10000
+      - ldap_users.generalta.home | default('') == '/u/ta/generalta'
+      - "'ta' in (ldap_users.generalta.groups | default([]))"
+      - ldap_users.generalta.ssh_public_key is defined
+      - ldap_users.generalta.password_hash_key is defined
+      - ldap_users.generalta.totp_required | default(false) == true
+
+      # mailta: exact uid_number, gid_number, home, groups, ssh_public_key, password_hash_key
+      - ldap_users.mailta.uid_number | default(-1) == 10001
+      - ldap_users.mailta.gid_number | default(-1) == 10000
+      - ldap_users.mailta.home | default('') == '/u/ta/mailta'
+      - "'ta' in (ldap_users.mailta.groups | default([]))"
+      - ldap_users.mailta.ssh_public_key is defined
+      - ldap_users.mailta.password_hash_key is defined
+      - ldap_users.mailta.totp_required | default(true) == false
+
+      # stu: exact uid_number, gid_number, home, groups, ssh_public_key, password_hash_key
+      - ldap_users.stu.uid_number | default(-1) == 20000
+      - ldap_users.stu.gid_number | default(-1) == 20000
+      - ldap_users.stu.home | default('') == '/u/stu/stu'
+      - "'stu' in (ldap_users.stu.groups | default([]))"
+      - ldap_users.stu.ssh_public_key is defined
+      - ldap_users.stu.password_hash_key is defined
+      - ldap_users.stu.totp_required | default(false) == true
+
+    fail_msg: >-
+      Required LDAP Data Model is incomplete or incorrect.
+      ldap_ous must contain People, Group, Ppolicy, SUDOers, Fortune.
+      ldap_groups.ta must have gid 10000 with members generalta and mailta.
+      ldap_groups.stu must have gid 20000 with member stu.
+      ldap_users must contain generalta (UID 10000), mailta (UID 10001), stu (UID 20000)
+      with correct homes, groups, ssh_public_key, and password_hash_key.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Check Required OpenLDAP Secret Shapes
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [assert : Check Required OpenLDAP Secret Shapes]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      # Admin password and hash must be defined and non-empty
+      - openldap_admin_password is defined
+      - openldap_admin_password | length > 0
+      - openldap_admin_password_hash is defined
+      - openldap_admin_password_hash | length > 0
+
+      # User password hashes must be a dict with required keys
+      - openldap_user_password_hashes is defined
+      - openldap_user_password_hashes is mapping
+      - openldap_user_password_hashes.generalta is defined
+      - openldap_user_password_hashes.generalta | length > 0
+      - openldap_user_password_hashes.mailta is defined
+      - openldap_user_password_hashes.mailta | length > 0
+      - openldap_user_password_hashes.stu is defined
+      - openldap_user_password_hashes.stu | length > 0
+
+      # Each hash must begin with an LDAP password hash marker
+      - >-
+        openldap_user_password_hashes.generalta is match('\{S(SHA|SHA512|SHA256|HA|CRYPT|ARGON2)\}')
+      - >-
+        openldap_user_password_hashes.mailta is match('\{S(SHA|SHA512|SHA256|HA|CRYPT|ARGON2)\}')
+      - >-
+        openldap_user_password_hashes.stu is match('\{S(SHA|SHA512|SHA256|HA|CRYPT|ARGON2)\}')
+
+    fail_msg: >-
+      Required OpenLDAP secret shapes are missing or invalid.
+      openldap_admin_password and openldap_admin_password_hash must be defined and non-empty.
+      openldap_user_password_hashes must be a dict with non-empty keys: generalta, mailta, stu.
+      Each hash must begin with an LDAP password hash marker: {SSHA}, {SSHA512}, {SSHA256}, {SHA}, {CRYPT}, {ARGON2}.
+  no_log: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Check Required TLS Shape
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [assert : Check Required TLS Shape]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      # Both TLS key and cert must be defined (str type)
+      - openldap_tls_private_key is defined
+      - openldap_tls_certificate is defined
+      # Accept either the pair is non-empty (from secrets) or both are
+      # empty strings (target generation by install/tls tasks).
+      # Reject the case where only one of key/cert has content.
+      - openldap_tls_private_key | length > 0 or openldap_tls_certificate | length == 0
+      - openldap_tls_certificate | length > 0 or openldap_tls_private_key | length == 0
+    fail_msg: >-
+      Incomplete TLS secret shape: openldap_tls_private_key and openldap_tls_certificate
+      must both be non-empty (from secrets) or both be empty (for target generation).
+      Providing only one of the two values is not allowed.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Check Required Module And Schema Defaults
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [assert : Check Required Module And Schema Defaults]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      # Required modules list must be non-empty
+      - openldap_required_modules is defined
+      - openldap_required_modules | length > 0
+
+      # Schema files list must be non-empty
+      - openldap_schema_files is defined
+      - openldap_schema_files | length > 0
+    fail_msg: >-
+      Required module and schema defaults must be non-empty.
+      openldap_required_modules must list ppolicy, otp, sssvlv entries.
+      openldap_schema_files must list required schema LDIF paths.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:
