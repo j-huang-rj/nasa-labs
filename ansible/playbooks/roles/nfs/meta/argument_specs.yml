@@ -1,0 +1,24 @@
+---
+argument_specs:
+  main:
+    short_description: Validate nfs role variables
+
+    options:
+      nfs_enabled:
+        type: bool
+        required: true
+        description: Whether the nfs role should be active on this host
+
+      nfs_exports:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          NFS export definitions. Shape-only in Phase 9; expanded in Phase 13.
+
+      nfs_mounts:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          NFS mount definitions. Shape-only in Phase 9; expanded in Phase 13.
