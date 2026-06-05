@@ -154,9 +154,21 @@
       olcRootDN: {{ openldap_root_dn }}
   changed_when: true
 
+- name: "PHASE [olc : Extract Current MDB RootPW For Comparison]"
+  when: >-
+    _openldap_mdb_state.skipped is not defined
+  ansible.builtin.set_fact:
+    _openldap_mdb_current_rootpw: >-
+      {{ _openldap_mdb_state.stdout
+         | default('')
+         | regex_search('olcRootPW:\\s*(\\S+)', '\\1')
+         | first
+         | default('') }}
+
 - name: "PHASE [olc : Reconcile MDB RootPW]"
   when: >-
     _openldap_mdb_state.skipped is not defined
+    and _openldap_mdb_current_rootpw | default('') != openldap_admin_password_hash
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
