@@ -1,0 +1,29 @@
+---
+# ───────────────────────────── Feature flag ─────────────────────────────
+# openldap_enabled is set in inventory; default here provides a safe
+# fallback so the role can be unconditionally included in playbooks.
+openldap_enabled: false
+
+# ───────────────────────────── LDAP identity ─────────────────────────────
+# These shape variables are populated by group_vars/all/ldap_identity.yml
+# and define the LDAP server's DN and service endpoints. They are shape-only
+# in Phase 9; real service configuration happens in Phase 11.
+#
+# All ldap_* variables use a shared prefix (not openldap_) because these
+# identity shapes are consumed across multiple component roles (openldap,
+# ldap-client, nfs, mail) per the project's generic-variable-naming convention.
+ldap_domain: ""  # noqa: var-naming[no-role-prefix]
+ldap_base_dn: ""  # noqa: var-naming[no-role-prefix]
+ldap_server_host: ldap-01  # noqa: var-naming[no-role-prefix]
+ldap_server_fqdn: ""  # noqa: var-naming[no-role-prefix]
+ldap_server_uri: ""  # noqa: var-naming[no-role-prefix]
+
+# ───────────────────────────── Data shapes ──────────────────────────────
+# Shape-only in Phase 9. Populated by later phases.
+ldap_unix_groups: []  # noqa: var-naming[no-role-prefix]
+ldap_users: []  # noqa: var-naming[no-role-prefix]
+ldap_consumer_bind_identities: []  # noqa: var-naming[no-role-prefix]
+
+# ───────────────────────────── TLS shapes ───────────────────────────────
+# Placeholder only in Phase 9.
+ldap_tls_ca_certificate: ""  # noqa: var-naming[no-role-prefix]
