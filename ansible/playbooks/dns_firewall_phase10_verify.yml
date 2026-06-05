@@ -274,3 +274,389 @@
     - name: "PHASE [ldap-identity : END]"
       ansible.builtin.debug:
         msg: "Phase 10 LDAP identity validation complete"
+
+# ──────────────────────────────────────────────────────────
+# LDAPS Policy Path-Shape Validation (D-12/D-13/D-14/D-15)
+# ──────────────────────────────────────────────────────────
+- name: "Phase10 LDAPS Policy Validation"
+  hosts: router-01
+  gather_facts: false
+  become: false
+  tags:
+    - ldaps-policy
+  vars:
+    _p10_ldaps_policy: >-
+      {{ firewall_policies
+         | selectattr('name', 'equalto', 'dmz-to-internal-ldaps')
+         | list
+         | first }}
+    _p10_ldap_zone_ports: >-
+      {{ hostvars['ldap-01'].firewall_zone_ports | default([]) }}
+    _p10_ldap_rich_rules: >-
+      {{ hostvars['ldap-01'].firewall_rich_rules | default([]) }}
+    _p10_mail_ldap: "{{ hostvars['dmz-client-01'].mail_ldap_enabled | default(false) }}"
+  tasks:
+    - name: "PHASE [ldaps-policy : START]"
+      ansible.builtin.debug:
+        msg: "Phase 10 LDAPS policy path-shape validation (path only — service behavior is Phase 11-owned per D-19)"
+
+    - name: "PHASE [ldaps-policy : Assert dmz-to-internal-ldaps Policy Exists]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p10_ldaps_policy | length > 0
+        fail_msg: >-
+          Router policy 'dmz-to-internal-ldaps' not found in firewall_policies.
+
+    - name: "PHASE [ldaps-policy : Assert LDAPS Policy Shape]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p10_ldaps_policy.priority == -55
+          - _p10_ldaps_policy.target == 'CONTINUE'
+          - "'dmz' in _p10_ldaps_policy.ingress_zones"
+          - "'internal' in _p10_ldaps_policy.egress_zones"
+        fail_msg: >-
+          LDAPS policy shape mismatch.
+          Expected: priority=-55, target=CONTINUE, ingress=dmz, egress=internal.
+          Got: priority={{ _p10_ldaps_policy.priority }},
+          target={{ _p10_ldaps_policy.target }},
+          ingress={{ _p10_ldaps_policy.ingress_zones }},
+          egress={{ _p10_ldaps_policy.egress_zones }}.
+
+    - name: "PHASE [ldaps-policy : Assert LDAPS Policy Contains 636/tcp]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p10_ldaps_policy.ports | selectattr('port', 'equalto', 636) | selectattr('proto', 'equalto', 'tcp') | list | length > 0
+        fail_msg: >-
+          LDAPS policy missing port 636/tcp in ports list.
+          Got: {{ _p10_ldaps_policy.ports | default([]) }}.
+
+    - name: "PHASE [ldaps-policy : Assert ldap-01 Keeps 636/tcp Internal Zone Port]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p10_ldap_zone_ports
+            | selectattr('zone', 'equalto', 'internal')
+            | selectattr('port', 'equalto', 636)
+            | selectattr('proto', 'equalto', 'tcp')
+            | list | length > 0
+        fail_msg: >-
+          ldap-01 internal zone missing 636/tcp port.
+          Got: {{ _p10_ldap_zone_ports }}.
+
+    - name: "PHASE [ldaps-policy : Assert No 389/tcp In Any Router Policy Port]"
+      ansible.builtin.set_fact:
+        _p10_all_policy_ports: >-
+          {{ firewall_policies
+             | map(attribute='ports')
+             | flatten
+             | map(attribute='port') | map('string')
+             | list }}
+    - name: "PHASE [ldaps-policy : Verify No 389 Port In Router Policies]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'389' not in _p10_all_policy_ports"
+        fail_msg: >-
+          Router firewall_policies contain port 389 — Phase 10 forbids LDAP/389
+          and StartTLS per D-14. Found ports: {{ _p10_all_policy_ports }}.
+
+    - name: "PHASE [ldaps-policy : Assert No 389 In ldap-01 Zone Ports]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_ldap_zone_ports | selectattr('port', 'equalto', 389) | list | length) == 0
+        fail_msg: >-
+          ldap-01 firewall_zone_ports contains port 389 — Phase 10 forbids LDAP/389
+          and StartTLS per D-14.
+
+    - name: "PHASE [ldaps-policy : Assert No 389 In ldap-01 Rich Rules]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_ldap_rich_rules | selectattr('rule', 'search', 'port="389"') | list | length) == 0
+        fail_msg: >-
+          ldap-01 firewall_rich_rules contain port 389 — Phase 10 forbids LDAP/389.
+
+    - name: "PHASE [ldaps-policy : Assert mail_ldap_enabled Is False]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - not _p10_mail_ldap
+        fail_msg: >-
+          dmz-client-01 mail_ldap_enabled is true — must remain false until Phase 15 per D-15.
+
+    - name: "PHASE [ldaps-policy : END]"
+      ansible.builtin.debug:
+        msg: "Phase 10 LDAPS policy path-shape validation passed (service path verified; LDAPS service behavior is Phase 11-owned per D-19)"
+
+# ──────────────────────────────────────────────────────────
+# NFS Path-Shape Validation (D-07/D-08/D-09/D-10/D-11/D-18)
+# ──────────────────────────────────────────────────────────
+- name: "Phase10 NFS Path-Shape Validation"
+  hosts: router-01
+  gather_facts: false
+  become: false
+  tags:
+    - nfs-path-source
+  vars:
+    _p10_nfs_policy: >-
+      {{ firewall_policies
+         | selectattr('name', 'equalto', 'dmz-to-internal-nfs')
+         | list
+         | first
+         | default({}) }}
+    _p10_preserve_pairs: "{{ firewall_masquerade_preserve_source_pairs | default([]) }}"
+    _p10_ldap_zone_ports: >-
+      {{ hostvars['ldap-01'].firewall_zone_ports | default([]) }}
+    _p10_ldap_rich_rules: >-
+      {{ hostvars['ldap-01'].firewall_rich_rules | default([]) }}
+    _p10_dmz_to_internal_ports: >-
+      {{ (firewall_policies
+          | selectattr('name', 'equalto', 'dmz-to-internal')
+          | map(attribute='ports')
+          | flatten
+          | list) }}
+    _p10_ldaps_policy_ports: >-
+      {{ (firewall_policies
+          | selectattr('name', 'equalto', 'dmz-to-internal-ldaps')
+          | map(attribute='ports')
+          | flatten
+          | list) }}
+  tasks:
+    - name: "PHASE [nfs-path-source : START]"
+      ansible.builtin.debug:
+        msg: "Phase 10 NFS path-shape validation (path only — NFS exports/mounts are Phase 13-owned per D-19)"
+
+    - name: "PHASE [nfs-path-source : Assert dmz-to-internal-nfs Policy Exists]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p10_nfs_policy | length > 0
+        fail_msg: >-
+          Router policy 'dmz-to-internal-nfs' not found in firewall_policies.
+
+    - name: "PHASE [nfs-path-source : Assert NFS Policy Shape]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p10_nfs_policy.priority == -54
+          - _p10_nfs_policy.target == 'CONTINUE'
+          - "'dmz' in _p10_nfs_policy.ingress_zones"
+          - "'internal' in _p10_nfs_policy.egress_zones"
+          - (_p10_nfs_policy.ports | default([]) | length) == 0
+        fail_msg: >-
+          NFS policy shape mismatch.
+          Expected: priority=-54, target=CONTINUE, ingress=dmz, egress=internal, ports=[].
+          Got: priority={{ _p10_nfs_policy.priority }},
+          target={{ _p10_nfs_policy.target }},
+          ingress={{ _p10_nfs_policy.ingress_zones }},
+          egress={{ _p10_nfs_policy.egress_zones }},
+          ports={{ _p10_nfs_policy.ports | default([]) }}.
+
+    - name: "PHASE [nfs-path-source : Assert NFS Policy Has Workstation Source Rich Rules]"
+      ansible.builtin.set_fact:
+        _p10_nfs_rich_rules: "{{ _p10_nfs_policy.rich_rules | default([]) }}"
+    - name: "PHASE [nfs-path-source : Verify NFS Rich Rules Shape]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_nfs_rich_rules | length) == 2
+          - (_p10_nfs_rich_rules | select('search', '172.16.0.1/32') | list | length) > 0
+          - (_p10_nfs_rich_rules | select('search', '172.16.0.2/32') | list | length) > 0
+          - (_p10_nfs_rich_rules | select('search', '172.16.1.10/32') | list | length) == 2
+          - (_p10_nfs_rich_rules | select('search', 'port="2049"') | list | length) == 2
+          - (_p10_nfs_rich_rules | select('search', 'protocol="tcp"') | list | length) == 2
+          - (_p10_nfs_rich_rules | select('search', 'accept') | list | length) == 2
+        fail_msg: >-
+          NFS policy rich rules shape mismatch.
+          Expected: 2 rules each matching source 172.16.0.1/32 or 172.16.0.2/32,
+          destination 172.16.1.10/32, port 2049, protocol tcp, accept.
+          Got: {{ _p10_nfs_rich_rules }}.
+
+    - name: "PHASE [nfs-path-source : Assert Preserve-Source Pairs For NFS]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_preserve_pairs | selectattr('source', 'equalto', '172.16.0.1') | selectattr('destination', 'equalto', '172.16.1.10') | list | length) > 0
+          - (_p10_preserve_pairs | selectattr('source', 'equalto', '172.16.0.2') | selectattr('destination', 'equalto', '172.16.1.10') | list | length) > 0
+        fail_msg: >-
+          Preserve-source pairs missing expected NFS entries.
+          Expected pairs: 172.16.0.1 -> 172.16.1.10, 172.16.0.2 -> 172.16.1.10.
+          Got: {{ _p10_preserve_pairs }}.
+
+    - name: "PHASE [nfs-path-source : Assert ldap-01 Has Source-Restricted NFS Rich Rules]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            (_p10_ldap_rich_rules
+             | selectattr('zone', 'equalto', 'internal')
+             | selectattr('rule', 'search', '172.16.0.1/32')
+             | selectattr('rule', 'search', 'port="2049"')
+             | list | length) > 0
+          - >-
+            (_p10_ldap_rich_rules
+             | selectattr('zone', 'equalto', 'internal')
+             | selectattr('rule', 'search', '172.16.0.2/32')
+             | selectattr('rule', 'search', 'port="2049"')
+             | list | length) > 0
+          - >-
+            (_p10_ldap_rich_rules
+             | selectattr('zone', 'equalto', 'internal')
+             | selectattr('rule', 'search', 'protocol="tcp"')
+             | selectattr('rule', 'search', 'accept')
+             | selectattr('rule', 'search', 'port="2049"')
+             | list | length) >= 2
+        fail_msg: >-
+          ldap-01 host-local NFS rich rules missing or incorrect.
+          Expected: internal-zone rich rules accepting port 2049/tcp from
+          172.16.0.1/32 and 172.16.0.2/32.
+          Got: {{ _p10_ldap_rich_rules | selectattr('zone', 'equalto', 'internal') | list }}.
+
+    - name: "PHASE [nfs-path-source : Assert No Broad 2049/tcp On ldap-01 Zone Ports]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_ldap_zone_ports | selectattr('port', 'equalto', 2049) | selectattr('proto', 'equalto', 'tcp') | list | length) == 0
+        fail_msg: >-
+          ldap-01 still has broad internal-zone 2049/tcp port — should be
+          replaced with source-restricted rich rules per D-10.
+
+    - name: "PHASE [nfs-path-source : Assert No 2049/tcp In dmz-to-internal Policy]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_dmz_to_internal_ports | selectattr('port', 'equalto', 2049) | list | length) == 0
+        fail_msg: >-
+          dmz-to-internal policy contains 2049/tcp — NFS should use separate
+          dmz-to-internal-nfs policy per D-11.
+
+    - name: "PHASE [nfs-path-source : Assert No 2049/tcp In dmz-to-internal-ldaps Policy]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_ldaps_policy_ports | selectattr('port', 'equalto', 2049) | list | length) == 0
+        fail_msg: >-
+          dmz-to-internal-ldaps policy contains 2049/tcp — NFS should not be
+          merged into LDAPS policy per D-11.
+
+    - name: "PHASE [nfs-path-source : END]"
+      ansible.builtin.debug:
+        msg: "Phase 10 NFS path-shape validation passed (path verified; NFS exports/mounts are Phase 13-owned per D-19)"
+
+# ──────────────────────────────────────────────────────────
+# Firewall Regression Gates (D-16/D-17/D-18/D-19)
+# ──────────────────────────────────────────────────────────
+- name: "Phase10 Firewall Regression Gates"
+  hosts: router-01
+  gather_facts: false
+  become: false
+  tags:
+    - firewall-regression
+  vars:
+    _p10_dnat_ports: "{{ firewall_forward_ports | default([]) }}"
+    _p10_router_rich_rules: "{{ firewall_rich_rules | default([]) }}"
+    _p10_all_policy_ports: >-
+      {{ firewall_policies
+         | map(attribute='ports')
+         | flatten
+         | map(attribute='port') | map('string')
+         | list }}
+    _p10_nfs_policy: >-
+      {{ firewall_policies
+         | selectattr('name', 'equalto', 'dmz-to-internal-nfs')
+         | list
+         | first
+         | default({}) }}
+  tasks:
+    - name: "PHASE [firewall-regression : START]"
+      ansible.builtin.debug:
+        msg: "Phase 10 firewall regression validation — verifying old-lab HW1-0/HW1-1/HW1-2 behavior is preserved"
+
+    # --- NFS target gate ---
+    - name: "PHASE [firewall-regression : Assert NFS Policy Target Is CONTINUE Not ACCEPT]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p10_nfs_policy.target | default('CONTINUE') == 'CONTINUE'
+        fail_msg: >-
+          dmz-to-internal-nfs policy target is not CONTINUE — must not use ACCEPT
+          per D-14. Got: {{ _p10_nfs_policy.target | default('(policy absent)') }}.
+
+    # --- No rpcbind/mountd/statd/lockd ---
+    - name: "PHASE [firewall-regression : Assert No NFSv3 Helper Ports In Router Policies]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'111' not in _p10_all_policy_ports"
+          - "'20048' not in _p10_all_policy_ports"
+          - "'662' not in _p10_all_policy_ports"
+          - "'32803' not in _p10_all_policy_ports"
+        fail_msg: >-
+          Router policy ports contain NFSv3 helper ports (rpcbind 111, mountd 20048,
+          statd 662, lockd 32803) — Phase 10 allows NFSv4 TCP/2049 only per D-09.
+          Found ports: {{ _p10_all_policy_ports }}.
+
+    # --- DNAT port preservation ---
+    - name: "PHASE [firewall-regression : Assert DNAT Ports 10001 and 10002 Preserved]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            (_p10_dnat_ports
+             | selectattr('port', 'equalto', 10001)
+             | selectattr('proto', 'equalto', 'tcp')
+             | selectattr('toport', 'equalto', 2222)
+             | selectattr('toaddr', 'equalto', '172.16.0.123')
+             | list | length) > 0
+          - >-
+            (_p10_dnat_ports
+             | selectattr('port', 'equalto', 10002)
+             | selectattr('proto', 'equalto', 'tcp')
+             | selectattr('toport', 'equalto', 2222)
+             | selectattr('toaddr', 'equalto', '172.16.1.123')
+             | list | length) > 0
+        fail_msg: >-
+          DNAT port-forwarding rules changed.
+          Expected: 10001/tcp -> dmz-agent-01:2222 (172.16.0.123),
+          10002/tcp -> internal-agent-01:2222 (172.16.1.123).
+          Got: {{ _p10_dnat_ports }}.
+
+    # --- VPN SSH reject preservation ---
+    - name: "PHASE [firewall-regression : Assert VPN SSH Reject Rule Preserved]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            (_p10_router_rich_rules
+             | selectattr('zone', 'equalto', 'vpn')
+             | selectattr('rule', 'search', 'ssh')
+             | selectattr('rule', 'search', 'reject')
+             | list | length) > 0
+        fail_msg: >-
+          Router VPN-zone SSH reject rich rule missing or changed.
+          Expected: vpn zone 'rule service name="ssh" reject'.
+          Got: {{ _p10_router_rich_rules | selectattr('zone', 'equalto', 'vpn') | list }}.
+
+    # --- Forbidden broad patterns ---
+    - name: "PHASE [firewall-regression : Assert No rpcbind/mountd/statd/lockd In Router Rich Rules]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - (_p10_router_rich_rules | selectattr('rule', 'search', '111') | list | length) == 0
+          - (_p10_router_rich_rules | selectattr('rule', 'search', 'rpcbind') | list | length) == 0
+          - (_p10_router_rich_rules | selectattr('rule', 'search', 'mountd') | list | length) == 0
+        fail_msg: >-
+          Router rich rules contain rpcbind/mountd references — Phase 10 allows
+          NFSv4 TCP/2049 only per D-09.
+
+    - name: "PHASE [firewall-regression : END]"
+      ansible.builtin.debug:
+        msg: >-
+          Phase 10 firewall regression gates passed (path-shape evidence recorded;
+          service-level LDAPS/NFS checks are Phase 11/13-owned per D-19).
+          HW1-0/HW1-1/HW1-2 behavior preserved.
