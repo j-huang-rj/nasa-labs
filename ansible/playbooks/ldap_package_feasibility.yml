@@ -41,7 +41,7 @@
         quiet: true
         that:
           - inventory_hostname == 'ldap-01'
-          - ansible_distribution == 'AlmaLinux'
+          - ansible_facts['distribution'] == 'AlmaLinux'
           - ansible_host | default('') == '172.16.1.10'
         fail_msg: >-
           Phase 8 must run only on prepared AlmaLinux ldap-01 (172.16.1.10);
@@ -237,16 +237,20 @@
           # Phase 8: OpenLDAP Package Feasibility Report
 
           **Target:** ldap-01 (172.16.1.10)
-          **Executed:** {{ ansible_date_time.iso8601 }}
+          **Executed:** {{ ansible_facts['date_time']['iso8601'] }}
           **Playbook:** `ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/ldap_package_feasibility.yml --limit ldap-01`
 
           ## Summary
 
           {% set pkg_ok = 'openldap-servers' in openldap_repoquery.stdout and 'openldap-clients' in openldap_repoquery.stdout -%}
           {% set mod_ok = openldap_missing_required_modules | length == 0 -%}
-          {% set load_ok = openldap_slaptest_probe.rc == 0 -%}
+          {% set load_ok = _olc_slapadd_probe.rc == 0 and openldap_slaptest_probe.rc == 0 -%}
           {% set all_ok = pkg_ok and mod_ok and load_ok %}
-          {% if all_ok %}All required OpenLDAP package, module, and loadability checks passed on ldap-01.{% else %}BLOCKING: One or more required capabilities are missing. See Contingency Status below.{% endif %}
+          {% if all_ok %}
+          All required OpenLDAP package, module, and loadability checks passed on ldap-01.
+          {% else %}
+          BLOCKING: One or more required capabilities are missing. See Contingency Status below.
+          {% endif %}
 
           ## Package Versions
 
@@ -371,7 +375,7 @@
           # DO NOT copy this file directly into a role. Use as a reference when
           # creating ansible/playbooks/roles/openldap/defaults/main.yml in a later phase.
           #
-          # Source: ldap-01 dnf repoquery and slaptest probe on {{ ansible_date_time.iso8601 }}.
+          # Source: ldap-01 dnf repoquery and slaptest probe on {{ ansible_facts['date_time']['iso8601'] }}.
 
           # EPEL dependency
           openldap_epel_package: epel-release
@@ -437,7 +441,7 @@
             'category': 'packages',
             'detail': 'dnf repoquery did not find openldap-servers or openldap-clients from EPEL/BaseOS on ldap-01. Install epel-release and verify repo availability.'
           }] }}
-      when: not ('openldap-servers' in openldap_repoquery.stdout and 'openldap-clients' in openldap_repoquery.stdout)
+      when: not openldap_package_probe_pass
 
     - name: "PHASE [contingency : Accumulate Missing Module File Findings]"
       ansible.builtin.set_fact:
@@ -464,12 +468,16 @@
             'category': 'loadability',
             'detail': 'OLC isolated loadability probe FAILED. slapadd rc=' ~ (_olc_slapadd_probe.rc | string) ~ ', slaptest rc=' ~ (openldap_slaptest_probe.rc | string) ~ '. Modules (ppolicy.so, otp.so, sssvlv.so) could not be loaded into an isolated OLC config copy. Verify module compatibility with installed OpenLDAP version.'
           }] }}
-      when: _olc_slapadd_probe.rc != 0 or openldap_slaptest_probe.rc != 0
+      when: not openldap_loadability_pass
 
     - name: "PHASE [contingency : Assert Required OpenLDAP Capabilities Are Present]"
       ansible.builtin.assert:
         quiet: true
         that:
+          - openldap_package_probe_pass
+          - openldap_module_inventory_pass
+          - openldap_loadability_pass
+          - openldap_missing_required_modules | length == 0
           - openldap_blocking_findings | length == 0
         fail_msg: |-
           Phase 8 feasibility HARD-BLOCK: {{ openldap_blocking_findings | length }} required
