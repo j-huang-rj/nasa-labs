@@ -139,25 +139,19 @@
   changed_when: true
   notify: "PHASE [handler : Restart slapd]"
 
-- name: "PHASE [tls : Set Self-Signed Certificate Ownership]"
+- name: "PHASE [tls : Set TLS Certificate Ownership]"
   ansible.builtin.file:
     path: "{{ openldap_tls_cert_path }}"
     owner: root
     group: ldap
     mode: "0644"
-  when: >-
-    (openldap_tls_certificate is not defined or openldap_tls_certificate | length == 0)
-    and (openldap_tls_private_key is not defined or openldap_tls_private_key | length == 0)
 
-- name: "PHASE [tls : Set Self-Signed Key Permissions]"
+- name: "PHASE [tls : Set TLS Key Permissions]"
   ansible.builtin.file:
     path: "{{ openldap_tls_key_path }}"
     owner: root
     group: ldap
     mode: "0640"
-  when: >-
-    (openldap_tls_certificate is not defined or openldap_tls_certificate | length == 0)
-    and (openldap_tls_private_key is not defined or openldap_tls_private_key | length == 0)
 
 # ─────────────────────────────────────────────────────────────────────────
 # Validate certificate SAN regardless of provisioning path
