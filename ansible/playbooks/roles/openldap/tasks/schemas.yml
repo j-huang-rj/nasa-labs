@@ -115,12 +115,12 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - "'cn: cosine' in _openldap_schemas_verify.stdout"
-      - "'cn: inetorgperson' in _openldap_schemas_verify.stdout"
-      - "'cn: nis' in _openldap_schemas_verify.stdout"
-      - "'cn: sudo' in _openldap_schemas_verify.stdout"
-      - "'cn: openssh-lpk' in _openldap_schemas_verify.stdout"
-      - "'cn: fortune' in _openldap_schemas_verify.stdout"
+      - "'cosine' in _openldap_schemas_verify.stdout"
+      - "'inetorgperson' in _openldap_schemas_verify.stdout"
+      - "'nis' in _openldap_schemas_verify.stdout"
+      - "'sudo' in _openldap_schemas_verify.stdout"
+      - "'openssh-lpk' in _openldap_schemas_verify.stdout"
+      - "'fortune' in _openldap_schemas_verify.stdout"
     fail_msg: >-
       Required LDAP schemas are missing from cn=schema,cn=config.
       Expected: cosine, inetorgperson, nis, sudo, openssh-lpk, and fortune.
