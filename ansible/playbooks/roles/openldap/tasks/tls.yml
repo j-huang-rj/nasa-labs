@@ -21,8 +21,8 @@
     path: "{{ openldap_tls_key_dir }}"
     state: directory
     owner: root
-    group: root
-    mode: "0700"
+    group: ldap
+    mode: "0750"
 
 # ─────────────────────────────────────────────────────────────────────────
 # Branched TLS material provisioning
@@ -97,8 +97,8 @@
     content: "{{ openldap_tls_private_key }}"
     dest: "{{ openldap_tls_key_path }}"
     owner: root
-    group: root
-    mode: "0600"
+    group: ldap
+    mode: "0640"
   notify: "PHASE [handler : Restart slapd]"
   no_log: true
 
@@ -153,8 +153,8 @@
   ansible.builtin.file:
     path: "{{ openldap_tls_key_path }}"
     owner: root
-    group: root
-    mode: "0600"
+    group: ldap
+    mode: "0640"
   when: >-
     (openldap_tls_certificate is not defined or openldap_tls_certificate | length == 0)
     and (openldap_tls_private_key is not defined or openldap_tls_private_key | length == 0)
