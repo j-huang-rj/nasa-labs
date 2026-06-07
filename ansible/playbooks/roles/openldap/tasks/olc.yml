@@ -176,11 +176,12 @@
     _openldap_mdb_state.skipped is not defined
   ansible.builtin.set_fact:
     _openldap_mdb_current_rootpw: >-
-      {{ _openldap_mdb_state.stdout
-         | default('')
-         | regex_search('olcRootPW:\\s*(\\S+)', '\\1')
+      {{ _openldap_mdb_state.stdout_lines | default([])
+         | select('match', '^olcRootPW: ')
+         | list
          | first
-         | default('') }}
+         | default('')
+         | regex_replace('^olcRootPW: ', '') }}
   no_log: true
 
 - name: "PHASE [olc : Reconcile MDB RootPW]"
