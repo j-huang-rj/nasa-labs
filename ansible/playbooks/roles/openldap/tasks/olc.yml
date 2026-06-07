@@ -132,7 +132,7 @@
     group: root
     mode: "0600"
   no_log: true
-  changed_when: true
+  changed_when: false
 
 - name: "PHASE [olc : Create MDB Database If Missing]"
   when: >-

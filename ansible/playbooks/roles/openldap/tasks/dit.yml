@@ -15,6 +15,7 @@
     owner: root
     group: root
     mode: "0700"
+  changed_when: false
 
 # ─────────────────────────────────────────────────────────────────────────
 # Base DN: search before add
@@ -27,6 +28,7 @@
     owner: root
     group: root
     mode: "0600"
+  changed_when: false
   vars:
     entry_type: base
 

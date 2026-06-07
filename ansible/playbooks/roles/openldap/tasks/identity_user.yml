@@ -6,6 +6,7 @@
     owner: root
     group: root
     mode: "0600"
+  changed_when: false
   vars:
     username: "{{ _ident_user.key }}"
     uid_number: "{{ _ident_user.value.uid_number }}"

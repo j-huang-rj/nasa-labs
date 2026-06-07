@@ -6,6 +6,7 @@
     owner: root
     group: root
     mode: "0600"
+  changed_when: false
   vars:
     group_name: "{{ _ident_group.key }}"
     group_gid: "{{ _ident_group.value.gid }}"

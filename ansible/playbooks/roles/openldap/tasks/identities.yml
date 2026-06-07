@@ -15,6 +15,7 @@
     owner: root
     group: root
     mode: "0700"
+  changed_when: false
 
 # ─────────────────────────────────────────────────────────────────────────
 # posixGroup entries: search before add, modify to exact state
