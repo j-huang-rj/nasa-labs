@@ -10,11 +10,11 @@
 - name: "PHASE [setup : Configure TLS And LDAPS Listener]"
   ansible.builtin.import_tasks: tls.yml
 
-- name: "PHASE [setup : Configure OLC Modules And Database]"
-  ansible.builtin.import_tasks: olc.yml
-
 - name: "PHASE [setup : Load Required Schemas]"
   ansible.builtin.import_tasks: schemas.yml
+
+- name: "PHASE [setup : Configure OLC Modules And Database]"
+  ansible.builtin.import_tasks: olc.yml
 
 - name: "PHASE [setup : Create Base DIT]"
   ansible.builtin.import_tasks: dit.yml
