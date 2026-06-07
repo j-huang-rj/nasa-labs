@@ -58,50 +58,11 @@
 # ─────────────────────────────────────────────────────────────────────────
 
 - name: "PHASE [dit : Render OU Entry LDIF]"
-  ansible.builtin.template:
-    src: openldap/dit-entry.ldif.j2
-    dest: "/tmp/openldap-phase11-dit/ou-{{ _dit_ou_name }}.ldif"
-    owner: root
-    group: root
-    mode: "0600"
-  vars:
-    entry_type: ou
-    ou_name: "{{ _dit_ou_name }}"
+  ansible.builtin.include_tasks: dit_ou.yml
   loop: "{{ ldap_ous }}"
   loop_control:
     loop_var: _dit_ou_name
     label: "ou={{ _dit_ou_name }}"
-
-- name: "PHASE [dit : Search OU]"
-  ansible.builtin.command:
-    cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
-      -H {{ ldap_server_uri }} -b "ou={{ _dit_ou_name }},{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
-  changed_when: false
-  failed_when: false
-  no_log: true
-  register: _openldap_dit_ou_checks
-  environment:
-    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-  loop: "{{ ldap_ous }}"
-  loop_control:
-    loop_var: _dit_ou_name
-    label: "ou={{ _dit_ou_name }}"
-
-- name: "PHASE [dit : Create OU If Missing]"
-  when: _dit_ou_result.rc != 0
-  ansible.builtin.command:
-    cmd: >-
-      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
-      -H {{ ldap_server_uri }} -f /tmp/openldap-phase11-dit/ou-{{ _dit_ou_result.item }}.ldif
-  changed_when: true
-  no_log: true
-  environment:
-    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-  loop: "{{ _openldap_dit_ou_checks.results }}"
-  loop_control:
-    loop_var: _dit_ou_result
-    label: "ou={{ _dit_ou_result.item }}"
 
 # ─────────────────────────────────────────────────────────────────────────
 # Clean up temporary render directory
