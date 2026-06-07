@@ -690,11 +690,20 @@
 
     - name: "PHASE [idempotency : Run ldap_configure.yml Second Time]"
       ansible.builtin.command:
-        cmd: >-
-          ansible-playbook -i {{ _p11_inventory_file }}
-          {{ playbook_dir }}/ldap_configure.yml
-          --limit ldap-01
-          -e openldap_enabled=true
+        argv:
+          - ansible-playbook
+          - -i
+          - "{{ _p11_inventory_file }}"
+          - "{{ playbook_dir }}/ldap_configure.yml"
+          - --limit
+          - ldap-01
+          - -e
+          - >-
+            {{ {
+              'openldap_enabled': true,
+              'ansible_user': ansible_user | default('student'),
+              'ansible_ssh_common_args': ansible_ssh_common_args | default('')
+            } | to_json }}
       changed_when: false
       register: _p11_idempotency_rerun
 
