@@ -45,6 +45,7 @@
     cmd: >-
       ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
       -H {{ ldap_server_uri }} -b "uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}" -s base
+      -o ldif-wrap=no
       '(objectClass=posixAccount)' uid cn sn uidNumber gidNumber homeDirectory loginShell mail sshPublicKey userPassword
   changed_when: false
   failed_when: false
@@ -57,6 +58,10 @@
   ansible.builtin.set_fact:
     _openldap_user_expected_pw_hash: >-
       {{ openldap_user_password_hashes[_ident_user.value.password_hash_key]
+         | regex_escape() }}
+    _openldap_user_expected_pw_hash_b64: >-
+      {{ openldap_user_password_hashes[_ident_user.value.password_hash_key]
+         | b64encode
          | regex_escape() }}
     # TODO: When ldap_users supports per-user shell, replace hardcoded /bin/bash
     # with _ident_user.value.shell | default('/bin/bash') in loginShell check below.
@@ -77,8 +82,12 @@
          or _openldap_user_current.stdout | default('')
             | regex_search('sshPublicKey:\s*'
                            ~ (_ident_user.value.ssh_public_key | regex_escape()) ~ '\s') is none
-         or _openldap_user_current.stdout | default('')
-            | regex_search('userPassword:\s*' ~ _openldap_user_expected_pw_hash) is none }}
+         or (
+              _openldap_user_current.stdout | default('')
+              | regex_search('userPassword:\s*' ~ _openldap_user_expected_pw_hash) is none
+              and _openldap_user_current.stdout | default('')
+              | regex_search('userPassword::\s*' ~ _openldap_user_expected_pw_hash_b64) is none
+            ) }}
   no_log: true
 
 - name: "PHASE [identities : Modify User To Exact Managed Attributes] | {{ _ident_user.key }}"
