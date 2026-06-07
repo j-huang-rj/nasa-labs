@@ -116,10 +116,12 @@
   when: _openldap_mdb_search.rc == 0
   ansible.builtin.set_fact:
     _openldap_mdb_dn: >-
-      {{ _openldap_mdb_search.stdout
-         | regex_findall('^dn:\\s*(olcDatabase=[^,]+mdb,\\s*cn=config)', multiline=true)
+      {{ _openldap_mdb_search.stdout_lines | default([])
+         | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+         | list
          | first
          | default('')
+         | regex_replace('^dn: ', '')
          | trim }}
 
 - name: "PHASE [olc : Render MDB Database LDIF]"
