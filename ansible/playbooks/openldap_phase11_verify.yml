@@ -348,7 +348,7 @@
           ldapsearch -H {{ ldap_server_uri }}
           -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
       environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
       changed_when: false
       register: _p11_ldaps_search
 
@@ -741,7 +741,7 @@
           ldapsearch -H {{ ldap_server_uri }}
           -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
       environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
       changed_when: false
       register: _p11_reboot_ldaps
 
