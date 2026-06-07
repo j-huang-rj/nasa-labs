@@ -588,6 +588,7 @@
           uid uidNumber gidNumber homeDirectory mail sshPublicKey userPassword
       changed_when: false
       register: _p11_dit_generalta
+      no_log: true
 
     - name: "PHASE [dit : Assert Generalta User Attributes]"
       ansible.builtin.assert:
@@ -605,7 +606,7 @@
           Generalta user entry missing or missing required attributes
           (uid, uidNumber=10000, gidNumber=10000, homeDirectory, mail,
           sshPublicKey, userPassword).
-          stdout={{ _p11_dit_generalta.stdout | default('') }}
+      no_log: true
 
     - name: "PHASE [dit : Search Mailta User Entry]"
       ansible.builtin.command:
@@ -616,6 +617,7 @@
           uid uidNumber gidNumber homeDirectory mail sshPublicKey userPassword
       changed_when: false
       register: _p11_dit_mailta
+      no_log: true
 
     - name: "PHASE [dit : Assert Mailta User Attributes]"
       ansible.builtin.assert:
@@ -633,7 +635,7 @@
           Mailta user entry missing or missing required attributes
           (uid, uidNumber=10001, gidNumber=10000, homeDirectory, mail,
           sshPublicKey, userPassword).
-          stdout={{ _p11_dit_mailta.stdout | default('') }}
+      no_log: true
 
     - name: "PHASE [dit : Search Stu User Entry]"
       ansible.builtin.command:
@@ -644,6 +646,7 @@
           uid uidNumber gidNumber homeDirectory mail sshPublicKey userPassword
       changed_when: false
       register: _p11_dit_stu
+      no_log: true
 
     - name: "PHASE [dit : Assert Stu User Attributes]"
       ansible.builtin.assert:
@@ -661,7 +664,7 @@
           Stu user entry missing or missing required attributes
           (uid, uidNumber=20000, gidNumber=20000, homeDirectory, mail,
           sshPublicKey, userPassword).
-          stdout={{ _p11_dit_stu.stdout | default('') }}
+      no_log: true
 
     - name: "PHASE [dit : END]"
       become: false

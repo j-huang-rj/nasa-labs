@@ -267,6 +267,7 @@
       uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
   changed_when: false
   register: _openldap_user_search_generalta
+  no_log: true
 
 - name: "PHASE [verify : Assert Generalta User Attributes]"
   ansible.builtin.assert:
@@ -286,7 +287,7 @@
       Expected: uid=generalta, uidNumber=10000, gidNumber=10000,
       homeDirectory=/u/ta/generalta, mail=generalta@{{ ldap_domain }},
       loginShell=/bin/bash, sshPublicKey present, userPassword present.
-      stdout={{ _openldap_user_search_generalta.stdout | default('') }}
+  no_log: true
 
 - name: "PHASE [verify : Search Mailta User Entry]"
   ansible.builtin.command:
@@ -297,6 +298,7 @@
       uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
   changed_when: false
   register: _openldap_user_search_mailta
+  no_log: true
 
 - name: "PHASE [verify : Assert Mailta User Attributes]"
   ansible.builtin.assert:
@@ -316,7 +318,7 @@
       Expected: uid=mailta, uidNumber=10001, gidNumber=10000,
       homeDirectory=/u/ta/mailta, mail=mailta@{{ ldap_domain }},
       loginShell=/bin/bash, sshPublicKey present, userPassword present.
-      stdout={{ _openldap_user_search_mailta.stdout | default('') }}
+  no_log: true
 
 - name: "PHASE [verify : Search Stu User Entry]"
   ansible.builtin.command:
@@ -327,6 +329,7 @@
       uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
   changed_when: false
   register: _openldap_user_search_stu
+  no_log: true
 
 - name: "PHASE [verify : Assert Stu User Attributes]"
   ansible.builtin.assert:
@@ -346,7 +349,7 @@
       Expected: uid=stu, uidNumber=20000, gidNumber=20000,
       homeDirectory=/u/stu/stu, mail=stu@{{ ldap_domain }},
       loginShell=/bin/bash, sshPublicKey present, userPassword present.
-      stdout={{ _openldap_user_search_stu.stdout | default('') }}
+  no_log: true
 
 - name: "PHASE [verify : END]"
   become: false

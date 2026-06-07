@@ -126,11 +126,11 @@
 
       # Each hash must begin with an LDAP password hash marker
       - >-
-        openldap_user_password_hashes.generalta is match('\{S(SHA|SHA512|SHA256|HA|CRYPT|ARGON2)\}')
+        openldap_user_password_hashes.generalta is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
       - >-
-        openldap_user_password_hashes.mailta is match('\{S(SHA|SHA512|SHA256|HA|CRYPT|ARGON2)\}')
+        openldap_user_password_hashes.mailta is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
       - >-
-        openldap_user_password_hashes.stu is match('\{S(SHA|SHA512|SHA256|HA|CRYPT|ARGON2)\}')
+        openldap_user_password_hashes.stu is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
 
     fail_msg: >-
       Required OpenLDAP secret shapes are missing or invalid.
