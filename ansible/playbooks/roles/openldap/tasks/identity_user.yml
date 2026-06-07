@@ -54,7 +54,7 @@
   environment:
     LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
-- name: "PHASE [identities : Compute User Modify Gate] | {{ _ident_user.key }}"
+- name: "PHASE [identities : Compute User Password Comparison Values] | {{ _ident_user.key }}"
   ansible.builtin.set_fact:
     _openldap_user_expected_pw_hash: >-
       {{ openldap_user_password_hashes[_ident_user.value.password_hash_key]
@@ -63,6 +63,10 @@
       {{ openldap_user_password_hashes[_ident_user.value.password_hash_key]
          | b64encode
          | regex_escape() }}
+  no_log: true
+
+- name: "PHASE [identities : Compute User Modify Gate] | {{ _ident_user.key }}"
+  ansible.builtin.set_fact:
     # TODO: When ldap_users supports per-user shell, replace hardcoded /bin/bash
     # with _ident_user.value.shell | default('/bin/bash') in loginShell check below.
     _openldap_user_needs_modify: >-
