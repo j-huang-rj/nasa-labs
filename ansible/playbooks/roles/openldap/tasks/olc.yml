@@ -117,7 +117,7 @@
   ansible.builtin.set_fact:
     _openldap_mdb_dn: >-
       {{ _openldap_mdb_search.stdout
-         | regex_findall('^dn:\\s*(olcDatabase=\\{?\\d+\\}?mdb,\\s*cn=config)', multiline=true)
+         | regex_findall('^dn:\\s*(olcDatabase=[^,]+mdb,\\s*cn=config)', multiline=true)
          | first
          | default('')
          | trim }}
