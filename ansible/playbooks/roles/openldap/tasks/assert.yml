@@ -92,6 +92,17 @@
 # Check Required OpenLDAP Secret Shapes
 # ─────────────────────────────────────────────────────────────────────────
 
+- name: "PHASE [assert : Normalize Legacy OpenLDAP User Password Hashes]"
+  become: false
+  ansible.builtin.set_fact:
+    openldap_user_password_hashes: >-
+      {{ {
+        'generalta': openldap_generalta_password_hash | default(''),
+        'mailta': openldap_mailta_password_hash | default(''),
+        'stu': openldap_stu_password_hash | default('')
+      } | combine(openldap_user_password_hashes | default({}), recursive=false) }}
+  no_log: true
+
 - name: "PHASE [assert : Check Required OpenLDAP Secret Shapes]"
   become: false
   ansible.builtin.assert:
