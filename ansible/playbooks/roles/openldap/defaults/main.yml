@@ -42,10 +42,6 @@ openldap_schema_files:
     path: /etc/openldap/schema/inetorgperson.ldif
   - name: nis
     path: /etc/openldap/schema/nis.ldif
-  - name: ppolicy
-    path: /etc/openldap/schema/ppolicy.ldif
-  - name: otp
-    path: /etc/openldap/schema/otp.ldif
 
 openldap_custom_schema_templates:
   - name: sudo

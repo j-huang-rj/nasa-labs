@@ -170,15 +170,12 @@
       - "'cosine' in _openldap_schema_search.stdout"
       - "'inetorgperson' in _openldap_schema_search.stdout"
       - "'nis' in _openldap_schema_search.stdout"
-      - "'ppolicy' in _openldap_schema_search.stdout"
       - "'sudo' in _openldap_schema_search.stdout"
       - "'openssh-lpk' in _openldap_schema_search.stdout"
-      - "'oath' in _openldap_schema_search.stdout or 'otp' in _openldap_schema_search.stdout"
       - "'fortune' in _openldap_schema_search.stdout"
     fail_msg: >-
       Required schemas not found in cn=schema,cn=config.
-      Expected: core, cosine, inetorgperson, nis, ppolicy, sudo,
-      openssh-lpk, oath/otp, fortune.
+      Expected: core, cosine, inetorgperson, nis, sudo, openssh-lpk, fortune.
       stdout={{ _openldap_schema_search.stdout | default('') }}
 
 # ─────────────────────────────────────────────────────────────────────────

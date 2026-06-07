@@ -118,15 +118,12 @@
       - "'cn: cosine' in _openldap_schemas_verify.stdout"
       - "'cn: inetorgperson' in _openldap_schemas_verify.stdout"
       - "'cn: nis' in _openldap_schemas_verify.stdout"
-      - "'cn: ppolicy' in _openldap_schemas_verify.stdout"
       - "'cn: sudo' in _openldap_schemas_verify.stdout"
       - "'cn: openssh-lpk' in _openldap_schemas_verify.stdout"
-      - "'cn: otp' in _openldap_schemas_verify.stdout or 'cn: oath' in _openldap_schemas_verify.stdout"
       - "'cn: fortune' in _openldap_schemas_verify.stdout"
     fail_msg: >-
       Required LDAP schemas are missing from cn=schema,cn=config.
-      Expected: cosine, inetorgperson, nis, ppolicy, sudo, openssh-lpk,
-      otp or oath, and fortune.
+      Expected: cosine, inetorgperson, nis, sudo, openssh-lpk, and fortune.
       Present output:
       {{ _openldap_schemas_verify.stdout }}
 

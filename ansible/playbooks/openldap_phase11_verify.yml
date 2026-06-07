@@ -486,9 +486,8 @@
           - "'cosine' in _p11_olc_schemas.stdout"
           - "'inetorgperson' in _p11_olc_schemas.stdout"
           - "'nis' in _p11_olc_schemas.stdout"
-          - "'ppolicy' in _p11_olc_schemas.stdout"
         fail_msg: >-
-          Required schemas (core, cosine, inetorgperson, nis, ppolicy)
+          Required schemas (core, cosine, inetorgperson, nis)
           not found in cn=schema,cn=config.
           stdout={{ _p11_olc_schemas.stdout | default('') }}
 
