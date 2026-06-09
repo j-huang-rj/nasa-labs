@@ -14,22 +14,7 @@
     name: "{{ openldap_packages }}"
     state: present
 
-- name: "PHASE [install : Assert Sysconfig File Exists]"
-  ansible.builtin.stat:
-    path: "{{ openldap_sysconfig_path }}"
-  register: _openldap_sysconfig_stat
-
-- name: "PHASE [install : Configure SLAPD_URLS For ldapi And LDAPS Only]"
-  when: _openldap_sysconfig_stat.stat.exists
-  ansible.builtin.lineinfile:
-    path: "{{ openldap_sysconfig_path }}"
-    regexp: '^\s*SLAPD_URLS='
-    line: 'SLAPD_URLS="ldapi:/// ldaps:///"'
-    state: present
-  register: _openldap_slapd_urls_result
-
 - name: "PHASE [install : Create OpenLDAP Systemd Override Directory]"
-  when: not _openldap_sysconfig_stat.stat.exists
   ansible.builtin.file:
     path: /etc/systemd/system/slapd.service.d
     state: directory
@@ -38,7 +23,6 @@
     mode: "0755"
 
 - name: "PHASE [install : Configure Systemd Listener Override For ldapi And LDAPS Only]"
-  when: not _openldap_sysconfig_stat.stat.exists
   ansible.builtin.copy:
     dest: /etc/systemd/system/slapd.service.d/listen-urls.conf
     owner: root
@@ -48,17 +32,10 @@
       [Service]
       ExecStart=
       ExecStart=/usr/sbin/slapd -u ldap -h "ldapi:/// ldaps:///"
-  register: _openldap_systemd_listener_result
+  notify: "PHASE [handler : Restart slapd]"
 
-- name: "PHASE [install : Restart OpenLDAP Immediately After Listener URL Change]"  # noqa: no-handler
-  when: >-
-    _openldap_slapd_urls_result.changed | default(false)
-    or _openldap_systemd_listener_result.changed | default(false)
-  ansible.builtin.systemd_service:
-    name: "{{ openldap_service_name }}"
-    daemon_reload: true
-    enabled: true
-    state: restarted
+- name: "PHASE [install : Apply Listener Override Immediately]"
+  ansible.builtin.meta: flush_handlers
 
 - name: "PHASE [install : Enable And Start OpenLDAP Service]"
   ansible.builtin.systemd_service:

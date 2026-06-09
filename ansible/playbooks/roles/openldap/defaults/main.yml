@@ -1,8 +1,8 @@
 ---
-# ───────────────────────────── Feature flag ─────────────────────────────
+# Feature flag
 openldap_enabled: false
 
-# ───────────────────────────── Package and service defaults ─────────────
+# Package and service defaults
 openldap_epel_package: epel-release
 openldap_packages:
   - openldap-servers
@@ -10,9 +10,8 @@ openldap_packages:
   - openssl
   - ca-certificates
 openldap_service_name: slapd
-openldap_sysconfig_path: /etc/sysconfig/slapd
 
-# ───────────────────────────── Module paths ─────────────────────────────
+# Module paths
 openldap_module_dir: /usr/lib64/openldap
 openldap_required_modules:
   - load: ppolicy.la
@@ -22,19 +21,19 @@ openldap_required_modules:
   - load: sssvlv.la
     path: /usr/lib64/openldap/sssvlv.la
 
-# ───────────────────────────── Filesystem paths ─────────────────────────
+# Filesystem paths
 openldap_tls_cert_dir: /etc/openldap/certs
 openldap_tls_key_dir: /etc/openldap/private
 openldap_tls_cert_path: "{{ openldap_tls_cert_dir }}/ldap.crt"
 openldap_tls_key_path: "{{ openldap_tls_key_dir }}/ldap.key"
 openldap_data_dir: /var/lib/ldap
 
-# ───────────────────────────── OLC / database identity ──────────────────
+# OLC / database identity
 openldap_database_suffix: "{{ ldap_base_dn }}"
 openldap_root_dn: "cn=admin,{{ ldap_base_dn }}"
 openldap_olc_database_dn: olcDatabase={1}mdb,cn=config
 
-# ───────────────────────────── Schema defaults ──────────────────────────
+# Schema defaults
 openldap_schema_files:
   - name: cosine
     path: /etc/openldap/schema/cosine.ldif
@@ -53,23 +52,7 @@ openldap_custom_schema_templates:
 
 openldap_fortune_schema_oid_root: "2.25.109749598841848522681210166878566339431"
 
-# ───────────────────────────── LDAP identity shapes ──────────────────────
-# Populated from group_vars/all/ldap_identity.yml.
-# All ldap_* variables use a shared prefix (not openldap_) because these
-# identity shapes are consumed across multiple component roles (openldap,
-# ldap-client, nfs, mail) per the project's generic-variable-naming convention.
-ldap_domain: ""  # noqa: var-naming[no-role-prefix]
-ldap_base_dn: ""  # noqa: var-naming[no-role-prefix]
-ldap_server_host: ldap-01  # noqa: var-naming[no-role-prefix]
-ldap_server_fqdn: ""  # noqa: var-naming[no-role-prefix]
-ldap_server_uri: ""  # noqa: var-naming[no-role-prefix]
-
-ldap_ous: []  # noqa: var-naming[no-role-prefix]
-ldap_groups: {}  # noqa: var-naming[no-role-prefix]
-ldap_users: {}  # noqa: var-naming[no-role-prefix]
-
-# ───────────────────────────── Secret shapes ─────────────────────────────
-# Populated from gitignored host_vars/*/secrets.yml.
+# Secret shapes
 openldap_user_password_hashes: {}
 openldap_tls_private_key: ""
 openldap_tls_certificate: ""

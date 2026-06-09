@@ -25,11 +25,6 @@ argument_specs:
         required: false
         description: Systemd unit name for the OpenLDAP service (slapd)
 
-      openldap_sysconfig_path:
-        type: str
-        required: false
-        description: Path to the slapd sysconfig file for listener URL configuration
-
       openldap_module_dir:
         type: str
         required: false
@@ -108,43 +103,43 @@ argument_specs:
 
       ldap_domain:
         type: str
-        required: false
+        required: true
         description: LDAP domain name derived from DNS identity
 
       ldap_base_dn:
         type: str
-        required: false
+        required: true
         description: LDAP base DN derived from ldap_domain
 
       ldap_server_host:
         type: str
-        required: false
+        required: true
         description: Inventory hostname of the LDAP server (ldap-01)
 
       ldap_server_fqdn:
         type: str
-        required: false
+        required: true
         description: FQDN of the LDAP service
 
       ldap_server_uri:
         type: str
-        required: false
+        required: true
         description: LDAPS URI for the LDAP server
 
       ldap_ous:
         type: list
         elements: str
-        required: false
+        required: true
         description: Organizational Unit names for DIT containers
 
       ldap_groups:
         type: dict
-        required: false
+        required: true
         description: posixGroup definitions keyed by group name (e.g. ta, stu)
 
       ldap_users:
         type: dict
-        required: false
+        required: true
         description: posixAccount definitions keyed by username (e.g. generalta, mailta, stu)
 
       openldap_user_password_hashes:

@@ -26,12 +26,11 @@
       - ldap_server_fqdn | length > 0
       - ldap_server_uri is defined
       - ldap_server_uri | length > 0
-    fail_msg: "Required LDAP identity variables (ldap_domain, ldap_base_dn, ldap_server_fqdn, ldap_server_uri) must be defined and non-empty"
+    fail_msg: "Required LDAP identity variables must be defined and non-empty"
 
-# ─────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────
 # Check Required LDAP Data Model
-# ─────────────────────────────────────────────────────────────────────────
-
+# ───────────────────────────────
 - name: "PHASE [assert : Check Required LDAP Data Model]"
   become: false
   ansible.builtin.assert:
@@ -88,10 +87,9 @@
       ldap_users must contain generalta (UID 10000), mailta (UID 10001), stu (UID 20000)
       with correct homes, groups, ssh_public_key, and password_hash_key.
 
-# ─────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────
 # Check Required OpenLDAP Secret Shapes
-# ─────────────────────────────────────────────────────────────────────────
-
+# ──────────────────────────────────────
 - name: "PHASE [assert : Normalize Legacy OpenLDAP User Password Hashes]"
   become: false
   ansible.builtin.set_fact:
@@ -139,32 +137,27 @@
       Each hash must begin with an LDAP password hash marker: {SSHA}, {SSHA512}, {SSHA256}, {SHA}, {CRYPT}, {ARGON2}.
   no_log: true
 
-# ─────────────────────────────────────────────────────────────────────────
-# Check Required TLS Shape
-# ─────────────────────────────────────────────────────────────────────────
-
-- name: "PHASE [assert : Check Required TLS Shape]"
+# ─────────────────────────────────────
+# Check Optional TLS Secret Pair Shape
+# ─────────────────────────────────────
+- name: "PHASE [assert : Check Optional TLS Secret Pair Shape]"
   become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      # Both TLS key and cert must be defined (str type)
       - openldap_tls_private_key is defined
       - openldap_tls_certificate is defined
-      # Accept either the pair is non-empty (from secrets) or both are
-      # empty strings (target generation by install/tls tasks).
-      # Reject the case where only one of key/cert has content.
       - openldap_tls_private_key | length > 0 or openldap_tls_certificate | length == 0
       - openldap_tls_certificate | length > 0 or openldap_tls_private_key | length == 0
     fail_msg: >-
       Incomplete TLS secret shape: openldap_tls_private_key and openldap_tls_certificate
-      must both be non-empty (from secrets) or both be empty (for target generation).
+      must both be non-empty when supplied from secrets, or both be empty so
+      tls.yml can generate a self-signed key/cert.
       Providing only one of the two values is not allowed.
 
-# ─────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────
 # Check Required Module And Schema Defaults
-# ─────────────────────────────────────────────────────────────────────────
-
+# ──────────────────────────────────────────
 - name: "PHASE [assert : Check Required Module And Schema Defaults]"
   become: false
   ansible.builtin.assert:
