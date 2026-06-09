@@ -35,7 +35,7 @@ mail_local_user_password_hashes: {}
 # TLS
 mail_tls_certificate: ""
 mail_tls_private_key: ""
-mail_tls_cert_path: /etc/pki/tls/certs/mail.pem
+mail_tls_cert_path: /etc/pki/tls/certs/mail.crt
 mail_tls_key_path: /etc/pki/tls/private/mail.key
 
 # DKIM

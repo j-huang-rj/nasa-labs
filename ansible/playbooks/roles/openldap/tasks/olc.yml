@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Create LDAP data directory
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [olc : Create LDAP Data Directory]"
   ansible.builtin.file:
     path: "{{ openldap_data_dir }}"
@@ -19,7 +18,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # OLC module path and module load reconciliation
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [olc : Search Existing OLC Module Path]"
   ansible.builtin.command:
     cmd: >-
@@ -100,6 +98,34 @@
 # ─────────────────────────────────────────────────────────────────────────
 # MDB database creation or reconciliation
 # ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [olc : Search Stock MDB Placeholder Database]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config
+      {{ '(&(objectClass=olcMdbConfig)'
+         ~ '(olcSuffix=dc=my-domain,dc=com)'
+         ~ '(olcRootDN=cn=Manager,dc=my-domain,dc=com))' }}
+      dn
+  changed_when: false
+  failed_when: false
+  register: _openldap_stock_mdb_search
+
+- name: "PHASE [olc : Extract Stock MDB Placeholder Database DNs]"
+  ansible.builtin.set_fact:
+    _openldap_stock_mdb_dns: >-
+      {{ _openldap_stock_mdb_search.stdout_lines | default([])
+         | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+         | map('regex_replace', '^dn: ', '')
+         | list }}
+
+- name: "PHASE [olc : Remove Stock MDB Placeholder Database If Present]"
+  ansible.builtin.command:
+    cmd: ldapdelete -Y EXTERNAL -H ldapi:/// "{{ item }}"
+  changed_when: true
+  loop: "{{ _openldap_stock_mdb_dns }}"
+  loop_control:
+    label: "{{ item }}"
 
 - name: "PHASE [olc : Search Existing MDB Database For Suffix]"
   ansible.builtin.command:

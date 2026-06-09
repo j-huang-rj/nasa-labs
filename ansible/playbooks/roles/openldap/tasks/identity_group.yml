@@ -2,7 +2,7 @@
 - name: "PHASE [identities : Render Group LDIF] | {{ _ident_group.key }}"
   ansible.builtin.template:
     src: openldap/group.ldif.j2
-    dest: "/tmp/openldap-phase11-identities/group-{{ _ident_group.key }}.ldif"
+    dest: "/tmp/openldap-identities/group-{{ _ident_group.key }}.ldif"
     owner: root
     group: root
     mode: "0600"
@@ -29,7 +29,7 @@
   ansible.builtin.command:
     cmd: >-
       ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
-      -H {{ ldap_server_uri }} -f /tmp/openldap-phase11-identities/group-{{ _ident_group.key }}.ldif
+      -H {{ ldap_server_uri }} -f /tmp/openldap-identities/group-{{ _ident_group.key }}.ldif
   changed_when: true
   no_log: true
   environment:

@@ -2,7 +2,7 @@
 - name: "PHASE [dit : Render OU Entry LDIF] | {{ _dit_ou_name }}"
   ansible.builtin.template:
     src: openldap/dit-entry.ldif.j2
-    dest: "/tmp/openldap-phase11-dit/ou-{{ _dit_ou_name }}.ldif"
+    dest: "/tmp/openldap-dit/ou-{{ _dit_ou_name }}.ldif"
     owner: root
     group: root
     mode: "0600"
@@ -28,7 +28,7 @@
   ansible.builtin.command:
     cmd: >-
       ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
-      -H {{ ldap_server_uri }} -f /tmp/openldap-phase11-dit/ou-{{ _dit_ou_name }}.ldif
+      -H {{ ldap_server_uri }} -f /tmp/openldap-dit/ou-{{ _dit_ou_name }}.ldif
   changed_when: true
   no_log: true
   environment:

@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Create TLS directories
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [tls : Create TLS Certificate Directory]"
   ansible.builtin.file:
     path: "{{ openldap_tls_cert_dir }}"
@@ -26,10 +25,9 @@
 
 # ─────────────────────────────────────────────────────────────────────────
 # Branched TLS material provisioning
-#   Path A: secrets provided → idempotent slurp+b64decode deploy
-#   Path B: secrets empty   → self-signed generation on target
+#   Path A: secrets provided → idempotent slurp + base64 decode deploy
+#   Path B: secrets empty    → self-signed generation on target
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [tls : Slurp Existing TLS Certificate]"
   ansible.builtin.slurp:
     src: "{{ openldap_tls_cert_path }}"
@@ -105,7 +103,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Self-signed certificate generation (when secrets are empty)
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [tls : Check Existing Certificate SAN For Self-Signed Path]"
   ansible.builtin.command:
     cmd: >-
@@ -156,7 +153,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Validate certificate SAN regardless of provisioning path
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [tls : Validate TLS Certificate Subject Alternative Name]"
   ansible.builtin.command:
     cmd: >-
@@ -179,7 +175,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Apply OLC TLS configuration via ldapmodify over ldapi
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [tls : Search Existing OLC TLS Configuration]"
   ansible.builtin.command:
     cmd: >-

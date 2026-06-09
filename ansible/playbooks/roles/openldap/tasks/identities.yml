@@ -10,7 +10,7 @@
 
 - name: "PHASE [identities : Create Temporary Identity LDIF Render Directory]"
   ansible.builtin.file:
-    path: /tmp/openldap-phase11-identities
+    path: /tmp/openldap-identities
     state: directory
     owner: root
     group: root
@@ -45,7 +45,7 @@
 
 - name: "PHASE [identities : Remove Temporary Identity LDIF Render Directory]"
   ansible.builtin.file:
-    path: /tmp/openldap-phase11-identities
+    path: /tmp/openldap-identities
     state: absent
   changed_when: false
 
