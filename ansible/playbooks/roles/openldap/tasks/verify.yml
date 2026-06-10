@@ -380,6 +380,58 @@
       Ordered ACLs missing from target MDB olcAccess.
       stdout={{ _openldap_acl_search.stdout | default('') }}
 
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 12: PPolicy verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search PPolicy Overlay On Target MDB]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "olcOverlay=ppolicy,{{ _openldap_mdb_dn }}" -s base
+      '(objectClass=*)' olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
+  changed_when: false
+  register: _openldap_ppolicy_overlay_search
+
+- name: "PHASE [verify : Assert PPolicy Overlay Configured]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_ppolicy_overlay_search.rc == 0
+      - "'olcPPolicyDefault' in _openldap_ppolicy_overlay_search.stdout"
+      - "'olcPPolicyCheckModule' in _openldap_ppolicy_overlay_search.stdout"
+      - "'olcPPolicyHashCleartext' in _openldap_ppolicy_overlay_search.stdout"
+    fail_msg: >-
+      PPolicy overlay not configured on target MDB.
+      stdout={{ _openldap_ppolicy_overlay_search.stdout | default('') }}
+
+- name: "PHASE [verify : Search Default PPolicy Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "cn=default,ou=Ppolicy,{{ ldap_base_dn }}" -s base
+      '(objectClass=*)' pwdCheckQuality pwdMinLength pwdInHistory pwdUseCheckModule
+  changed_when: false
+  register: _openldap_ppolicy_entry_search
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert Default PPolicy Entry Attributes]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_ppolicy_entry_search.rc == 0
+      - "'pwdCheckQuality: 2' in _openldap_ppolicy_entry_search.stdout"
+      - "'pwdMinLength: 8' in _openldap_ppolicy_entry_search.stdout"
+      - "'pwdInHistory: 1' in _openldap_ppolicy_entry_search.stdout"
+      - "'pwdUseCheckModule: TRUE' in _openldap_ppolicy_entry_search.stdout"
+    fail_msg: >-
+      Default ppolicy entry missing or has wrong attributes.
+      stdout={{ _openldap_ppolicy_entry_search.stdout | default('') }}
+  no_log: true
+
 - name: "PHASE [verify : END]"
   become: false
   ansible.builtin.debug:

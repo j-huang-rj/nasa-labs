@@ -649,3 +649,179 @@
       become: false
       ansible.builtin.debug:
         msg: "Phase 12 ACL matrix validation complete"
+
+# ──────────────────────────────────────────────────────────
+# PPolicy Validation: Ordinary User Password Policy Behavior
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 PPolicy Validation"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - ppolicy
+  vars:
+    _p12_mailta_dn: "uid=mailta,ou=People,{{ ldap_base_dn }}"
+    _p12_admin_dn: "cn=admin,{{ ldap_base_dn }}"
+    _p12_ppolicy_temp_pass: "Phase12-Temp9!"
+    _p12_ppolicy_short_pass: "short"
+    _p12_ppolicy_lc_digit_pass: "lowercase1"
+    _p12_ppolicy_current_pass: "{{ openldap_ta_password }}"
+  tasks:
+    - name: "PHASE [ppolicy : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 ppolicy validation — ordinary mailta password-change behavior"
+
+    # ─── Verify mailta can bind with current password ───
+    - name: "PHASE [ppolicy : Bind As Mailta To Verify Connectivity]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_current_pass }}"
+          -H {{ ldap_server_uri }}
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      no_log: true
+      register: _p12_ppolicy_mailta_bind
+
+    - name: "PHASE [ppolicy : Assert Mailta Can Bind With Current Password]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_ppolicy_mailta_bind.rc == 0
+        fail_msg: >-
+          Mailta could not bind with current password.
+          rc={{ _p12_ppolicy_mailta_bind.rc }}
+      no_log: true
+
+    # ─── Negative: password shorter than 8 characters ───
+    - name: "PHASE [ppolicy : Attempt Short Password Change]"
+      ansible.builtin.command:
+        cmd: >-
+          ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_current_pass }}"
+          -H {{ ldap_server_uri }}
+          -a "{{ _p12_mailta_dn }}"
+          -s "{{ _p12_ppolicy_short_pass }}"
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_ppolicy_short_result
+
+    - name: "PHASE [ppolicy : Assert Short Password Rejected]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_ppolicy_short_result.rc != 0
+        fail_msg: >-
+          Short password should have been rejected by ppolicy pwdMinLength: 8.
+          rc={{ _p12_ppolicy_short_result.rc }}
+      no_log: true
+
+    # ─── Negative: password with only lowercase+digit classes (2 points < 3) ───
+    - name: "PHASE [ppolicy : Attempt Missing Character Classes Password Change]"
+      ansible.builtin.command:
+        cmd: >-
+          ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_current_pass }}"
+          -H {{ ldap_server_uri }}
+          -a "{{ _p12_mailta_dn }}"
+          -s "{{ _p12_ppolicy_lc_digit_pass }}"
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_ppolicy_missing_classes_result
+
+    - name: "PHASE [ppolicy : Assert Missing Character Classes Password Rejected]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_ppolicy_missing_classes_result.rc != 0
+        fail_msg: >-
+          Password with only lowercase+digit classes should have been rejected
+          by check_password.so (minPoints 3, only 2 classes).
+          rc={{ _p12_ppolicy_missing_classes_result.rc }}
+      no_log: true
+
+    # ─── Positive: valid password with all character classes ───
+    - name: "PHASE [ppolicy : Set Valid Temporary Password]"
+      ansible.builtin.command:
+        cmd: >-
+          ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_current_pass }}"
+          -H {{ ldap_server_uri }}
+          -a "{{ _p12_mailta_dn }}"
+          -s "{{ _p12_ppolicy_temp_pass }}"
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+      register: _p12_ppolicy_valid_pass_result
+
+    - name: "PHASE [ppolicy : Assert Valid Temporary Password Set]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_ppolicy_valid_pass_result.rc == 0
+        fail_msg: >-
+          Valid temporary password should have been accepted.
+          rc={{ _p12_ppolicy_valid_pass_result.rc }}
+      no_log: true
+
+    # ─── Negative: immediate reuse of previous password ───
+    - name: "PHASE [ppolicy : Attempt Immediate Password Reuse]"
+      ansible.builtin.command:
+        cmd: >-
+          ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_temp_pass }}"
+          -H {{ ldap_server_uri }}
+          -a "{{ _p12_mailta_dn }}"
+          -s "{{ _p12_ppolicy_temp_pass }}"
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_ppolicy_reuse_result
+
+    - name: "PHASE [ppolicy : Assert Password Reuse Rejected]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_ppolicy_reuse_result.rc != 0
+        fail_msg: >-
+          Password reuse should have been rejected by ppolicy pwdInHistory: 1.
+          rc={{ _p12_ppolicy_reuse_result.rc }}
+      no_log: true
+
+    # ─── Cleanup: reset mailta password to original hash via admin bind ───
+    - name: "PHASE [ppolicy : Cleanup Reset Mailta Password To Original Hash]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_mailta_dn }}
+          changetype: modify
+          replace: userPassword
+          userPassword: {{ openldap_user_password_hashes.mailta }}
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+      register: _p12_ppolicy_cleanup_result
+
+    - name: "PHASE [ppolicy : Assert Mailta Password Cleanup Succeeded]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_ppolicy_cleanup_result.rc == 0
+        fail_msg: >-
+          Cleanup failed — could not reset mailta password to original hash.
+          rc={{ _p12_ppolicy_cleanup_result.rc }}
+      no_log: true
+
+    - name: "PHASE [ppolicy : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 ppolicy validation complete"
