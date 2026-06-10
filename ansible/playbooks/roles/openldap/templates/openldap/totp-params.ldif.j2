@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+dn: cn=totp-default,ou=Ppolicy,{{ ldap_base_dn }}
+objectClass: top
+objectClass: organizationalRole
+objectClass: oathTOTPParams
+cn: totp-default
+oathOTPLength: 6
+oathTOTPTimeStepPeriod: 60
+oathHMACAlgorithm: 1.2.840.113549.2.7

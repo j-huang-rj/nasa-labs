@@ -1,0 +1,77 @@
+---
+# Per-user TOTP token reconciliation (included from totp.yml)
+# Loop var: _totp_user_item (key=username, value=user dict)
+
+- name: "PHASE [totp_token : Render TOTP Token LDIF] | {{ _totp_user_item.key }}"
+  ansible.builtin.template:
+    src: openldap/totp-token.ldif.j2
+    dest: "/tmp/openldap-phase12-totp/totp-token-{{ _totp_user_item.key }}.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+  vars:
+    _totp_username: "{{ _totp_user_item.key }}"
+    _totp_secret: "{{ _openldap_totp_secrets[_totp_user_item.key] }}"
+  no_log: true
+
+- name: "PHASE [totp_token : Search Existing TOTP Token] | {{ _totp_user_item.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "cn=totp-{{ _totp_user_item.key }},ou=Ppolicy,{{ ldap_base_dn }}" -s base
+      '(objectClass=*)' dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _openldap_totp_token_search
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [totp_token : Add TOTP Token If Missing] | {{ _totp_user_item.key }}"
+  when: _openldap_totp_token_search.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }} -f /tmp/openldap-phase12-totp/totp-token-{{ _totp_user_item.key }}.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [totp_token : Search User For OATH Attributes] | {{ _totp_user_item.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "uid={{ _totp_user_item.key }},ou=People,{{ ldap_base_dn }}" -s base
+      '(objectClass=posixAccount)' objectClass oathTOTPToken
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _openldap_totp_user_search
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [totp_token : Add oathTOTPUser And oathTOTPToken To User] | {{ _totp_user_item.key }}"
+  when: >-
+    _openldap_totp_user_search.rc != 0
+    or 'oathTOTPUser' not in _openldap_totp_user_search.stdout
+    or 'oathTOTPToken' not in _openldap_totp_user_search.stdout
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+    stdin: |
+      dn: uid={{ _totp_user_item.key }},ou=People,{{ ldap_base_dn }}
+      changetype: modify
+      add: objectClass
+      objectClass: oathTOTPUser
+      -
+      add: oathTOTPToken
+      oathTOTPToken: cn=totp-{{ _totp_user_item.key }},ou=Ppolicy,{{ ldap_base_dn }}
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
