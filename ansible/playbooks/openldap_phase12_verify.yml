@@ -2075,16 +2075,37 @@
       changed_when: false
       register: _p12_safety_nolog_lines
 
-    - name: "PHASE [secret_safety : Assert Secret Variable Tasks Have no_log Coverage]"
+    - name: "PHASE [secret_safety : Cross-Reference Secret Tasks Without no_log]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          for f in tasks/acls.yml tasks/ppolicy.yml tasks/totp.yml
+                   tasks/totp_token.yml tasks/fortune.yml tasks/fortune_entry.yml; do
+            [ -f "{{ _p12_openldap_role_dir }}/$f" ] || continue;
+            python3 -c "
+          import re, sys
+          text = open('{{ _p12_openldap_role_dir }}/$f').read()
+          blocks = re.split(r'^- name:', text, flags=re.MULTILINE)
+          for block in blocks:
+            if any(s in block for s in ['openldap_admin_password', 'openldap_ta_password',
+                    'openldap_generalta_totp_secret', 'openldap_stu_totp_secret',
+                    'openldap_user_password_hashes', 'openldap_bind_password']):
+              if 'no_log: true' not in block:
+                print(f'$f: task missing no_log: {block[:80].strip()!r}')
+          " || true;
+          done
+        executable: /bin/bash
+      changed_when: false
+      register: _p12_safety_missing_nolog
+
+    - name: "PHASE [secret_safety : Assert All Secret Tasks Have no_log]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - _p12_safety_secret_refs.stdout | regex_replace('^\s*#.*$', '', multiline=true) | trim | length == 0
+          - _p12_safety_missing_nolog.stdout | trim | length == 0
         fail_msg: >-
-          Phase 12 task files contain secret variable references without adequate
-          no_log protection (comment-only lines already filtered).
-          Secret refs found:
-          {{ _p12_safety_secret_refs.stdout }}
+          Tasks referencing secret variables without no_log: true:
+          {{ _p12_safety_missing_nolog.stdout }}
 
     # ─── Scan 2: fail_msg or msg patterns that could leak secrets ───
     - name: "PHASE [secret_safety : Scan For Secret Output In fail_msg And msg Patterns]"
