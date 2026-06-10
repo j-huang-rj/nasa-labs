@@ -556,6 +556,82 @@
       stdout={{ _openldap_totp_mailta_verify.stdout | default('') }}
   no_log: true
 
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 12: Fortune schema and data verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search Fortune Schema In cn=config]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "cn=fortune,cn=schema,cn=config" -s base
+      '(objectClass=olcSchemaConfig)' cn olcAttributeTypes olcObjectClasses
+  changed_when: false
+  register: _openldap_fortune_schema_search
+
+- name: "PHASE [verify : Assert Fortune Schema Has Required OID Matching Rules And Description]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_fortune_schema_search.rc == 0
+      - "'2.25.109749598841848522681210166878566339431' in _openldap_fortune_schema_search.stdout"
+      - "'caseIgnoreMatch' in _openldap_fortune_schema_search.stdout"
+      - "'caseIgnoreOrderingMatch' in _openldap_fortune_schema_search.stdout"
+      - "'caseIgnoreSubstringsMatch' in _openldap_fortune_schema_search.stdout"
+      - "'integerMatch' in _openldap_fortune_schema_search.stdout"
+      - "'integerOrderingMatch' in _openldap_fortune_schema_search.stdout"
+      - "'SUP top' in _openldap_fortune_schema_search.stdout"
+      - "'description' in _openldap_fortune_schema_search.stdout"
+    fail_msg: >-
+      Fortune schema missing required OID root, matching rules, integer id, SUP top,
+      or description in cn=schema,cn=config.
+      stdout={{ _openldap_fortune_schema_search.stdout | default('') }}
+
+- name: "PHASE [verify : Search Fortune Entry Count]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "ou=Fortune,{{ ldap_base_dn }}" '(objectClass=fortune)' dn
+  changed_when: false
+  no_log: true
+  register: _openldap_fortune_count_search
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert Fortune Entries Present In ou=Fortune]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_fortune_count_search.rc == 0
+      - "'ou=Fortune' in _openldap_fortune_count_search.stdout"
+      - "'cn=fortune-' in _openldap_fortune_count_search.stdout"
+    fail_msg: >-
+      Fortune entries missing from ou=Fortune.
+      stdout={{ _openldap_fortune_count_search.stdout | default('') }}
+  no_log: true
+
+- name: "PHASE [verify : Search sssvlv Overlay On Target MDB]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "olcOverlay=sssvlv,{{ _openldap_mdb_dn }}" -s base
+      '(objectClass=*)' olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+  changed_when: false
+  register: _openldap_sssvlv_overlay_search
+
+- name: "PHASE [verify : Assert sssvlv Overlay Configured With Limits]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_sssvlv_overlay_search.rc == 0
+      - "'olcSssVlvMax' in _openldap_sssvlv_overlay_search.stdout"
+      - "'olcSssVlvMaxKeys' in _openldap_sssvlv_overlay_search.stdout"
+      - "'olcSssVlvMaxPerConn' in _openldap_sssvlv_overlay_search.stdout"
+    fail_msg: >-
+      sssvlv overlay missing or missing limit attributes on target MDB.
+      stdout={{ _openldap_sssvlv_overlay_search.stdout | default('') }}
+
 - name: "PHASE [verify : END]"
   become: false
   ansible.builtin.debug:

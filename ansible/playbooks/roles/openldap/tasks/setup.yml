@@ -31,6 +31,9 @@
 - name: "PHASE [setup : Configure TOTP Authentication]"
   ansible.builtin.import_tasks: totp.yml
 
+- name: "PHASE [setup : Import Fortune Data And Search Controls]"
+  ansible.builtin.import_tasks: fortune.yml
+
 - name: "PHASE [setup : Verify OpenLDAP State]"
   ansible.builtin.import_tasks: verify.yml
 

@@ -1374,3 +1374,245 @@
       become: false
       ansible.builtin.debug:
         msg: "Phase 12 SSH public key read verification complete"
+
+# ──────────────────────────────────────────────────────────
+# Fortune Schema, Data, Sort, And Pagination Validation
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 Fortune Schema Data Sort And Pagination Validation"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - fortune
+    - schema
+    - data
+    - sssvlv
+  vars:
+    _p12_fortune_sample_ids:
+      - "1"
+      - "45"
+      - "106"
+      - "231"
+      - "300"
+    _p12_fortune_base: "ou=Fortune,{{ ldap_base_dn }}"
+    _p12_fortune_yaml_path: "{{ playbook_dir }}/roles/openldap/files/fortunes.yml"
+  tasks:
+    - name: "PHASE [fortune : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 Fortune validation — schema, data, server-side sort and paging"
+
+    # ─── Load fortunes.yml to compute expected row count ───
+    - name: "PHASE [fortune : Read Fortune YAML Source]"
+      ansible.builtin.set_fact:
+        _p12_fortune_yaml_data: "{{ lookup('ansible.builtin.file', _p12_fortune_yaml_path) | from_yaml }}"
+      changed_when: false
+
+    - name: "PHASE [fortune : Set Expected Fortune Row Count]"
+      ansible.builtin.set_fact:
+        _p12_fortune_yaml_count: "{{ _p12_fortune_yaml_data | length }}"
+
+    # ─── Schema: verify fortune schema in cn=config ───
+    - name: "PHASE [schema : Search Fortune Schema In cn=config]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "cn=fortune,cn=schema,cn=config" -s base
+          '(objectClass=olcSchemaConfig)' cn olcAttributeTypes olcObjectClasses
+      changed_when: false
+      register: _p12_fortune_schema_search
+
+    - name: "PHASE [schema : Assert Fortune Schema OID Root And Author Matching Rules]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_fortune_schema_search.rc == 0
+          - "'2.25.109749598841848522681210166878566339431' in _p12_fortune_schema_search.stdout"
+          - "'caseIgnoreMatch' in _p12_fortune_schema_search.stdout"
+          - "'caseIgnoreOrderingMatch' in _p12_fortune_schema_search.stdout"
+          - "'caseIgnoreSubstringsMatch' in _p12_fortune_schema_search.stdout"
+          - "'NAME 'author'' in _p12_fortune_schema_search.stdout"
+        fail_msg: >-
+          Fortune schema missing UUID OID root or author case-insensitive matching rules.
+          stdout={{ _p12_fortune_schema_search.stdout | default('') }}
+
+    - name: "PHASE [schema : Assert Fortune Schema Integer id And SUP top And description]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_fortune_schema_search.rc == 0
+          - "'integerMatch' in _p12_fortune_schema_search.stdout"
+          - "'integerOrderingMatch' in _p12_fortune_schema_search.stdout"
+          - "'NAME 'id'' in _p12_fortune_schema_search.stdout"
+          - "'SUP top' in _p12_fortune_schema_search.stdout"
+          - "'description' in _p12_fortune_schema_search.stdout"
+        fail_msg: >-
+          Fortune schema missing integer id matching rules, SUP top, or description.
+          stdout={{ _p12_fortune_schema_search.stdout | default('') }}
+
+    # ─── Data: search all Fortune entries and compare count ───
+    - name: "PHASE [data : Search All Fortune Entries In ou=Fortune]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_fortune_base }}" '(objectClass=fortune)' dn
+      changed_when: false
+      no_log: true
+      register: _p12_fortune_data_search
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [data : Extract LDAP Fortune Entry Count]"
+      ansible.builtin.set_fact:
+        _p12_fortune_ldap_count: >-
+          {{ _p12_fortune_data_search.stdout_lines | default([])
+             | select('match', '^dn: cn=fortune-')
+             | list
+             | length }}
+
+    - name: "PHASE [data : Assert Fortune LDAP Count Matches YAML Source]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_fortune_data_search.rc == 0
+          - _p12_fortune_ldap_count | int == _p12_fortune_yaml_count | int
+        fail_msg: >-
+          Fortune LDAP entry count ({{ _p12_fortune_ldap_count }}) does not
+          match YAML source count ({{ _p12_fortune_yaml_count }}).
+      no_log: true
+
+    # ─── Data: assert sample DNs and attributes for IDs 1, 45, 106, 231, 300 ───
+    - name: "PHASE [data : Search Sample Fortune Entries By DN]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "cn=fortune-{{ item }},{{ _p12_fortune_base }}" -s base
+          '(objectClass=fortune)' cn id author description
+      changed_when: false
+      no_log: true
+      register: _p12_fortune_sample_results
+      loop: "{{ _p12_fortune_sample_ids }}"
+      loop_control:
+        label: "id={{ item }}"
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [data : Assert Sample Fortune Entry DN Found]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - item.rc == 0
+          - "'cn: fortune-' ~ item.item in item.stdout"
+          - "'id: ' ~ item.item in item.stdout"
+          - "'author::' in item.stdout"
+          - "'description::' in item.stdout"
+        fail_msg: >-
+          Fortune sample entry id={{ item.item }} missing or has wrong attributes.
+          stdout={{ item.stdout | default('') }}
+      loop: "{{ _p12_fortune_sample_results.results }}"
+      loop_control:
+        label: "id={{ item.item }}"
+      no_log: true
+
+    # ─── Data: case/space-insensitive author search ───
+    - name: "PHASE [data : Search Fortune Entries By Author Feynman Case Insensitive]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_fortune_base }}" '(author=Feynman)' dn
+      changed_when: false
+      no_log: true
+      register: _p12_fortune_feynman_search
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [data : Assert Author Search Case Insensitive Finds Feynman]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_fortune_feynman_search.rc == 0
+          - "'cn=fortune-' in _p12_fortune_feynman_search.stdout"
+        fail_msg: >-
+          Author search for 'Feynman' (case-insensitive) returned no results.
+      no_log: true
+
+    # ─── sssvlv: discover MDB and search overlay ───
+    - name: "PHASE [sssvlv : Discover Target MDB By Suffix]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config
+          '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+          dn
+      changed_when: false
+      failed_when: false
+      register: _p12_sssvlv_mdb_search
+
+    - name: "PHASE [sssvlv : Extract MDB Database DN]"
+      when: _p12_sssvlv_mdb_search.rc == 0
+      ansible.builtin.set_fact:
+        _p12_sssvlv_mdb_dn: >-
+          {{ _p12_sssvlv_mdb_search.stdout_lines | default([])
+             | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+             | list
+             | first
+             | default('')
+             | regex_replace('^dn: ', '')
+             | trim }}
+
+    - name: "PHASE [sssvlv : Search sssvlv Overlay On Target MDB]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "olcOverlay=sssvlv,{{ _p12_sssvlv_mdb_dn }}" -s base
+          '(objectClass=*)' olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+      changed_when: false
+      register: _p12_sssvlv_overlay_verify
+
+    - name: "PHASE [sssvlv : Assert sssvlv Overlay Present With Conservative Limits]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_sssvlv_overlay_verify.rc == 0
+          - "'olcSssVlvMax' in _p12_sssvlv_overlay_verify.stdout"
+          - "'olcSssVlvMaxKeys' in _p12_sssvlv_overlay_verify.stdout"
+          - "'olcSssVlvMaxPerConn' in _p12_sssvlv_overlay_verify.stdout"
+        fail_msg: >-
+          sssvlv overlay missing limit attributes on target MDB.
+          stdout={{ _p12_sssvlv_overlay_verify.stdout | default('') }}
+
+    # ─── sssvlv: server-side sort by author with paged results ───
+    - name: "PHASE [sssvlv : Run Server-Side Sort And Paged-Result ldapsearch]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -b "{{ _p12_fortune_base }}"
+          -E sss=author
+          -E pr=10/noprompt
+          '(objectClass=fortune)' cn id author description
+      changed_when: false
+      no_log: true
+      register: _p12_fortune_sort_page_search
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [sssvlv : Assert Server-Side Sort And Paged Results Succeed]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_fortune_sort_page_search.rc == 0
+          - "'cn=fortune-' in _p12_fortune_sort_page_search.stdout"
+          - "'author::' in _p12_fortune_sort_page_search.stdout"
+        fail_msg: >-
+          Server-side sort and paged result search failed against ou=Fortune.
+          rc={{ _p12_fortune_sort_page_search.rc }},
+          stderr={{ _p12_fortune_sort_page_search.stderr | default('') }}
+      no_log: true
+
+    - name: "PHASE [fortune : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 Fortune schema, data, and sssvlv validation complete"
