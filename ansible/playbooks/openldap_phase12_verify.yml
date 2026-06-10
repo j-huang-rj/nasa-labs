@@ -1,0 +1,278 @@
+---
+# Phase 12 validation playbook: ACL, ppolicy, TOTP, Fortune,
+# server-side sort/paging, idempotency, and reboot persistence.
+#
+# Prerequisites:
+#   - site.yml or ldap_configure.yml
+
+# ──────────────────────────────────────────────────────────
+# Preflight: Reachability And Module Readiness
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 Preflight Reachability And Module Readiness"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - preflight
+  tasks:
+    - name: "PHASE [preflight : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 preflight — target reachability, MDB discovery, module checks, secret shape validation"
+
+    - name: "PHASE [preflight : Ping ldap-01 Target]"
+      ansible.builtin.ping:
+
+    - name: "PHASE [preflight : Discover Target MDB By Suffix]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config
+          '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+          dn
+      changed_when: false
+      failed_when: false
+      register: _p12_mdb_search
+
+    - name: "PHASE [preflight : Extract MDB Database DN]"
+      when: _p12_mdb_search.rc == 0
+      ansible.builtin.set_fact:
+        _p12_mdb_dn: >-
+          {{ _p12_mdb_search.stdout_lines | default([])
+             | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+             | list
+             | first
+             | default('')
+             | regex_replace('^dn: ', '')
+             | trim }}
+
+    - name: "PHASE [preflight : Assert Target MDB Database Found By Suffix]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_mdb_search.rc == 0
+          - _p12_mdb_dn | default('') | length > 0
+        fail_msg: >-
+          Target MDB database not found by suffix {{ ldap_base_dn }}.
+          Search rc={{ _p12_mdb_search.rc }},
+          stdout={{ _p12_mdb_search.stdout | default('') }}
+
+    - name: "PHASE [preflight : Search OLC Loaded Modules]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config
+          '(olcModuleLoad=*)' dn olcModuleLoad
+      changed_when: false
+      register: _p12_module_search
+
+    - name: "PHASE [preflight : Assert Required Modules Loaded]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_module_search.rc == 0
+          - "'ppolicy' in _p12_module_search.stdout"
+          - "'otp' in _p12_module_search.stdout"
+          - "'sssvlv' in _p12_module_search.stdout"
+        fail_msg: >-
+          Required OpenLDAP modules not loaded (ppolicy, otp, sssvlv).
+          stdout={{ _p12_module_search.stdout | default('') }}
+
+    - name: "PHASE [preflight : Verify check_password.so Exists]"
+      ansible.builtin.stat:
+        path: /usr/lib64/openldap/check_password.so
+      changed_when: false
+      register: _p12_check_password_stat
+
+    - name: "PHASE [preflight : Assert check_password.so Module File Present]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_check_password_stat.stat.exists
+        fail_msg: >-
+          Password quality check module not found at
+          /usr/lib64/openldap/check_password.so.
+
+    - name: "PHASE [preflight : Assert Required Phase 12 Secrets Defined]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - openldap_ta_password is defined
+          - openldap_ta_password | length > 0
+          - openldap_generalta_totp_secret is defined
+          - openldap_generalta_totp_secret | length > 0
+          - openldap_stu_totp_secret is defined
+          - openldap_stu_totp_secret | length > 0
+        fail_msg: >-
+          Phase 12 secrets (openldap_ta_password, openldap_generalta_totp_secret,
+          openldap_stu_totp_secret) must be defined and non-empty in
+          host_vars/ldap-01/secrets.yml.
+      no_log: true
+
+    - name: "PHASE [preflight : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 preflight reachability and module readiness complete"
+
+# ──────────────────────────────────────────────────────────
+# Static Source Safety Gates (Phase 12)
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 Static Source Safety Gates"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tags:
+    - static
+  vars:
+    _p12_inventory_file: >-
+      {{ inventory_file
+         | default(ansible_inventory_sources | first
+                   | default((playbook_dir + '/../inventory/hosts.yml'))) }}
+    _p12_openldap_role_dir: "{{ playbook_dir }}/roles/openldap"
+    _p12_forbidden_source_patterns:
+      - pattern: '/etc/openldap/slapd\.d'
+        label: 'Direct slapd.d file writes'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "/etc/openldap/slapd\.d"'
+      - pattern: 'LDAPTLS_REQCERT\s*=\s*never'
+        label: 'LDAPTLS_REQCERT=never (disables certificate validation)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "LDAPTLS_REQCERT"'
+      - pattern: 'validate_certs\s*:\s*false'
+        label: 'validate_certs: false (disables Ansible certificate validation)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "validate_certs:\s*false"'
+      - pattern: '\-[Zz]{2}'
+        label: 'StartTLS -ZZ flag (ldapsearch StartTLS)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "\-[Zz]\{2\}"'
+      - pattern: 'ldap://[^s]'
+        label: 'ldap:// scheme (non-SSL LDAP) excluding ldaps:// and ldapi://'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" --include="*.j2" "ldap://"'
+      - pattern: ':389'
+        label: 'Port 389 reference (plain LDAP)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" ":389"'
+      - pattern: 'userPassword'
+        label: 'Unfiltered userPassword output in failure messages'
+        grep_args: >-
+          -rn --include="*.yml" --include="*.yaml"
+          -e 'fail_msg.*userPassword' -e 'msg.*userPassword'
+      - pattern: 'no_log:\s*true'
+        label: 'Secret-adjacent tasks without no_log (preflight secret checks only)'
+        grep_args: '-rn --include="*.yml" --include="*.yaml" "no_log:\s*true"'
+  tasks:
+    - name: "PHASE [static : START]"
+      ansible.builtin.debug:
+        msg: "Phase 12 static source safety gates — scanning for forbidden patterns"
+
+    - name: "PHASE [static : Scan For Forbidden Phase 12 Patterns]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          (
+            cd "{{ _p12_openldap_role_dir }}" 2>/dev/null || exit 0;
+            grep {{ item.grep_args }} || true
+          );
+          (
+            cd "{{ playbook_dir }}" 2>/dev/null || exit 0;
+            grep {{ item.grep_args }} openldap_phase12_verify.yml || true
+          )
+        executable: /bin/bash
+      changed_when: false
+      register: _p12_forbidden_source_scan
+      loop: "{{ _p12_forbidden_source_patterns }}"
+      loop_control:
+        label: "{{ item.label }}"
+
+    - name: "PHASE [static : Assert No slapd.d File Writes In Phase 12 Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p12_forbidden_source_scan.results[0].stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Phase 12 content contains direct writes to /etc/openldap/slapd.d.
+          OpenLDAP OLC must be managed through LDAP operations (ldapmodify/ldapadd).
+          Matches:
+          {{ _p12_forbidden_source_scan.results[0].stdout }}
+
+    - name: "PHASE [static : Assert No LDAPTLS_REQCERT=never In Phase 12 Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p12_forbidden_source_scan.results[1].stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Phase 12 content contains LDAPTLS_REQCERT=never.
+          Matches:
+          {{ _p12_forbidden_source_scan.results[1].stdout }}
+
+    - name: "PHASE [static : Assert No validate_certs: false In Phase 12 Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p12_forbidden_source_scan.results[2].stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Phase 12 content contains validate_certs: false.
+          Matches:
+          {{ _p12_forbidden_source_scan.results[2].stdout }}
+
+    - name: "PHASE [static : Assert No StartTLS -ZZ In Phase 12 Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p12_forbidden_source_scan.results[3].stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Phase 12 content contains StartTLS -ZZ flag.
+          Matches:
+          {{ _p12_forbidden_source_scan.results[3].stdout }}
+
+    - name: "PHASE [static : Assert No ldap:// (Non-SSL) In Phase 12 Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p12_forbidden_source_scan.results[4].stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Phase 12 content contains ldap:// scheme (non-SSL LDAP).
+          Matches:
+          {{ _p12_forbidden_source_scan.results[4].stdout }}
+
+    - name: "PHASE [static : Assert No Port 389 In Phase 12 Content]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p12_forbidden_source_scan.results[5].stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Phase 12 content contains port 389 reference.
+          Matches:
+          {{ _p12_forbidden_source_scan.results[5].stdout }}
+
+    - name: "PHASE [static : Assert No userPassword Output In Failure Messages]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p12_forbidden_source_scan.results[6].stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Phase 12 content may leak userPassword in failure messages
+          or stdout output. Mark all secret-adjacent tasks no_log: true.
+          Matches:
+          {{ _p12_forbidden_source_scan.results[6].stdout }}
+
+    - name: "PHASE [static : END]"
+      ansible.builtin.debug:
+        msg: "Phase 12 static source safety gates complete"

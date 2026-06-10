@@ -175,6 +175,86 @@
       openldap_required_modules must list ppolicy, otp, sssvlv entries.
       openldap_schema_files must list required schema LDIF paths.
 
+# ──────────────────────────────────────────
+# Check Required Phase 12 Secret Shapes
+# ──────────────────────────────────────────
+- name: "PHASE [assert : Check Required Phase 12 Secret Shapes]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      # TA plaintext password for Phase 12 non-root validation binds
+      - openldap_ta_password is defined
+      - openldap_ta_password | length > 0
+
+      # TOTP secrets (raw bytes, base64-encoded) for generalta and stu
+      - openldap_generalta_totp_secret is defined
+      - openldap_generalta_totp_secret | length > 0
+      - openldap_stu_totp_secret is defined
+      - openldap_stu_totp_secret | length > 0
+    fail_msg: >-
+      Required Phase 12 secret shapes are missing or empty.
+      openldap_ta_password, openldap_generalta_totp_secret, and
+      openldap_stu_totp_secret must be defined and non-empty in
+      host_vars/ldap-01/secrets.yml.
+  no_log: true
+
+# ──────────────────────────────────────────
+# Check Required Phase 12 Defaults
+# ──────────────────────────────────────────
+- name: "PHASE [assert : Check Required Phase 12 Defaults]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      # ACL defaults must be defined
+      - openldap_acl_secret_attrs is defined
+      - openldap_acl_secret_attrs | length > 0
+      - openldap_acl_delegate_dns is defined
+      - openldap_acl_delegate_dns | length > 0
+
+      # PPolicy defaults must have valid values
+      - openldap_ppolicy_default_dn is defined
+      - openldap_ppolicy_default_dn | length > 0
+      - openldap_ppolicy_check_module is defined
+      - openldap_ppolicy_check_module | length > 0
+      - openldap_ppolicy_hash_cleartext is defined
+      - openldap_ppolicy_check_quality is defined
+      - openldap_ppolicy_min_length | default(0) | int >= 1
+      - openldap_ppolicy_in_history | default(-1) | int >= 0
+      - openldap_ppolicy_use_check_module is defined
+
+      # Check module defaults must have valid values
+      - openldap_check_password_min_points | default(-1) | int >= 0
+      - openldap_check_password_min_upper is defined
+      - openldap_check_password_min_lower is defined
+      - openldap_check_password_min_digit is defined
+      - openldap_check_password_min_punct is defined
+
+      # TOTP defaults must have valid values
+      - openldap_totp_params_dn is defined
+      - openldap_totp_params_dn | length > 0
+      - openldap_totp_length | default(0) | int >= 1
+      - openldap_totp_time_step | default(0) | int >= 1
+      - openldap_totp_hmac_algorithm is defined
+      - openldap_totp_hmac_algorithm | length > 0
+
+      # Fortune/sssvlv defaults must have valid values
+      - openldap_fortune_base_dn is defined
+      - openldap_fortune_base_dn | length > 0
+      - openldap_sssvlv_max | default(0) | int >= 1
+      - openldap_sssvlv_max_keys | default(0) | int >= 1
+      - openldap_sssvlv_max_per_conn | default(0) | int >= 1
+    fail_msg: >-
+      Required Phase 12 defaults are missing or invalid.
+      ACL default lists must be non-empty.
+      PPolicy defaults must include check module path, quality level, min length >= 1,
+      in history >= 0, and hash_cleartext/use_check_module booleans.
+      Check module min points must be >= 0.
+      TOTP defaults must have valid params DN, length >= 1, time step >= 1,
+      and HMAC algorithm OID.
+      Fortune/sssvlv defaults must have valid base DN and max limits >= 1.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:
