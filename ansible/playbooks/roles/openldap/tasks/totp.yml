@@ -146,13 +146,10 @@
   environment:
     LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
-- name: "PHASE [totp : Remove oathTOTPUser And oathTOTPToken From Mailta If Present]"
+- name: "PHASE [totp : Remove oathTOTPUser From Mailta If Present]"
   when: >-
     _openldap_mailta_otp_search.rc == 0
-    and (
-      'oathTOTPUser' in _openldap_mailta_otp_search.stdout
-      or 'oathTOTPToken' in _openldap_mailta_otp_search.stdout
-    )
+    and 'oathTOTPUser' in _openldap_mailta_otp_search.stdout
   ansible.builtin.command:
     cmd: >-
       ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
@@ -162,7 +159,22 @@
       changetype: modify
       delete: objectClass
       objectClass: oathTOTPUser
-      -
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [totp : Remove oathTOTPToken From Mailta If Present]"
+  when: >-
+    _openldap_mailta_otp_search.rc == 0
+    and 'oathTOTPToken' in _openldap_mailta_otp_search.stdout
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+    stdin: |
+      dn: uid=mailta,ou=People,{{ ldap_base_dn }}
+      changetype: modify
       delete: oathTOTPToken
   changed_when: true
   no_log: true
