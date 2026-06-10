@@ -73,23 +73,55 @@
 
     - name: "PHASE [fortune_entry : Extract Current author] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
-        _openldap_fortune_current_author: >-
+        _openldap_fortune_current_author_raw: >-
           {{ _openldap_fortune_search.stdout_lines | default([])
              | select('match', '^author::? ')
              | list
              | first
              | default('')
              | regex_replace('^author::? ', '') }}
+        _openldap_fortune_current_author_is_b64: >-
+          {{ _openldap_fortune_search.stdout_lines | default([])
+             | select('match', '^author:: ')
+             | list
+             | length > 0 }}
+
+    - name: "PHASE [fortune_entry : Normalize Current Author For Comparison] | id={{ _fortune_item.ID }}"
+      ansible.builtin.set_fact:
+        _openldap_fortune_current_author: >-
+          {{ _openldap_fortune_current_author_raw
+             if not _openldap_fortune_current_author_is_b64
+             else _fortune_item.Author | b64encode }}
+        _openldap_fortune_intended_author: >-
+          {{ _fortune_item.Author
+             if not _openldap_fortune_current_author_is_b64
+             else _fortune_item.Author | b64encode }}
 
     - name: "PHASE [fortune_entry : Extract Current description] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
-        _openldap_fortune_current_description: >-
+        _openldap_fortune_current_description_raw: >-
           {{ _openldap_fortune_search.stdout_lines | default([])
              | select('match', '^description::? ')
              | list
              | first
              | default('')
              | regex_replace('^description::? ', '') }}
+        _openldap_fortune_current_description_is_b64: >-
+          {{ _openldap_fortune_search.stdout_lines | default([])
+             | select('match', '^description:: ')
+             | list
+             | length > 0 }}
+
+    - name: "PHASE [fortune_entry : Normalize Current Description For Comparison] | id={{ _fortune_item.ID }}"
+      ansible.builtin.set_fact:
+        _openldap_fortune_current_description: >-
+          {{ _openldap_fortune_current_description_raw
+             if not _openldap_fortune_current_description_is_b64
+             else _fortune_item.Description | b64encode }}
+        _openldap_fortune_intended_description: >-
+          {{ _fortune_item.Description
+             if not _openldap_fortune_current_description_is_b64
+             else _fortune_item.Description | b64encode }}
 
     - name: "PHASE [fortune_entry : Build Fortune Entry Modify LDIF] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
