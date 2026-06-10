@@ -25,7 +25,7 @@
   tasks:
     - name: Run LDAP Client Role
       ansible.builtin.include_role:
-        name: ldap-client
+        name: ldap_client
       when: ldap_client_enabled | default(false) | bool
 
     - name: Run NFS Role

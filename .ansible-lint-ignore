@@ -1,2 +1,0 @@
-# Project convention: LDAP client role is intentionally named with a hyphen.
-ansible/playbooks/roles/ldap-client role-name skip

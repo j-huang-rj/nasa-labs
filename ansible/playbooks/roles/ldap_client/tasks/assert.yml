@@ -2,7 +2,7 @@
 - name: "PHASE [assert : START]"
   become: false
   ansible.builtin.debug:
-    msg: "Validate ldap-client role variables"
+    msg: "Validate ldap_client role variables"
 
 - name: "PHASE [assert : Check ldap_client_enabled Is True]"
   become: false
@@ -11,7 +11,7 @@
     that:
       - ldap_client_enabled | bool
       - inventory_hostname in groups['ldap_clients']
-    fail_msg: "ldap-client role must run only on hosts in ldap_clients with ldap_client_enabled=true"
+    fail_msg: "ldap_client role must run only on hosts in ldap_clients with ldap_client_enabled=true"
 
 - name: "PHASE [assert : Check LDAP Consumer Identity Variables Are Defined]"
   become: false
