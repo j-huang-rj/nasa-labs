@@ -276,3 +276,376 @@
     - name: "PHASE [static : END]"
       ansible.builtin.debug:
         msg: "Phase 12 static source safety gates complete"
+
+# ──────────────────────────────────────────────────────────
+# ACL Matrix Validation: Delegation, Secrets, Self-Service
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 ACL Matrix Validation"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - acl
+    - secrets
+    - self_service
+  vars:
+    _p12_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
+    _p12_mailta_dn: "uid=mailta,ou=People,{{ ldap_base_dn }}"
+    _p12_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
+    _p12_admin_dn: "cn=admin,{{ ldap_base_dn }}"
+  tasks:
+    - name: "PHASE [acl : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 ACL matrix — delegation, secrets, self-service"
+
+    # ─── MDB discovery (same pattern as preflight) ───
+    - name: "PHASE [acl : Discover Target MDB By Suffix]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config
+          '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+          dn
+      changed_when: false
+      failed_when: false
+      register: _p12_acl_mdb_search
+
+    - name: "PHASE [acl : Extract MDB Database DN]"
+      when: _p12_acl_mdb_search.rc == 0
+      ansible.builtin.set_fact:
+        _p12_acl_mdb_dn: >-
+          {{ _p12_acl_mdb_search.stdout_lines | default([])
+             | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+             | list
+             | first
+             | default('')
+             | regex_replace('^dn: ', '')
+             | trim }}
+
+    - name: "PHASE [acl : Search OLC Access Rules]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "{{ _p12_acl_mdb_dn }}" -s base '(objectClass=*)' olcAccess
+      changed_when: false
+      register: _p12_acl_olc_access
+
+    # ─── ACL delegation: generalta can write non-secret user attribute ───
+    - name: "PHASE [acl : Generalta Write Description On Stu Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_generalta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_stu_dn }}
+          changetype: modify
+          replace: description
+          description: ACL delegation test - generalta
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+      register: _p12_delegate_write
+
+    - name: "PHASE [acl : Assert Generalta Can Write Non-Secret Attribute]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_delegate_write.rc == 0
+        fail_msg: >-
+          Delegated admin generalta could not write description on stu entry.
+          rc={{ _p12_delegate_write.rc }}, stderr={{ _p12_delegate_write.stderr | default('') }}
+      no_log: true
+
+    # ─── Cleanup: restore description with admin bind ───
+    - name: "PHASE [acl : Cleanup Restore Stu Description]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_stu_dn }}
+          changetype: modify
+          delete: description
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+
+    # ─── ACL delegation: generalta can read group entry ───
+    - name: "PHASE [acl : Generalta Read TA Group Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_generalta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+          -b "cn=ta,ou=Group,{{ ldap_base_dn }}" -s base '(objectClass=posixGroup)'
+          cn gidNumber memberUid
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      no_log: true
+      register: _p12_delegate_group_read
+
+    - name: "PHASE [acl : Assert Generalta Can Read TA Group]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_delegate_group_read.rc == 0
+          - "'cn: ta' in _p12_delegate_group_read.stdout"
+          - "'memberUid: generalta' in _p12_delegate_group_read.stdout"
+        fail_msg: >-
+          Delegated admin generalta could not read TA group entry.
+      no_log: true
+
+    # ─── ACL delegation: mailta can write non-secret user attribute ───
+    - name: "PHASE [acl : Mailta Write Description On Stu Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_mailta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_stu_dn }}
+          changetype: modify
+          replace: description
+          description: ACL delegation test - mailta
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+      register: _p12_mailta_write
+
+    - name: "PHASE [acl : Assert Mailta Can Write Non-Secret Attribute]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_mailta_write.rc == 0
+        fail_msg: >-
+          Delegated admin mailta could not write description on stu entry.
+      no_log: true
+
+    # ─── Cleanup: restore description with admin bind ───
+    - name: "PHASE [acl : Cleanup Restore Stu Description Mailta]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_stu_dn }}
+          changetype: modify
+          delete: description
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+
+    # ─── SECRETS: generalta cannot read/search userPassword ───
+    - name: "PHASE [secrets : Generalta Search For UserPassword On Stu Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_generalta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_stu_dn }}" -s base '(objectClass=*)' userPassword
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      no_log: true
+      register: _p12_delegate_secret_search
+
+    - name: "PHASE [secrets : Assert Generalta Cannot Read userPassword]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'userPassword' not in _p12_delegate_secret_search.stdout"
+        fail_msg: >-
+          Delegated admin generalta should not be able to read userPassword.
+      no_log: true
+
+    # ─── SECRETS: mailta cannot read/search userPassword ───
+    - name: "PHASE [secrets : Mailta Search For userPassword On Stu Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_mailta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_stu_dn }}" -s base '(objectClass=*)' userPassword
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      no_log: true
+      register: _p12_mailta_secret_search
+
+    - name: "PHASE [secrets : Assert Mailta Cannot Read userPassword]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'userPassword' not in _p12_mailta_secret_search.stdout"
+        fail_msg: >-
+          Delegated admin mailta should not be able to read userPassword.
+      no_log: true
+
+    # ─── SECRETS: anonymous cannot read userPassword ───
+    - name: "PHASE [secrets : Anonymous Search For userPassword On Stu Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_stu_dn }}" -s base '(objectClass=*)' userPassword
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      register: _p12_anonymous_secret_search
+
+    - name: "PHASE [secrets : Assert Anonymous Cannot Read userPassword]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'userPassword' not in _p12_anonymous_secret_search.stdout"
+        fail_msg: >-
+          Anonymous bind should not be able to read userPassword.
+      no_log: true
+
+    # ─── ACL: delegated DN cannot search cn=config ───
+    - name: "PHASE [acl : Generalta Search cn=config]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config -s base '(objectClass=*)' dn
+      changed_when: false
+      failed_when: false
+      register: _p12_cnconfig_via_ldapi
+
+    - name: "PHASE [acl : Assert Generalta Cannot Access cn=config Via Delegated Bind]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_cnconfig_via_ldapi.rc != 0 or 'cn=config' not in _p12_cnconfig_via_ldapi.stdout
+        fail_msg: >-
+          Delegated admin should not be able to access cn=config via SASL EXTERNAL.
+      no_log: true
+
+    # ─── SELF-SERVICE: stu can read normal user attributes ───
+    - name: "PHASE [self_service : Stu Search Own Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_stu_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_stu_dn }}" -s base '(objectClass=*)'
+          uid uidNumber gidNumber homeDirectory mail loginShell
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      no_log: true
+      register: _p12_stu_self_read
+
+    - name: "PHASE [self_service : Assert Stu Can Read Own Attributes]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_stu_self_read.rc == 0
+          - "'uid: stu' in _p12_stu_self_read.stdout"
+          - "'mail' in _p12_stu_self_read.stdout"
+          - "'loginShell' in _p12_stu_self_read.stdout"
+        fail_msg: >-
+          Stu should be able to read own normal user attributes.
+      no_log: true
+
+    # ─── SELF-SERVICE: stu can modify own loginShell ───
+    - name: "PHASE [self_service : Stu Modify Own loginShell]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_stu_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_stu_dn }}
+          changetype: modify
+          replace: loginShell
+          loginShell: /bin/sh
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+      register: _p12_self_service_modify
+
+    - name: "PHASE [self_service : Assert Stu Can Modify Own loginShell]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_self_service_modify.rc == 0
+        fail_msg: >-
+          Stu should be able to modify own loginShell.
+      no_log: true
+
+    # ─── Cleanup: restore stu loginShell via admin ───
+    - name: "PHASE [self_service : Cleanup Restore Stu loginShell]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_stu_dn }}
+          changetype: modify
+          replace: loginShell
+          loginShell: /bin/bash
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: true
+      no_log: true
+
+    # ─── SELF-SERVICE: stu cannot modify own mail ───
+    - name: "PHASE [self_service : Stu Try Modify Own Mail]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_stu_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_stu_dn }}
+          changetype: modify
+          replace: mail
+          mail: hacked@evil.com
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_stu_mail_modify
+
+    - name: "PHASE [self_service : Assert Stu Cannot Modify Own Mail]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_stu_mail_modify.rc != 0
+        fail_msg: >-
+          Stu should NOT be able to modify own mail attribute.
+      no_log: true
+
+    # ─── SELF-SERVICE: stu cannot modify another user attribute ───
+    - name: "PHASE [self_service : Stu Try Modify Mailta loginShell]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "{{ _p12_stu_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: |
+          dn: {{ _p12_mailta_dn }}
+          changetype: modify
+          replace: loginShell
+          loginShell: /bin/sh
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_stu_other_modify
+
+    - name: "PHASE [self_service : Assert Stu Cannot Modify Another User Mailta]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_stu_other_modify.rc != 0
+        fail_msg: >-
+          Stu should NOT be able to modify mailta loginShell.
+      no_log: true
+
+    - name: "PHASE [acl : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 ACL matrix validation complete"

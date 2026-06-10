@@ -351,6 +351,35 @@
       loginShell=/bin/bash, sshPublicKey present, userPassword present.
   no_log: true
 
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 12: ACL verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search OLC Access Rules]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "{{ _openldap_mdb_dn }}" -s base '(objectClass=*)' olcAccess
+  changed_when: false
+  register: _openldap_acl_search
+
+- name: "PHASE [verify : Assert Ordered ACLs Present]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_acl_search.rc == 0
+      - "'olcAccess: {0}' in _openldap_acl_search.stdout"
+      - "'userPassword' in _openldap_acl_search.stdout"
+      - "'oathSecret' in _openldap_acl_search.stdout"
+      - "'=w' in _openldap_acl_search.stdout"
+      - "'uid=generalta' in _openldap_acl_search.stdout"
+      - "'uid=mailta' in _openldap_acl_search.stdout"
+      - "'ou=People' in _openldap_acl_search.stdout"
+      - "'ou=Group' in _openldap_acl_search.stdout"
+    fail_msg: >-
+      Ordered ACLs missing from target MDB olcAccess.
+      stdout={{ _openldap_acl_search.stdout | default('') }}
+
 - name: "PHASE [verify : END]"
   become: false
   ansible.builtin.debug:
