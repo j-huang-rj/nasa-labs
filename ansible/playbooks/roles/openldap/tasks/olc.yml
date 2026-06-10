@@ -213,14 +213,14 @@
 - name: "PHASE [olc : Reconcile MDB RootPW]"
   when: >-
     _openldap_mdb_state.skipped is not defined
-    and _openldap_mdb_current_rootpw | default('') != openldap_admin_password_hash
+    and _openldap_mdb_current_rootpw | default('') != _openldap_admin_password_hash
   ansible.builtin.command:
     cmd: ldapmodify -Y EXTERNAL -H ldapi:///
     stdin: |
       dn: {{ _openldap_mdb_dn }}
       changetype: modify
       replace: olcRootPW
-      olcRootPW: {{ openldap_admin_password_hash }}
+      olcRootPW: {{ _openldap_admin_password_hash }}
   changed_when: true
   no_log: true
 

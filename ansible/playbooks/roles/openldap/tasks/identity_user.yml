@@ -14,13 +14,13 @@
     home: "{{ _ident_user.value.home }}"
     mail_address: "{{ _ident_user.value.mail }}"
     ssh_public_key: "{{ _ident_user.value.ssh_public_key }}"
-    password_hash: "{{ openldap_user_password_hashes[_ident_user.value.password_hash_key] }}"
+    password_hash: "{{ _openldap_user_password_hashes[_ident_user.value.password_hash_key] }}"
   no_log: true
 
 - name: "PHASE [identities : Search Existing User] | {{ _ident_user.key }}"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -b "uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}" -s base '(objectClass=posixAccount)' dn
   changed_when: false
   failed_when: false
@@ -33,7 +33,7 @@
   when: _openldap_user_exists.rc != 0
   ansible.builtin.command:
     cmd: >-
-      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -f /tmp/openldap-identities/user-{{ _ident_user.key }}.ldif
   changed_when: true
   no_log: true
@@ -43,7 +43,7 @@
 - name: "PHASE [identities : Search Existing User Managed Attributes] | {{ _ident_user.key }}"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -b "uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}" -s base
       -o ldif-wrap=no
       '(objectClass=posixAccount)' uid cn sn uidNumber gidNumber homeDirectory loginShell mail sshPublicKey userPassword
@@ -57,10 +57,10 @@
 - name: "PHASE [identities : Compute User Password Comparison Values] | {{ _ident_user.key }}"
   ansible.builtin.set_fact:
     _openldap_user_expected_pw_hash: >-
-      {{ openldap_user_password_hashes[_ident_user.value.password_hash_key]
+      {{ _openldap_user_password_hashes[_ident_user.value.password_hash_key]
          | regex_escape() }}
     _openldap_user_expected_pw_hash_b64: >-
-      {{ openldap_user_password_hashes[_ident_user.value.password_hash_key]
+      {{ _openldap_user_password_hashes[_ident_user.value.password_hash_key]
          | b64encode
          | regex_escape() }}
   no_log: true
@@ -96,7 +96,7 @@
   when: _openldap_user_needs_modify | default(false) | bool
   ansible.builtin.command:
     cmd: >-
-      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
     stdin: |
       dn: uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}
@@ -129,7 +129,7 @@
       sshPublicKey: {{ _ident_user.value.ssh_public_key }}
       -
       replace: userPassword
-      userPassword: {{ openldap_user_password_hashes[_ident_user.value.password_hash_key] }}
+      userPassword: {{ _openldap_user_password_hashes[_ident_user.value.password_hash_key] }}
   changed_when: true
   no_log: true
   environment:

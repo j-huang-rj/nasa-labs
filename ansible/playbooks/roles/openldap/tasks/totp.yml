@@ -87,7 +87,7 @@
 - name: "PHASE [totp : Search Existing TOTP Params Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "{{ openldap_totp_params_dn }}" -s base '(objectClass=*)' dn
   changed_when: false
@@ -101,7 +101,7 @@
   when: _openldap_totp_params_search.rc != 0
   ansible.builtin.command:
     cmd: >-
-      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -f /tmp/openldap-phase12-totp/totp-params.ldif
   changed_when: true
   no_log: true
@@ -109,13 +109,12 @@
     LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
 # ─────────────────────────────────────────────────────────────────────────
-# Set TOTP secret variable mapping (username → secret)
+# TOTP secrets are provided by the normalized _openldap_user_totp_secrets
+# fact built in assert.yml. Each key tracks the username → secret mapping.
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [totp : Set TOTP Secret Variable Mapping]"
   ansible.builtin.set_fact:
-    _openldap_totp_secrets:
-      generalta: "{{ openldap_generalta_totp_secret }}"
-      stu: "{{ openldap_stu_totp_secret }}"
+    _openldap_totp_secrets: "{{ _openldap_user_totp_secrets }}"
   no_log: true
   changed_when: false
 
@@ -135,7 +134,7 @@
 - name: "PHASE [totp : Search Mailta For OATH Attributes]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "uid=mailta,ou=People,{{ ldap_base_dn }}" -s base
       '(objectClass=posixAccount)' objectClass oathTOTPToken
@@ -152,7 +151,7 @@
     and 'oathTOTPUser' in _openldap_mailta_otp_search.stdout
   ansible.builtin.command:
     cmd: >-
-      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
     stdin: |
       dn: uid=mailta,ou=People,{{ ldap_base_dn }}
@@ -170,7 +169,7 @@
     and 'oathTOTPToken' in _openldap_mailta_otp_search.stdout
   ansible.builtin.command:
     cmd: >-
-      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
     stdin: |
       dn: uid=mailta,ou=People,{{ ldap_base_dn }}

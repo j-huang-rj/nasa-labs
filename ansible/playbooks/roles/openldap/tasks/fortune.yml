@@ -60,7 +60,7 @@
 - name: "PHASE [fortune : Search All Existing Fortune Entries]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "ou=Fortune,{{ ldap_base_dn }}" '(objectClass=fortune)' cn id
   changed_when: false
@@ -108,7 +108,7 @@
 - name: "PHASE [fortune : Delete Stale Fortune Entries]"
   ansible.builtin.command:
     cmd: >-
-      ldapdelete -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapdelete -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} "{{ item }}"
   changed_when: true
   no_log: true

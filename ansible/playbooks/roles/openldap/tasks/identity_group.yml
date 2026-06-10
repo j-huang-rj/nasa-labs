@@ -15,7 +15,7 @@
 - name: "PHASE [identities : Search Existing Group] | {{ _ident_group.key }}"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -b "cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}" -s base '(objectClass=posixGroup)' dn
   changed_when: false
   failed_when: false
@@ -28,7 +28,7 @@
   when: _openldap_group_exists.rc != 0
   ansible.builtin.command:
     cmd: >-
-      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -f /tmp/openldap-identities/group-{{ _ident_group.key }}.ldif
   changed_when: true
   no_log: true
@@ -38,7 +38,7 @@
 - name: "PHASE [identities : Search Existing Group Managed Attributes] | {{ _ident_group.key }}"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -b "cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}" -s base
       '(objectClass=posixGroup)' cn gidNumber memberUid
   changed_when: false
@@ -74,7 +74,7 @@
   when: _openldap_group_needs_modify | default(false) | bool
   ansible.builtin.command:
     cmd: >-
-      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
     stdin: |
       dn: cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}

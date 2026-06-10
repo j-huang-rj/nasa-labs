@@ -408,7 +408,7 @@
 - name: "PHASE [verify : Search Default PPolicy Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "cn=default,ou=Ppolicy,{{ ldap_base_dn }}" -s base
       '(objectClass=*)' pwdCheckQuality pwdMinLength pwdInHistory pwdUseCheckModule
@@ -458,7 +458,7 @@
 - name: "PHASE [verify : Search TOTP Params Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "{{ openldap_totp_params_dn }}" -s base
       '(objectClass=*)' oathOTPLength oathTOTPTimeStepPeriod oathHMACAlgorithm
@@ -484,7 +484,7 @@
 - name: "PHASE [verify : Search Generalta For OATH Attributes]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "uid=generalta,ou=People,{{ ldap_base_dn }}" -s base
       '(objectClass=posixAccount)' objectClass oathTOTPToken
@@ -509,7 +509,7 @@
 - name: "PHASE [verify : Search Stu For OATH Attributes]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "uid=stu,ou=People,{{ ldap_base_dn }}" -s base
       '(objectClass=posixAccount)' objectClass oathTOTPToken
@@ -534,7 +534,7 @@
 - name: "PHASE [verify : Search Mailta For OATH Attributes]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "uid=mailta,ou=People,{{ ldap_base_dn }}" -s base
       '(objectClass=posixAccount)' objectClass oathTOTPToken
@@ -590,7 +590,7 @@
 - name: "PHASE [verify : Search Fortune Entry Count]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "ou=Fortune,{{ ldap_base_dn }}" '(objectClass=fortune)' dn
   changed_when: false

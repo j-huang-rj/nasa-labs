@@ -18,7 +18,7 @@
 - name: "PHASE [fortune_entry : Search Existing Fortune Entry] | id={{ _fortune_item.ID }}"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "cn=fortune-{{ _fortune_item.ID }},ou=Fortune,{{ ldap_base_dn }}" -s base
       '(objectClass=fortune)' cn id author description
@@ -33,7 +33,7 @@
   when: _openldap_fortune_search.rc != 0
   ansible.builtin.command:
     cmd: >-
-      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -f /tmp/openldap-phase12-fortunes/fortune-{{ _fortune_item.ID }}.ldif
   changed_when: true
@@ -160,7 +160,7 @@
         or _openldap_fortune_current_description != _openldap_fortune_intended_description
       ansible.builtin.command:
         cmd: >-
-          ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
           -H {{ ldap_server_uri }}
         stdin: "{{ _openldap_fortune_entry_modify }}"
       changed_when: true

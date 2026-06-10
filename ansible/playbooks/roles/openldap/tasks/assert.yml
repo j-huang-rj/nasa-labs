@@ -87,55 +87,143 @@
       ldap_users must contain generalta (UID 10000), mailta (UID 10001), stu (UID 20000)
       with correct homes, groups, ssh_public_key, and password_hash_key.
 
-# ──────────────────────────────────────
-# Check Required OpenLDAP Secret Shapes
-# ──────────────────────────────────────
-- name: "PHASE [assert : Normalize Legacy OpenLDAP User Password Hashes]"
+# ─────────────────────────────────────────────────────────
+# Normalize credentials to internal facts (canonical first,
+# fallback to legacy flat vars)
+# ─────────────────────────────────────────────────────────
+- name: "PHASE [assert : Normalize Admin Password]"
   become: false
   ansible.builtin.set_fact:
-    openldap_user_password_hashes: >-
-      {{ {
-        'generalta': openldap_generalta_password_hash | default(''),
-        'mailta': openldap_mailta_password_hash | default(''),
-        'stu': openldap_stu_password_hash | default('')
-      } | combine(openldap_user_password_hashes | default({}), recursive=false) }}
+    _openldap_admin_password: >-
+      {{ openldap_credentials.directory_manager.password_plaintext
+         | default(openldap_admin_password | default('')) }}
+    _openldap_admin_password_hash: >-
+      {{ openldap_credentials.directory_manager.password_hash
+         | default(openldap_admin_password_hash | default('')) }}
   no_log: true
 
-- name: "PHASE [assert : Check Required OpenLDAP Secret Shapes]"
+- name: "PHASE [assert : Normalize Bind Password]"
+  become: false
+  ansible.builtin.set_fact:
+    _openldap_bind_password: >-
+      {{ openldap_credentials.service_bind.password_plaintext
+         | default(openldap_bind_password | default('')) }}
+    _openldap_bind_password_hash: >-
+      {{ openldap_credentials.service_bind.password_hash
+         | default(openldap_bind_password_hash | default('')) }}
+  no_log: true
+
+- name: "PHASE [assert : Normalize User Password Hashes]"
+  become: false
+  ansible.builtin.set_fact:
+    _openldap_user_password_hashes: >-
+      {%- set hashes = {} -%}
+      {%- for uname in ldap_users.keys() | list -%}
+      {%-   set _ = hashes.update({uname:
+            openldap_credentials.users[uname].password_hash
+            | default(openldap_user_password_hashes[uname]
+            | default(openldap_user_password_hashes[ldap_users[uname].password_hash_key]
+            | default(''))) }) -%}
+      {%- endfor -%}
+      {{ hashes }}
+    _openldap_user_plaintext_passwords: >-
+      {%- set plains = {} -%}
+      {%- for uname in ldap_users.keys() | list -%}
+      {%-   set _ = plains.update({uname:
+            openldap_credentials.users[uname].password_plaintext
+            | default(openldap_ta_password | default('')) }) -%}
+      {%- endfor -%}
+      {{ plains }}
+    _openldap_user_totp_secrets: >-
+      {%- set secrets = {} -%}
+      {%- for uname in ldap_users.keys() | list -%}
+      {%-   set cred_totp = openldap_credentials.users[uname].totp_secret_raw_b64
+             | default(none) -%}
+      {%-   if cred_totp is not none and cred_totp | length > 0 -%}
+      {%-     set _ = secrets.update({uname: cred_totp}) -%}
+      {%-   elif uname == 'generalta' and openldap_generalta_totp_secret | default('') | length > 0 -%}
+      {%-     set _ = secrets.update({uname: openldap_generalta_totp_secret}) -%}
+      {%-   elif uname == 'stu' and openldap_stu_totp_secret | default('') | length > 0 -%}
+      {%-     set _ = secrets.update({uname: openldap_stu_totp_secret}) -%}
+      {%-   elif cred_totp is not none -%}
+      {%-     set _ = secrets.update({uname: cred_totp}) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ secrets }}
+  no_log: true
+
+- name: "PHASE [assert : Check Required OpenLDAP Admin Secret Shapes]"
   become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      # Admin password and hash must be defined and non-empty
-      - openldap_admin_password is defined
-      - openldap_admin_password | length > 0
-      - openldap_admin_password_hash is defined
-      - openldap_admin_password_hash | length > 0
-
-      # User password hashes must be a dict with required keys
-      - openldap_user_password_hashes is defined
-      - openldap_user_password_hashes is mapping
-      - openldap_user_password_hashes.generalta is defined
-      - openldap_user_password_hashes.generalta | length > 0
-      - openldap_user_password_hashes.mailta is defined
-      - openldap_user_password_hashes.mailta | length > 0
-      - openldap_user_password_hashes.stu is defined
-      - openldap_user_password_hashes.stu | length > 0
-
-      # Each hash must begin with an LDAP password hash marker
-      - >-
-        openldap_user_password_hashes.generalta is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
-      - >-
-        openldap_user_password_hashes.mailta is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
-      - >-
-        openldap_user_password_hashes.stu is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
-
+      - _openldap_admin_password is defined
+      - _openldap_admin_password | length > 0
+      - _openldap_admin_password_hash is defined
+      - _openldap_admin_password_hash | length > 0
     fail_msg: >-
-      Required OpenLDAP secret shapes are missing or invalid.
-      openldap_admin_password and openldap_admin_password_hash must be defined and non-empty.
-      openldap_user_password_hashes must be a dict with non-empty keys: generalta, mailta, stu.
-      Each hash must begin with an LDAP password hash marker: {SSHA}, {SSHA512}, {SSHA256}, {SHA}, {CRYPT}, {ARGON2}.
+      Required OpenLDAP admin secrets are missing.
+      _openldap_admin_password and _openldap_admin_password_hash must be defined and non-empty.
   no_log: true
+
+- name: "PHASE [assert : Check Required OpenLDAP User Password Hash Shapes]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_user_password_hashes is defined
+      - _openldap_user_password_hashes is mapping
+      - "_openldap_user_password_hashes.keys() | list | sort == ldap_users.keys() | list | sort"
+      - item | length > 0
+      - >-
+        item is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
+    fail_msg: >-
+      User password hash for {{ _p12_user.key }} is missing or does not begin
+      with an LDAP password hash marker: {SSHA}, {SSHA512}, {SSHA256}, {SHA}, {CRYPT}, {ARGON2}.
+  loop: "{{ ldap_users | dict2items }}"
+  loop_control:
+    loop_var: _p12_user
+    label: "{{ _p12_user.key }}"
+  no_log: true
+  vars:
+    item: "{{ _openldap_user_password_hashes[_p12_user.key] | default('') }}"
+
+- name: "PHASE [assert : Check Required OpenLDAP User Plaintext Password Shapes]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_user_plaintext_passwords is defined
+      - _openldap_user_plaintext_passwords is mapping
+      - "_openldap_user_plaintext_passwords.keys() | list | sort == ldap_users.keys() | list | sort"
+      - item | length > 0
+    fail_msg: >-
+      Plaintext password for user {{ _p12_ptuser.key }} is missing or empty.
+  loop: "{{ ldap_users | dict2items }}"
+  loop_control:
+    loop_var: _p12_ptuser
+    label: "{{ _p12_ptuser.key }}"
+  no_log: true
+  vars:
+    item: "{{ _openldap_user_plaintext_passwords[_p12_ptuser.key] | default('') }}"
+
+- name: "PHASE [assert : Check Required OpenLDAP User TOTP Secret Shapes]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_user_totp_secrets is defined
+      - _openldap_user_totp_secrets is mapping
+      - item | length > 0
+    fail_msg: >-
+      TOTP secret for user {{ _p12_totp_user.key }} (totp_required) is missing or empty.
+  loop: "{{ ldap_users | dict2items | selectattr('value.totp_required', 'equalto', true) }}"
+  loop_control:
+    loop_var: _p12_totp_user
+    label: "{{ _p12_totp_user.key }}"
+  no_log: true
+  vars:
+    item: "{{ _openldap_user_totp_secrets[_p12_totp_user.key] | default('') }}"
 
 # ─────────────────────────────────────
 # Check Optional TLS Secret Pair Shape
@@ -177,6 +265,7 @@
 
 # ──────────────────────────────────────────
 # Check Required Phase 12 Secret Shapes
+# (validates normalized facts that derive from openldap_credentials or legacy flat vars)
 # ──────────────────────────────────────────
 - name: "PHASE [assert : Check Required Phase 12 Secret Shapes]"
   become: false
@@ -184,18 +273,23 @@
     quiet: true
     that:
       # TA plaintext password for Phase 12 non-root validation binds
-      - openldap_ta_password is defined
-      - openldap_ta_password | length > 0
+      - _openldap_user_plaintext_passwords.generalta is defined
+      - _openldap_user_plaintext_passwords.generalta | length > 0
+      - _openldap_user_plaintext_passwords.mailta is defined
+      - _openldap_user_plaintext_passwords.mailta | length > 0
+      - _openldap_user_plaintext_passwords.stu is defined
+      - _openldap_user_plaintext_passwords.stu | length > 0
 
       # TOTP secrets (raw bytes, base64-encoded) for generalta and stu
-      - openldap_generalta_totp_secret is defined
-      - openldap_generalta_totp_secret | length > 0
-      - openldap_stu_totp_secret is defined
-      - openldap_stu_totp_secret | length > 0
+      - _openldap_user_totp_secrets.generalta is defined
+      - _openldap_user_totp_secrets.generalta | length > 0
+      - _openldap_user_totp_secrets.stu is defined
+      - _openldap_user_totp_secrets.stu | length > 0
     fail_msg: >-
       Required Phase 12 secret shapes are missing or empty.
-      openldap_ta_password, openldap_generalta_totp_secret, and
-      openldap_stu_totp_secret must be defined and non-empty in
+      _openldap_user_plaintext_passwords must have non-empty values for generalta, mailta, stu.
+      _openldap_user_totp_secrets must have non-empty values for generalta and stu.
+      Source these from openldap_credentials (preferred) or legacy flat vars in
       host_vars/ldap-01/secrets.yml.
   no_log: true
 

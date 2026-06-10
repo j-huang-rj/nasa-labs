@@ -142,12 +142,22 @@ argument_specs:
         required: true
         description: posixAccount definitions keyed by username (e.g. generalta, mailta, stu)
 
+      openldap_credentials:
+        type: dict
+        required: false
+        description: >-
+          Canonical OpenLDAP credential bundle with directory_manager,
+          service_bind, and per-user credentials.
+          Prefer openldap_credentials over flat legacy variables.
+          Populated from gitignored host_vars/*/secrets.yml.
+
       openldap_user_password_hashes:
         type: dict
         required: false
         description: >-
-          User password hashes keyed by username (e.g. generalta, mailta, stu).
+          (Legacy) User password hashes keyed by username (e.g. generalta, mailta, stu).
           Populated from gitignored host_vars/*/secrets.yml.
+          Prefer openldap_credentials during migration window.
 
       openldap_tls_private_key:
         type: str
