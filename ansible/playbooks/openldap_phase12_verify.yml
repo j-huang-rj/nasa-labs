@@ -1616,3 +1616,393 @@
       become: false
       ansible.builtin.debug:
         msg: "Phase 12 Fortune schema, data, and sssvlv validation complete"
+
+# ──────────────────────────────────────────────────────────
+# Idempotency Check: Second Convergence Proof
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 Idempotency Check"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tags:
+    - idempotency
+  vars:
+    _p12_inventory_file: >-
+      {{ inventory_file
+         | default(ansible_inventory_sources | first
+                   | default((playbook_dir + '/../inventory/hosts.yml'))) }}
+  tasks:
+    - name: "PHASE [idempotency : START]"
+      ansible.builtin.debug:
+        msg: "Phase 12 idempotency: re-run ldap_configure.yml limited to ldap-01"
+
+    - name: "PHASE [idempotency : Run ldap_configure.yml Second Time]"
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - "{{ _p12_inventory_file }}"
+          - "{{ playbook_dir }}/ldap_configure.yml"
+          - --limit
+          - ldap-01
+          - -e
+          - >-
+            {{ {
+              'openldap_enabled': true,
+              'ansible_user': ansible_user | default('student'),
+              'ansible_ssh_common_args': ansible_ssh_common_args | default('')
+            } | to_json }}
+      changed_when: false
+      register: _p12_idempotency_rerun
+
+    - name: "PHASE [idempotency : Assert No Changes Failures Or Unreachable On Rerun]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'unreachable=0' in _p12_idempotency_rerun.stdout"
+          - "'failed=0' in _p12_idempotency_rerun.stdout"
+          - "'changed=0' in _p12_idempotency_rerun.stdout"
+        fail_msg: >-
+          Second ldap_configure.yml run reported unreachable, failed, or changed tasks.
+          stdout={{ _p12_idempotency_rerun.stdout | default('') }}
+
+    - name: "PHASE [idempotency : END]"
+      ansible.builtin.debug:
+        msg: "Phase 12 idempotency check complete"
+
+# ──────────────────────────────────────────────────────────
+# Reboot Persistence Check: Post-Reboot Phase 12 State Proof
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 Reboot Persistence Check"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  serial: 1
+  tags:
+    - reboot
+  vars:
+    _p12_reboot_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
+    _p12_reboot_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
+    _p12_reboot_fortune_base: "ou=Fortune,{{ ldap_base_dn }}"
+    _p12_reboot_totp_script: |
+      import base64, hmac, hashlib, struct, time, sys
+      secret_b64 = sys.argv[1]
+      raw_key = base64.b64decode(secret_b64)
+      counter = int(time.time() / 60)
+      counter_bytes = struct.pack('>Q', counter)
+      h = hmac.new(raw_key, counter_bytes, hashlib.sha1).digest()
+      offset_byte = h[-1] & 0x0F
+      code = struct.unpack('>I', h[offset_byte:offset_byte+4])[0] & 0x7FFFFFFF
+      print(f"{code % 1000000:06d}")
+  tasks:
+    - name: "PHASE [reboot : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: >-
+          Phase 12 reboot persistence check — reboot, then re-assert
+          LDAPS, ACL, ppolicy, TOTP, Fortune, and sssvlv state
+
+    - name: "PHASE [reboot : Reboot ldap-01 And Wait For Return]"
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        pre_reboot_delay: 5
+        post_reboot_delay: 15
+
+    # ─── Post-reboot: LDAPS base search ───
+    - name: "PHASE [reboot : Post-Reboot LDAPS Search Base DN With Certificate Validation]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+      changed_when: false
+      register: _p12_reboot_ldaps_search
+
+    - name: "PHASE [reboot : Assert Post-Reboot LDAPS Search Works]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_ldaps_search.rc == 0
+          - ldap_base_dn in _p12_reboot_ldaps_search.stdout
+        fail_msg: >-
+          Post-reboot LDAPS search failed.
+          rc={{ _p12_reboot_ldaps_search.rc }},
+          stdout={{ _p12_reboot_ldaps_search.stdout | default('') }}
+
+    # ─── Post-reboot: Ordered ACLs ───
+    - name: "PHASE [reboot : Post-Reboot Search OLC Access Rules]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config
+          '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+          dn olcAccess
+      changed_when: false
+      register: _p12_reboot_acl_search
+
+    - name: "PHASE [reboot : Assert Post-Reboot Ordered ACLs Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_acl_search.rc == 0
+          - "'olcAccess: {0}' in _p12_reboot_acl_search.stdout"
+          - "'userPassword' in _p12_reboot_acl_search.stdout"
+          - "'oathSecret' in _p12_reboot_acl_search.stdout"
+        fail_msg: >-
+          Post-reboot ordered ACLs missing.
+          stdout={{ _p12_reboot_acl_search.stdout | default('') }}
+
+    # ─── Post-reboot: ppolicy overlay and default policy ───
+    - name: "PHASE [reboot : Post-Reboot Discover Target MDB By Suffix]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config
+          '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+          dn
+      changed_when: false
+      failed_when: false
+      register: _p12_reboot_mdb_search
+
+    - name: "PHASE [reboot : Extract MDB Database DN]"
+      when: _p12_reboot_mdb_search.rc == 0
+      ansible.builtin.set_fact:
+        _p12_reboot_mdb_dn: >-
+          {{ _p12_reboot_mdb_search.stdout_lines | default([])
+             | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+             | list
+             | first
+             | default('')
+             | regex_replace('^dn: ', '')
+             | trim }}
+
+    - name: "PHASE [reboot : Post-Reboot Search PPolicy Overlay]"
+      when: _p12_reboot_mdb_dn | default('') | length > 0
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "olcOverlay=ppolicy,{{ _p12_reboot_mdb_dn }}" -s base
+          '(objectClass=*)' olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
+      changed_when: false
+      register: _p12_reboot_ppolicy_search
+
+    - name: "PHASE [reboot : Assert Post-Reboot PPolicy Overlay Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_ppolicy_search.rc == 0
+          - "'olcPPolicyDefault' in _p12_reboot_ppolicy_search.stdout"
+          - "'olcPPolicyCheckModule' in _p12_reboot_ppolicy_search.stdout"
+          - "'olcPPolicyHashCleartext' in _p12_reboot_ppolicy_search.stdout"
+        fail_msg: >-
+          Post-reboot ppolicy overlay missing.
+          stdout={{ _p12_reboot_ppolicy_search.stdout | default('') }}
+
+    - name: "PHASE [reboot : Post-Reboot Search Default PPolicy Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "cn=default,ou=Ppolicy,{{ ldap_base_dn }}" -s base
+          '(objectClass=*)' pwdCheckQuality pwdMinLength pwdInHistory pwdUseCheckModule
+      changed_when: false
+      no_log: true
+      register: _p12_reboot_ppolicy_entry
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [reboot : Assert Post-Reboot Default PPolicy Entry Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_ppolicy_entry.rc == 0
+          - "'pwdCheckQuality: 2' in _p12_reboot_ppolicy_entry.stdout"
+          - "'pwdMinLength: 8' in _p12_reboot_ppolicy_entry.stdout"
+          - "'pwdInHistory: 1' in _p12_reboot_ppolicy_entry.stdout"
+          - "'pwdUseCheckModule: TRUE' in _p12_reboot_ppolicy_entry.stdout"
+        fail_msg: >-
+          Post-reboot default ppolicy entry missing or incorrect.
+      no_log: true
+
+    # ─── Post-reboot: OTP overlay, TOTP params, and user OATH links ───
+    - name: "PHASE [reboot : Post-Reboot Search OTP Overlay]"
+      when: _p12_reboot_mdb_dn | default('') | length > 0
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "olcOverlay=otp,{{ _p12_reboot_mdb_dn }}" -s base
+          '(objectClass=*)' dn
+      changed_when: false
+      register: _p12_reboot_otp_overlay
+
+    - name: "PHASE [reboot : Assert Post-Reboot OTP Overlay Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_otp_overlay.rc == 0
+          - "'olcOverlay=otp' in _p12_reboot_otp_overlay.stdout"
+        fail_msg: >-
+          Post-reboot OTP overlay missing.
+          stdout={{ _p12_reboot_otp_overlay.stdout | default('') }}
+
+    - name: "PHASE [reboot : Post-Reboot Search TOTP Params Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ openldap_totp_params_dn }}" -s base
+          '(objectClass=*)' oathOTPLength oathTOTPTimeStepPeriod oathHMACAlgorithm
+      changed_when: false
+      no_log: true
+      register: _p12_reboot_totp_params
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [reboot : Assert Post-Reboot TOTP Params Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_totp_params.rc == 0
+          - "'oathOTPLength: 6' in _p12_reboot_totp_params.stdout"
+          - "'oathTOTPTimeStepPeriod: 60' in _p12_reboot_totp_params.stdout"
+        fail_msg: >-
+          Post-reboot TOTP params missing or incorrect.
+      no_log: true
+
+    - name: "PHASE [reboot : Post-Reboot Search Generalta OATH Attributes]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_reboot_generalta_dn }}" -s base
+          '(objectClass=posixAccount)' objectClass oathTOTPToken
+      changed_when: false
+      no_log: true
+      register: _p12_reboot_generalta_oath
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [reboot : Assert Post-Reboot Generalta OATH Links Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_generalta_oath.rc == 0
+          - "'oathTOTPUser' in _p12_reboot_generalta_oath.stdout"
+          - "'oathTOTPToken' in _p12_reboot_generalta_oath.stdout"
+        fail_msg: >-
+          Post-reboot generalta OATH links missing.
+      no_log: true
+
+    # ─── Post-reboot: TOTP password+code bind for generalta ───
+    - name: "PHASE [reboot : Post-Reboot Generate TOTP Code For Generalta]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_reboot_totp_script }}" "{{ openldap_generalta_totp_secret }}"
+      changed_when: false
+      no_log: true
+      register: _p12_reboot_totp_code
+
+    - name: "PHASE [reboot : Set Post-Reboot TOTP Code Fact]"
+      ansible.builtin.set_fact:
+        _p12_reboot_totp_code_val: "{{ _p12_reboot_totp_code.stdout | trim }}"
+      no_log: true
+
+    - name: "PHASE [reboot : Post-Reboot Generalta Password Plus TOTP Code Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_reboot_generalta_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_reboot_totp_code_val }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      no_log: true
+      register: _p12_reboot_totp_bind
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [reboot : Assert Post-Reboot TOTP Bind Succeeds]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_totp_bind.rc == 0
+        fail_msg: >-
+          Post-reboot generalta password+TOTP code bind failed.
+          rc={{ _p12_reboot_totp_bind.rc }}
+      no_log: true
+
+    # ─── Post-reboot: Fortune entries ───
+    - name: "PHASE [reboot : Post-Reboot Search Fortune Entries]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_reboot_fortune_base }}" '(objectClass=fortune)' dn
+      changed_when: false
+      no_log: true
+      register: _p12_reboot_fortune_search
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [reboot : Assert Post-Reboot Fortune Entries Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_fortune_search.rc == 0
+          - "'cn=fortune-' in _p12_reboot_fortune_search.stdout"
+        fail_msg: >-
+          Post-reboot Fortune entries missing from ou=Fortune.
+      no_log: true
+
+    # ─── Post-reboot: sssvlv overlay and server-side sort/page ───
+    - name: "PHASE [reboot : Post-Reboot Search sssvlv Overlay]"
+      when: _p12_reboot_mdb_dn | default('') | length > 0
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "olcOverlay=sssvlv,{{ _p12_reboot_mdb_dn }}" -s base
+          '(objectClass=*)' olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+      changed_when: false
+      register: _p12_reboot_sssvlv_overlay
+
+    - name: "PHASE [reboot : Assert Post-Reboot sssvlv Overlay Intact]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_sssvlv_overlay.rc == 0
+          - "'olcSssVlvMax' in _p12_reboot_sssvlv_overlay.stdout"
+          - "'olcSssVlvMaxKeys' in _p12_reboot_sssvlv_overlay.stdout"
+          - "'olcSssVlvMaxPerConn' in _p12_reboot_sssvlv_overlay.stdout"
+        fail_msg: >-
+          Post-reboot sssvlv overlay missing.
+          stdout={{ _p12_reboot_sssvlv_overlay.stdout | default('') }}
+
+    - name: "PHASE [reboot : Post-Reboot Server-Side Sort And Paged Results Search]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -b "{{ _p12_reboot_fortune_base }}"
+          -E sss=author
+          -E pr=10/noprompt
+          '(objectClass=fortune)' cn id author description
+      changed_when: false
+      no_log: true
+      register: _p12_reboot_sssvlv_search
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [reboot : Assert Post-Reboot Sort And Page Search Succeeds]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_reboot_sssvlv_search.rc == 0
+          - "'cn=fortune-' in _p12_reboot_sssvlv_search.stdout"
+          - "'author::' in _p12_reboot_sssvlv_search.stdout"
+        fail_msg: >-
+          Post-reboot server-side sort and paged results failed.
+          rc={{ _p12_reboot_sssvlv_search.rc }}
+      no_log: true
+
+    - name: "PHASE [reboot : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 reboot persistence check complete"
