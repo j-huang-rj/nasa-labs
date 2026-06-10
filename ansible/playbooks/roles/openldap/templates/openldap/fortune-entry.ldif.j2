@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+dn: cn=fortune-{{ fortune_id }},ou=Fortune,{{ ldap_base_dn }}
+objectClass: top
+objectClass: fortune
+cn: fortune-{{ fortune_id }}
+id: {{ fortune_id }}
+author:: {{ fortune_author | b64encode }}
+description:: {{ fortune_description | b64encode }}
