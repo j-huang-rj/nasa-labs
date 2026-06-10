@@ -69,7 +69,7 @@
     group: ldap
     mode: "0644"
     remote_src: true
-  notify: Restart slapd
+  notify: "PHASE [handler : Restart slapd]"
 
 # ─────────────────────────────────────────────────────────────────────────
 # Reconcile ppolicy overlay on target MDB
