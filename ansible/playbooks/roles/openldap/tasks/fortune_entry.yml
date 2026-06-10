@@ -48,8 +48,8 @@
       ansible.builtin.set_fact:
         _openldap_fortune_intended_cn: "fortune-{{ _fortune_item.ID }}"
         _openldap_fortune_intended_id: "{{ _fortune_item.ID }}"
-        _openldap_fortune_intended_author: "{{ _fortune_item.Author | b64encode }}"
-        _openldap_fortune_intended_description: "{{ _fortune_item.Description | b64encode }}"
+        _openldap_fortune_intended_author: "{{ _fortune_item.Author }}"
+        _openldap_fortune_intended_description: "{{ _fortune_item.Description }}"
 
     - name: "PHASE [fortune_entry : Extract Current cn] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
@@ -75,21 +75,21 @@
       ansible.builtin.set_fact:
         _openldap_fortune_current_author: >-
           {{ _openldap_fortune_search.stdout_lines | default([])
-             | select('match', '^author:: ')
+             | select('match', '^author::? ')
              | list
              | first
              | default('')
-             | regex_replace('^author:: ', '') }}
+             | regex_replace('^author::? ', '') }}
 
     - name: "PHASE [fortune_entry : Extract Current description] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
         _openldap_fortune_current_description: >-
           {{ _openldap_fortune_search.stdout_lines | default([])
-             | select('match', '^description:: ')
+             | select('match', '^description::? ')
              | list
              | first
              | default('')
-             | regex_replace('^description:: ', '') }}
+             | regex_replace('^description::? ', '') }}
 
     - name: "PHASE [fortune_entry : Build Fortune Entry Modify LDIF] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
@@ -109,12 +109,12 @@
           {%- endif -%}
           {%- if _openldap_fortune_current_author != _openldap_fortune_intended_author -%}
           {%-   set lines = lines + ['replace: author'] -%}
-          {%-   set lines = lines + ['author:: ' ~ _openldap_fortune_intended_author] -%}
+          {%-   set lines = lines + ['author:: ' ~ _fortune_item.Author | b64encode] -%}
           {%-   set lines = lines + ['-'] -%}
           {%- endif -%}
           {%- if _openldap_fortune_current_description != _openldap_fortune_intended_description -%}
           {%-   set lines = lines + ['replace: description'] -%}
-          {%-   set lines = lines + ['description:: ' ~ _openldap_fortune_intended_description] -%}
+          {%-   set lines = lines + ['description:: ' ~ _fortune_item.Description | b64encode] -%}
           {%-   set lines = lines + ['-'] -%}
           {%- endif -%}
           {{ lines | join('\n') }}
