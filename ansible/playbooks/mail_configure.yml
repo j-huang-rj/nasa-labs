@@ -1,5 +1,6 @@
 ---
 # Prerequisites:
+#   - bootstrap.yml
 #   - dns_configure.yml
 
 - name: Mail Service Configuration
