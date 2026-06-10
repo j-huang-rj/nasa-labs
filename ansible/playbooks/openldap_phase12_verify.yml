@@ -860,12 +860,9 @@
       code = struct.unpack('>I', h[offset_byte:offset_byte+4])[0] & 0x7FFFFFFF
       print(f"{code % 1000000:06d}")
     _p12_totp_wait_script: |
-      import time, sys
+      import time
       remaining = 60 - (time.time() % 60)
-      if remaining > 2:
-          print(int(remaining + 2))
-      else:
-          print(0)
+      print(int(remaining + 2))
   tasks:
     # ─── TOTP config: overlay, params, user OATH links ───
     - name: "PHASE [totp_config : START]"
