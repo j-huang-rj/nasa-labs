@@ -148,16 +148,107 @@ argument_specs:
         description: >-
           Canonical OpenLDAP credential bundle with directory_manager,
           service_bind, and per-user credentials.
-          Prefer openldap_credentials over flat legacy variables.
           Populated from gitignored host_vars/*/secrets.yml.
+        options:
+          directory_manager:
+            type: dict
+            required: true
+            description: Directory manager bind credential material.
+            options:
+              password_plaintext:
+                type: str
+                required: true
+                no_log: true
+                description: Directory manager plaintext password for LDAP binds.
+              password_hash:
+                type: str
+                required: true
+                no_log: true
+                description: Directory manager LDAP password hash.
 
-      openldap_user_password_hashes:
-        type: dict
-        required: false
-        description: >-
-          (Legacy) User password hashes keyed by username (e.g. generalta, mailta, stu).
-          Populated from gitignored host_vars/*/secrets.yml.
-          Prefer openldap_credentials during migration window.
+          service_bind:
+            type: dict
+            required: true
+            description: Service bind credential material.
+            options:
+              password_plaintext:
+                type: str
+                required: true
+                no_log: true
+                description: Service bind plaintext password for LDAP binds.
+              password_hash:
+                type: str
+                required: true
+                no_log: true
+                description: Service bind LDAP password hash.
+
+          users:
+            type: dict
+            required: true
+            description: Per-user credential material keyed by LDAP username.
+            options:
+              generalta:
+                type: dict
+                required: true
+                description: Credentials and TOTP secret for the generalta user.
+                options:
+                  password_plaintext:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Plaintext password for LDAP bind verification.
+                  password_hash:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: LDAP password hash for the userPassword attribute.
+                  totp_secret_raw_b64:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Base64-encoded raw TOTP secret bytes.
+
+              mailta:
+                type: dict
+                required: true
+                description: Credentials for the password-only mailta user.
+                options:
+                  password_plaintext:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Plaintext password for LDAP bind verification.
+                  password_hash:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: LDAP password hash for the userPassword attribute.
+                  totp_secret_raw_b64:
+                    type: raw
+                    required: false
+                    no_log: true
+                    description: Null for password-only users; raw base64 string if TOTP is enabled.
+
+              stu:
+                type: dict
+                required: true
+                description: Credentials and TOTP secret for the stu user.
+                options:
+                  password_plaintext:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Plaintext password for LDAP bind verification.
+                  password_hash:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: LDAP password hash for the userPassword attribute.
+                  totp_secret_raw_b64:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Base64-encoded raw TOTP secret bytes.
 
       openldap_tls_private_key:
         type: str

@@ -46,10 +46,12 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -H {{ ldap_server_uri }}
-      -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+      -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -b "{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
   environment:
     LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
   changed_when: false
+  no_log: true
   register: _openldap_ldaps_search
 
 - name: "PHASE [verify : Assert LDAPS Base DN Search Returned Results]"
@@ -62,6 +64,7 @@
       LDAPS search on {{ ldap_server_uri }} failed or base DN not found.
       rc={{ _openldap_ldaps_search.rc }},
       stdout={{ _openldap_ldaps_search.stdout | default('') }}
+  no_log: true
 
 # ─────────────────────────────────────────────────────────────────────────
 # OLC state verification (cn=config via ldapi)
@@ -185,10 +188,14 @@
 - name: "PHASE [verify : Search Base DN Organizational Units]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -Y EXTERNAL -H ldapi:///
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
       -b "{{ ldap_base_dn }}" '(objectClass=organizationalUnit)' dn ou
   changed_when: false
+  no_log: true
   register: _openldap_ou_search
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
 - name: "PHASE [verify : Assert Base DN OUs People Group Ppolicy SUDOers Fortune]"
   ansible.builtin.assert:
@@ -212,11 +219,15 @@
 - name: "PHASE [verify : Search TA Group Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -Y EXTERNAL -H ldapi:///
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
       -b "cn=ta,ou=Group,{{ ldap_base_dn }}" '(objectClass=posixGroup)'
       cn gidNumber memberUid
   changed_when: false
+  no_log: true
   register: _openldap_group_search_ta
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
 - name: "PHASE [verify : Assert TA Group Exists With Correct GID And Members]"
   ansible.builtin.assert:
@@ -235,11 +246,15 @@
 - name: "PHASE [verify : Search STU Group Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -Y EXTERNAL -H ldapi:///
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
       -b "cn=stu,ou=Group,{{ ldap_base_dn }}" '(objectClass=posixGroup)'
       cn gidNumber memberUid
   changed_when: false
+  no_log: true
   register: _openldap_group_search_stu
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
 - name: "PHASE [verify : Assert STU Group Exists With Correct GID And Member]"
   ansible.builtin.assert:
@@ -261,13 +276,16 @@
 - name: "PHASE [verify : Search Generalta User Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -Y EXTERNAL -H ldapi:///
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
       -b "uid=generalta,ou=People,{{ ldap_base_dn }}"
       '(objectClass=posixAccount)'
       uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
   changed_when: false
   register: _openldap_user_search_generalta
   no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
 - name: "PHASE [verify : Assert Generalta User Attributes]"
   ansible.builtin.assert:
@@ -280,8 +298,12 @@
       - "'homeDirectory: /u/ta/generalta' in _openldap_user_search_generalta.stdout"
       - "('mail: generalta@' ~ ldap_domain) in _openldap_user_search_generalta.stdout"
       - "'loginShell: /bin/bash' in _openldap_user_search_generalta.stdout"
-      - "'sshPublicKey' in _openldap_user_search_generalta.stdout"
-      - "'userPassword' in _openldap_user_search_generalta.stdout"
+      - >-
+        _openldap_user_search_generalta.stdout_lines | default([])
+        | select('match', '^sshPublicKey::? ') | list | length > 0
+      - >-
+        _openldap_user_search_generalta.stdout_lines | default([])
+        | select('match', '^userPassword::? ') | list | length > 0
     fail_msg: >-
       Generalta user entry missing or has wrong attributes.
       Expected: uid=generalta, uidNumber=10000, gidNumber=10000,
@@ -292,13 +314,16 @@
 - name: "PHASE [verify : Search Mailta User Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -Y EXTERNAL -H ldapi:///
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
       -b "uid=mailta,ou=People,{{ ldap_base_dn }}"
       '(objectClass=posixAccount)'
       uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
   changed_when: false
   register: _openldap_user_search_mailta
   no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
 - name: "PHASE [verify : Assert Mailta User Attributes]"
   ansible.builtin.assert:
@@ -311,8 +336,12 @@
       - "'homeDirectory: /u/ta/mailta' in _openldap_user_search_mailta.stdout"
       - "('mail: mailta@' ~ ldap_domain) in _openldap_user_search_mailta.stdout"
       - "'loginShell: /bin/bash' in _openldap_user_search_mailta.stdout"
-      - "'sshPublicKey' in _openldap_user_search_mailta.stdout"
-      - "'userPassword' in _openldap_user_search_mailta.stdout"
+      - >-
+        _openldap_user_search_mailta.stdout_lines | default([])
+        | select('match', '^sshPublicKey::? ') | list | length > 0
+      - >-
+        _openldap_user_search_mailta.stdout_lines | default([])
+        | select('match', '^userPassword::? ') | list | length > 0
     fail_msg: >-
       Mailta user entry missing or has wrong attributes.
       Expected: uid=mailta, uidNumber=10001, gidNumber=10000,
@@ -323,13 +352,16 @@
 - name: "PHASE [verify : Search Stu User Entry]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -Y EXTERNAL -H ldapi:///
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
       -b "uid=stu,ou=People,{{ ldap_base_dn }}"
       '(objectClass=posixAccount)'
       uid uidNumber gidNumber homeDirectory mail loginShell sshPublicKey userPassword
   changed_when: false
   register: _openldap_user_search_stu
   no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
 - name: "PHASE [verify : Assert Stu User Attributes]"
   ansible.builtin.assert:
@@ -342,8 +374,12 @@
       - "'homeDirectory: /u/stu/stu' in _openldap_user_search_stu.stdout"
       - "('mail: stu@' ~ ldap_domain) in _openldap_user_search_stu.stdout"
       - "'loginShell: /bin/bash' in _openldap_user_search_stu.stdout"
-      - "'sshPublicKey' in _openldap_user_search_stu.stdout"
-      - "'userPassword' in _openldap_user_search_stu.stdout"
+      - >-
+        _openldap_user_search_stu.stdout_lines | default([])
+        | select('match', '^sshPublicKey::? ') | list | length > 0
+      - >-
+        _openldap_user_search_stu.stdout_lines | default([])
+        | select('match', '^userPassword::? ') | list | length > 0
     fail_msg: >-
       Stu user entry missing or has wrong attributes.
       Expected: uid=stu, uidNumber=20000, gidNumber=20000,
@@ -388,8 +424,9 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "olcOverlay=ppolicy,{{ _openldap_mdb_dn }}" -s base
-      '(objectClass=*)' olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
+      -b "{{ _openldap_mdb_dn }}" -s one
+      '(objectClass=olcPPolicyConfig)'
+      dn olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
   changed_when: false
   register: _openldap_ppolicy_overlay_search
 
@@ -440,8 +477,8 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "olcOverlay=otp,{{ _openldap_mdb_dn }}" -s base
-      '(objectClass=*)' dn
+      -b "{{ _openldap_mdb_dn }}" -s one
+      '(objectClass=olcOverlayConfig)' dn olcOverlay
   changed_when: false
   register: _openldap_otp_overlay_verify
 
@@ -450,9 +487,12 @@
     quiet: true
     that:
       - _openldap_otp_overlay_verify.rc == 0
-      - "'olcOverlay=otp' in _openldap_otp_overlay_verify.stdout"
+      - "'otp' in _openldap_otp_overlay_verify.stdout"
+      - >-
+        _openldap_otp_overlay_verify.stdout_lines | default([])
+        | select('match', '^dn: olcOverlay=.*otp,') | list | length == 1
     fail_msg: >-
-      OTP overlay not present on target MDB.
+      OTP overlay not present on target MDB or duplicated.
       stdout={{ _openldap_otp_overlay_verify.stdout | default('') }}
 
 - name: "PHASE [verify : Search TOTP Params Entry]"
@@ -499,8 +539,12 @@
     quiet: true
     that:
       - _openldap_totp_generalta_verify.rc == 0
-      - "'oathTOTPUser' in _openldap_totp_generalta_verify.stdout"
-      - "'oathTOTPToken' in _openldap_totp_generalta_verify.stdout"
+      - >-
+        _openldap_totp_generalta_verify.stdout_lines | default([])
+        | select('match', '^objectClass: oathTOTPUser$') | list | length > 0
+      - >-
+        _openldap_totp_generalta_verify.stdout_lines | default([])
+        | select('match', '^oathTOTPToken: ') | list | length > 0
     fail_msg: >-
       Generalta missing oathTOTPUser or oathTOTPToken.
       stdout={{ _openldap_totp_generalta_verify.stdout | default('') }}
@@ -524,8 +568,12 @@
     quiet: true
     that:
       - _openldap_totp_stu_verify.rc == 0
-      - "'oathTOTPUser' in _openldap_totp_stu_verify.stdout"
-      - "'oathTOTPToken' in _openldap_totp_stu_verify.stdout"
+      - >-
+        _openldap_totp_stu_verify.stdout_lines | default([])
+        | select('match', '^objectClass: oathTOTPUser$') | list | length > 0
+      - >-
+        _openldap_totp_stu_verify.stdout_lines | default([])
+        | select('match', '^oathTOTPToken: ') | list | length > 0
     fail_msg: >-
       Stu missing oathTOTPUser or oathTOTPToken.
       stdout={{ _openldap_totp_stu_verify.stdout | default('') }}
@@ -549,8 +597,12 @@
     quiet: true
     that:
       - _openldap_totp_mailta_verify.rc == 0
-      - "'oathTOTPUser' not in _openldap_totp_mailta_verify.stdout"
-      - "'oathTOTPToken' not in _openldap_totp_mailta_verify.stdout"
+      - >-
+        _openldap_totp_mailta_verify.stdout_lines | default([])
+        | select('match', '^objectClass: oathTOTPUser$') | list | length == 0
+      - >-
+        _openldap_totp_mailta_verify.stdout_lines | default([])
+        | select('match', '^oathTOTPToken: ') | list | length == 0
     fail_msg: >-
       Mailta should NOT have oathTOTPUser or oathTOTPToken.
       stdout={{ _openldap_totp_mailta_verify.stdout | default('') }}
@@ -564,8 +616,10 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "cn=fortune,cn=schema,cn=config" -s base
-      '(objectClass=olcSchemaConfig)' cn olcAttributeTypes olcObjectClasses
+      -o ldif-wrap=no
+      -b cn=schema,cn=config
+      '(&(objectClass=olcSchemaConfig)(cn=*fortune))'
+      cn olcAttributeTypes olcObjectClasses
   changed_when: false
   register: _openldap_fortune_schema_search
 
@@ -615,8 +669,9 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "olcOverlay=sssvlv,{{ _openldap_mdb_dn }}" -s base
-      '(objectClass=*)' olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+      -b "{{ _openldap_mdb_dn }}" -s one
+      '(objectClass=olcSssVlvConfig)'
+      dn olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
   changed_when: false
   register: _openldap_sssvlv_overlay_search
 

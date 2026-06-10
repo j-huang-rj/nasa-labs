@@ -78,14 +78,26 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "olcOverlay=ppolicy,{{ _openldap_mdb_dn }}" -s base
-      '(objectClass=*)' olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
+      -b "{{ _openldap_mdb_dn }}" -s one
+      '(objectClass=olcPPolicyConfig)'
+      dn olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
   changed_when: false
   failed_when: false
   register: _openldap_ppolicy_overlay_search
 
+- name: "PHASE [ppolicy : Extract PPolicy Overlay DN]"
+  ansible.builtin.set_fact:
+    _openldap_ppolicy_overlay_dn: >-
+      {{ _openldap_ppolicy_overlay_search.stdout_lines | default([])
+         | select('match', '^dn: olcOverlay=.*ppolicy,')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
 - name: "PHASE [ppolicy : Add PPolicy Overlay If Missing]"
-  when: _openldap_ppolicy_overlay_search.rc != 0
+  when: _openldap_ppolicy_overlay_dn | length == 0
   ansible.builtin.command:
     cmd: >-
       ldapadd -Y EXTERNAL -H ldapi:///
@@ -94,7 +106,7 @@
 
 - name: "PHASE [ppolicy : Reconcile PPolicy Overlay Attributes]"
   when:
-    - _openldap_ppolicy_overlay_search.rc == 0
+    - _openldap_ppolicy_overlay_dn | length > 0
   block:
     - name: "PHASE [ppolicy : Set Intended PPolicy Overlay Attributes]"
       ansible.builtin.set_fact:
@@ -136,7 +148,7 @@
       ansible.builtin.set_fact:
         _openldap_ppolicy_overlay_modify: >-
           {%- set lines = [] -%}
-          {%- set lines = lines + ['dn: olcOverlay=ppolicy,' ~ _openldap_mdb_dn] -%}
+          {%- set lines = lines + ['dn: ' ~ _openldap_ppolicy_overlay_dn] -%}
           {%- set lines = lines + ['changetype: modify'] -%}
           {%- if _openldap_ppolicy_current_default != _openldap_ppolicy_intended_default -%}
           {%-   set lines = lines + ['replace: olcPPolicyDefault'] -%}
@@ -152,6 +164,9 @@
           {%-   set lines = lines + ['replace: olcPPolicyHashCleartext'] -%}
           {%-   set lines = lines + ['olcPPolicyHashCleartext: ' ~ _openldap_ppolicy_intended_hash_cleartext] -%}
           {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if lines | last == '-' -%}
+          {%-   set lines = lines[:-1] -%}
           {%- endif -%}
           {{ lines | join('\n') }}
       changed_when: false
@@ -174,7 +189,7 @@
     cmd: >-
       ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }} -b "cn=default,ou=Ppolicy,{{ ldap_base_dn }}" -s base
-      '(objectClass=*)' pwdCheckQuality pwdMinLength pwdInHistory pwdUseCheckModule
+      '(objectClass=*)' objectClass pwdCheckQuality pwdMinLength pwdInHistory pwdUseCheckModule
   changed_when: false
   failed_when: false
   no_log: true
@@ -201,8 +216,16 @@
         _openldap_ppolicy_intended_quality: "{{ openldap_ppolicy_check_quality }}"
         _openldap_ppolicy_intended_min_length: "{{ openldap_ppolicy_min_length }}"
         _openldap_ppolicy_intended_in_history: "{{ openldap_ppolicy_in_history }}"
-        _openldap_ppolicy_intended_use_module: >
+        _openldap_ppolicy_intended_use_module: >-
           {{ openldap_ppolicy_use_check_module | ternary('TRUE', 'FALSE') }}
+
+    - name: "PHASE [ppolicy : Extract Current Default ObjectClasses]"
+      ansible.builtin.set_fact:
+        _openldap_ppolicy_current_object_classes: >-
+          {{ _openldap_ppolicy_entry_search.stdout_lines | default([])
+             | select('match', '^objectClass: ')
+             | map('regex_replace', '^objectClass: ', '')
+             | list }}
 
     - name: "PHASE [ppolicy : Extract Current Default pwdCheckQuality]"
       ansible.builtin.set_fact:
@@ -250,6 +273,11 @@
           {%- set lines = [] -%}
           {%- set lines = lines + ['dn: cn=default,ou=Ppolicy,' ~ ldap_base_dn] -%}
           {%- set lines = lines + ['changetype: modify'] -%}
+          {%- if 'pwdPolicyChecker' not in _openldap_ppolicy_current_object_classes -%}
+          {%-   set lines = lines + ['add: objectClass'] -%}
+          {%-   set lines = lines + ['objectClass: pwdPolicyChecker'] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
           {%- if _openldap_ppolicy_current_quality != _openldap_ppolicy_intended_quality | string -%}
           {%-   set lines = lines + ['replace: pwdCheckQuality'] -%}
           {%-   set lines = lines + ['pwdCheckQuality: ' ~ _openldap_ppolicy_intended_quality] -%}
@@ -270,6 +298,9 @@
           {%-   set lines = lines + ['pwdUseCheckModule: ' ~ _openldap_ppolicy_intended_use_module] -%}
           {%-   set lines = lines + ['-'] -%}
           {%- endif -%}
+          {%- if lines | last == '-' -%}
+          {%-   set lines = lines[:-1] -%}
+          {%- endif -%}
           {{ lines | join('\n') }}
       changed_when: false
 
@@ -279,6 +310,7 @@
         or _openldap_ppolicy_current_min_length != _openldap_ppolicy_intended_min_length | string
         or _openldap_ppolicy_current_in_history != _openldap_ppolicy_intended_in_history | string
         or _openldap_ppolicy_current_use_module != _openldap_ppolicy_intended_use_module
+        or 'pwdPolicyChecker' not in _openldap_ppolicy_current_object_classes
       ansible.builtin.command:
         cmd: >-
           ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"

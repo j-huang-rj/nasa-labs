@@ -21,6 +21,7 @@
       ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
       -b "cn=fortune-{{ _fortune_item.ID }},ou=Fortune,{{ ldap_base_dn }}" -s base
+      -o ldif-wrap=no
       '(objectClass=fortune)' cn id author description
   changed_when: false
   failed_when: false
@@ -89,9 +90,7 @@
     - name: "PHASE [fortune_entry : Normalize Current Author For Comparison] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
         _openldap_fortune_current_author: >-
-          {{ _openldap_fortune_current_author_raw
-             if not _openldap_fortune_current_author_is_b64
-             else _fortune_item.Author | b64encode }}
+          {{ _openldap_fortune_current_author_raw }}
         _openldap_fortune_intended_author: >-
           {{ _fortune_item.Author
              if not _openldap_fortune_current_author_is_b64
@@ -115,9 +114,7 @@
     - name: "PHASE [fortune_entry : Normalize Current Description For Comparison] | id={{ _fortune_item.ID }}"
       ansible.builtin.set_fact:
         _openldap_fortune_current_description: >-
-          {{ _openldap_fortune_current_description_raw
-             if not _openldap_fortune_current_description_is_b64
-             else _fortune_item.Description | b64encode }}
+          {{ _openldap_fortune_current_description_raw }}
         _openldap_fortune_intended_description: >-
           {{ _fortune_item.Description
              if not _openldap_fortune_current_description_is_b64
@@ -148,6 +145,9 @@
           {%-   set lines = lines + ['replace: description'] -%}
           {%-   set lines = lines + ['description:: ' ~ _fortune_item.Description | b64encode] -%}
           {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if lines | last == '-' -%}
+          {%-   set lines = lines[:-1] -%}
           {%- endif -%}
           {{ lines | join('\n') }}
       changed_when: false

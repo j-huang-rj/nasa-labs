@@ -9,7 +9,7 @@ ldap_server_fqdn: "ldap.{{ ldap_domain }}"
 ldap_server_uri: "ldaps://{{ ldap_server_fqdn }}:636"
 
 # SSH public key shared by all LDAP users
-ldap_default_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXop004xu2hOBxNY 2026 NAP"
+ldap_default_user_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXop004xu2hOBxNY 2026 NAP"
 
 # Directory Information Tree containers
 ldap_ous:
@@ -38,7 +38,7 @@ ldap_users:
     mail: "generalta@{{ ldap_domain }}"
     groups: [ta]
     totp_required: true
-    ssh_public_key: "{{ ldap_default_ssh_public_key }}"
+    ssh_public_key: "{{ ldap_default_user_ssh_public_key }}"
     password_hash_key: generalta
 
   mailta:
@@ -48,7 +48,7 @@ ldap_users:
     mail: "mailta@{{ ldap_domain }}"
     groups: [ta]
     totp_required: false
-    ssh_public_key: "{{ ldap_default_ssh_public_key }}"
+    ssh_public_key: "{{ ldap_default_user_ssh_public_key }}"
     password_hash_key: mailta
 
   stu:
@@ -58,5 +58,5 @@ ldap_users:
     mail: "stu@{{ ldap_domain }}"
     groups: [stu]
     totp_required: true
-    ssh_public_key: "{{ ldap_default_ssh_public_key }}"
+    ssh_public_key: "{{ ldap_default_user_ssh_public_key }}"
     password_hash_key: stu

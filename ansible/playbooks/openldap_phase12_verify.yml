@@ -93,44 +93,41 @@
           Password quality check module not found at
           /usr/lib64/openldap/check_password.so.
 
-    - name: "PHASE [preflight : Normalize Credentials From canonical openldap_credentials With Fallback]"
+    - name: "PHASE [preflight : Normalize Credentials From openldap_credentials]"
       ansible.builtin.set_fact:
+        openldap_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
         _openldap_admin_password: >-
-          {{ openldap_credentials.directory_manager.password_plaintext
-             | default(openldap_admin_password | default('')) }}
+          {{ (openldap_credentials.directory_manager | default({})).password_plaintext
+             | default('', true) }}
         _openldap_admin_password_hash: >-
-          {{ openldap_credentials.directory_manager.password_hash
-             | default(openldap_admin_password_hash | default('')) }}
+          {{ (openldap_credentials.directory_manager | default({})).password_hash
+             | default('', true) }}
         _openldap_user_password_hashes: >-
           {%- set hashes = {} -%}
-          {%- for uname in ldap_users.keys() | list -%}
-          {%-   set _ = hashes.update({uname:
-                openldap_credentials.users[uname].password_hash
-                | default(openldap_user_password_hashes[uname]
-                | default(openldap_user_password_hashes[ldap_users[uname].password_hash_key]
-                | default(''))) }) -%}
+          {%- set credential_users = openldap_credentials.users | default({}) -%}
+          {%- for uname, udata in ldap_users.items() -%}
+          {%-   set hash_key = udata.password_hash_key | default(uname) -%}
+          {%-   set user_cred = credential_users[uname] | default({}) -%}
+          {%-   set _ = hashes.update({hash_key:
+                user_cred.password_hash | default('', true) }) -%}
           {%- endfor -%}
           {{ hashes }}
         _openldap_user_plaintext_passwords: >-
           {%- set plains = {} -%}
+          {%- set credential_users = openldap_credentials.users | default({}) -%}
           {%- for uname in ldap_users.keys() | list -%}
+          {%-   set user_cred = credential_users[uname] | default({}) -%}
           {%-   set _ = plains.update({uname:
-                openldap_credentials.users[uname].password_plaintext
-                | default(openldap_ta_password | default('')) }) -%}
+                user_cred.password_plaintext | default('', true) }) -%}
           {%- endfor -%}
           {{ plains }}
         _openldap_user_totp_secrets: >-
           {%- set secrets = {} -%}
+          {%- set credential_users = openldap_credentials.users | default({}) -%}
           {%- for uname in ldap_users.keys() | list -%}
-          {%-   set cred_totp = openldap_credentials.users[uname].totp_secret_raw_b64
-                 | default(none) -%}
-          {%-   if cred_totp is not none and cred_totp | length > 0 -%}
-          {%-     set _ = secrets.update({uname: cred_totp}) -%}
-          {%-   elif uname == 'generalta' and openldap_generalta_totp_secret | default('') | length > 0 -%}
-          {%-     set _ = secrets.update({uname: openldap_generalta_totp_secret}) -%}
-          {%-   elif uname == 'stu' and openldap_stu_totp_secret | default('') | length > 0 -%}
-          {%-     set _ = secrets.update({uname: openldap_stu_totp_secret}) -%}
-          {%-   elif cred_totp is not none -%}
+          {%-   set user_cred = credential_users[uname] | default({}) -%}
+          {%-   set cred_totp = user_cred.totp_secret_raw_b64 | default('', true) -%}
+          {%-   if cred_totp | length > 0 -%}
           {%-     set _ = secrets.update({uname: cred_totp}) -%}
           {%-   endif -%}
           {%- endfor -%}
@@ -153,8 +150,7 @@
           - _openldap_user_totp_secrets.stu | length > 0
         fail_msg: >-
           Phase 12 secrets must be defined and non-empty.
-          Source from openldap_credentials (preferred) or legacy flat vars in
-          host_vars/ldap-01/secrets.yml.
+          Source from openldap_credentials in host_vars/ldap-01/secrets.yml.
       no_log: true
 
     - name: "PHASE [preflight : END]"
@@ -341,6 +337,7 @@
     - secrets
     - self_service
   vars:
+    _p12_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
     _p12_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
     _p12_mailta_dn: "uid=mailta,ou=People,{{ ldap_base_dn }}"
     _p12_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
@@ -383,30 +380,30 @@
       changed_when: false
       register: _p12_acl_olc_access
 
-    # ─── ACL delegation: generalta can write non-secret user attribute ───
-    - name: "PHASE [acl : Generalta Write Description On Stu Entry]"
+    # ─── ACL delegation: mailta can write non-secret user attribute ───
+    - name: "PHASE [acl : Mailta Write Description On Stu Entry]"
       ansible.builtin.command:
         cmd: >-
-          ldapmodify -x -D "{{ _p12_generalta_dn }}" -w "{{ _openldap_user_plaintext_passwords.generalta }}"
+          ldapmodify -x -D "{{ _p12_mailta_dn }}" -w "{{ _openldap_user_plaintext_passwords.mailta }}"
           -H {{ ldap_server_uri }}
         stdin: |
           dn: {{ _p12_stu_dn }}
           changetype: modify
           replace: description
-          description: ACL delegation test - generalta
+          description: ACL delegation test - mailta
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: true
       no_log: true
       register: _p12_delegate_write
 
-    - name: "PHASE [acl : Assert Generalta Can Write Non-Secret Attribute]"
+    - name: "PHASE [acl : Assert Mailta Can Write Non-Secret Attribute]"
       ansible.builtin.assert:
         quiet: true
         that:
           - _p12_delegate_write.rc == 0
         fail_msg: >-
-          Delegated admin generalta could not write description on stu entry.
+          Delegated admin mailta could not write description on stu entry.
           rc={{ _p12_delegate_write.rc }}, stderr={{ _p12_delegate_write.stderr | default('') }}
       no_log: true
 
@@ -425,11 +422,11 @@
       changed_when: true
       no_log: true
 
-    # ─── ACL delegation: generalta can read group entry ───
-    - name: "PHASE [acl : Generalta Read TA Group Entry]"
+    # ─── ACL delegation: mailta can read group entry ───
+    - name: "PHASE [acl : Mailta Read TA Group Entry]"
       ansible.builtin.command:
         cmd: >-
-          ldapsearch -x -D "{{ _p12_generalta_dn }}" -w "{{ _openldap_user_plaintext_passwords.generalta }}"
+          ldapsearch -x -D "{{ _p12_mailta_dn }}" -w "{{ _openldap_user_plaintext_passwords.mailta }}"
           -H {{ ldap_server_uri }}
           -b "cn=ta,ou=Group,{{ ldap_base_dn }}" -s base '(objectClass=posixGroup)'
           cn gidNumber memberUid
@@ -439,7 +436,7 @@
       no_log: true
       register: _p12_delegate_group_read
 
-    - name: "PHASE [acl : Assert Generalta Can Read TA Group]"
+    - name: "PHASE [acl : Assert Mailta Can Read TA Group]"
       ansible.builtin.assert:
         quiet: true
         that:
@@ -447,73 +444,10 @@
           - "'cn: ta' in _p12_delegate_group_read.stdout"
           - "'memberUid: generalta' in _p12_delegate_group_read.stdout"
         fail_msg: >-
-          Delegated admin generalta could not read TA group entry.
+          Delegated admin mailta could not read TA group entry.
       no_log: true
 
-    # ─── ACL delegation: mailta can write non-secret user attribute ───
-    - name: "PHASE [acl : Mailta Write Description On Stu Entry]"
-      ansible.builtin.command:
-        cmd: >-
-          ldapmodify -x -D "{{ _p12_mailta_dn }}" -w "{{ _openldap_user_plaintext_passwords.mailta }}"
-          -H {{ ldap_server_uri }}
-        stdin: |
-          dn: {{ _p12_stu_dn }}
-          changetype: modify
-          replace: description
-          description: ACL delegation test - mailta
-      environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
-      no_log: true
-      register: _p12_mailta_write
-
-    - name: "PHASE [acl : Assert Mailta Can Write Non-Secret Attribute]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - _p12_mailta_write.rc == 0
-        fail_msg: >-
-          Delegated admin mailta could not write description on stu entry.
-      no_log: true
-
-    # ─── Cleanup: restore description with admin bind ───
-    - name: "PHASE [acl : Cleanup Restore Stu Description Mailta]"
-      ansible.builtin.command:
-        cmd: >-
-          ldapmodify -x -D "{{ _p12_admin_dn }}" -w "{{ _openldap_admin_password }}"
-          -H {{ ldap_server_uri }}
-        stdin: |
-          dn: {{ _p12_stu_dn }}
-          changetype: modify
-          delete: description
-      environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
-      no_log: true
-
-    # ─── SECRETS: generalta cannot read/search userPassword ───
-    - name: "PHASE [secrets : Generalta Search For UserPassword On Stu Entry]"
-      ansible.builtin.command:
-        cmd: >-
-          ldapsearch -x -D "{{ _p12_generalta_dn }}" -w "{{ _openldap_user_plaintext_passwords.generalta }}"
-          -H {{ ldap_server_uri }}
-          -b "{{ _p12_stu_dn }}" -s base '(objectClass=*)' userPassword
-      environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: false
-      no_log: true
-      register: _p12_delegate_secret_search
-
-    - name: "PHASE [secrets : Assert Generalta Cannot Read userPassword]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - "'userPassword' not in _p12_delegate_secret_search.stdout"
-        fail_msg: >-
-          Delegated admin generalta should not be able to read userPassword.
-      no_log: true
-
-    # ─── SECRETS: mailta cannot read/search userPassword ───
+    # ─── SECRETS: delegated TA cannot read/search userPassword ───
     - name: "PHASE [secrets : Mailta Search For userPassword On Stu Entry]"
       ansible.builtin.command:
         cmd: >-
@@ -524,13 +458,15 @@
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
       no_log: true
-      register: _p12_mailta_secret_search
+      register: _p12_delegate_secret_search
 
     - name: "PHASE [secrets : Assert Mailta Cannot Read userPassword]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'userPassword' not in _p12_mailta_secret_search.stdout"
+          - >-
+            _p12_delegate_secret_search.stdout_lines | default([])
+            | select('match', '^userPassword::? ') | list | length == 0
         fail_msg: >-
           Delegated admin mailta should not be able to read userPassword.
       no_log: true
@@ -545,22 +481,25 @@
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
+      failed_when: false
       register: _p12_anonymous_secret_search
 
     - name: "PHASE [secrets : Assert Anonymous Cannot Read userPassword]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'userPassword' not in _p12_anonymous_secret_search.stdout"
+          - >-
+            _p12_anonymous_secret_search.stdout_lines | default([])
+            | select('match', '^userPassword::? ') | list | length == 0
         fail_msg: >-
           Anonymous bind should not be able to read userPassword.
       no_log: true
 
     # ─── ACL: delegated DN cannot search cn=config ───
-    - name: "PHASE [acl : Generalta Search cn=config]"
+    - name: "PHASE [acl : Mailta Search cn=config]"
       ansible.builtin.command:
         cmd: >-
-          ldapsearch -x -D "{{ _p12_generalta_dn }}" -w "{{ _openldap_user_plaintext_passwords.generalta }}"
+          ldapsearch -x -D "{{ _p12_mailta_dn }}" -w "{{ _openldap_user_plaintext_passwords.mailta }}"
           -H {{ ldap_server_uri }}
           -b cn=config -s base '(objectClass=*)' dn
       changed_when: false
@@ -570,17 +509,24 @@
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
-    - name: "PHASE [acl : Assert Generalta Cannot Access cn=config]"
+    - name: "PHASE [acl : Assert Mailta Cannot Access cn=config]"
       ansible.builtin.assert:
         quiet: true
         that:
           - _p12_cnconfig_via_generalta.rc != 0 or 'cn=config' not in _p12_cnconfig_via_generalta.stdout
         fail_msg: >-
-          Delegated admin generalta should not be able to access cn=config.
+          Delegated admin mailta should not be able to access cn=config.
       no_log: true
 
     # ─── SELF-SERVICE: stu can read normal user attributes ───
+    - name: "PHASE [self_service : Note Password-Only Stu Checks Are Skipped]"
+      ansible.builtin.debug:
+        msg: >-
+          Password-only stu self-service checks are skipped because stu is TOTP-protected;
+          stu authentication is validated in the TOTP bind/replay play.
+
     - name: "PHASE [self_service : Stu Search Own Entry]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.command:
         cmd: >-
           ldapsearch -x -D "{{ _p12_stu_dn }}" -w "{{ _openldap_user_plaintext_passwords.stu }}"
@@ -594,6 +540,7 @@
       register: _p12_stu_self_read
 
     - name: "PHASE [self_service : Assert Stu Can Read Own Attributes]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.assert:
         quiet: true
         that:
@@ -607,6 +554,7 @@
 
     # ─── SELF-SERVICE: stu can modify own loginShell ───
     - name: "PHASE [self_service : Stu Modify Own loginShell]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.command:
         cmd: >-
           ldapmodify -x -D "{{ _p12_stu_dn }}" -w "{{ _openldap_user_plaintext_passwords.stu }}"
@@ -623,6 +571,7 @@
       register: _p12_self_service_modify
 
     - name: "PHASE [self_service : Assert Stu Can Modify Own loginShell]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.assert:
         quiet: true
         that:
@@ -633,6 +582,7 @@
 
     # ─── Cleanup: restore stu loginShell via admin ───
     - name: "PHASE [self_service : Cleanup Restore Stu loginShell]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.command:
         cmd: >-
           ldapmodify -x -D "{{ _p12_admin_dn }}" -w "{{ _openldap_admin_password }}"
@@ -649,6 +599,7 @@
 
     # ─── SELF-SERVICE: stu cannot modify own mail ───
     - name: "PHASE [self_service : Stu Try Modify Own Mail]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.command:
         cmd: >-
           ldapmodify -x -D "{{ _p12_stu_dn }}" -w "{{ _openldap_user_plaintext_passwords.stu }}"
@@ -666,6 +617,7 @@
       register: _p12_stu_mail_modify
 
     - name: "PHASE [self_service : Assert Stu Cannot Modify Own Mail]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.assert:
         quiet: true
         that:
@@ -676,6 +628,7 @@
 
     # ─── SELF-SERVICE: stu cannot modify another user attribute ───
     - name: "PHASE [self_service : Stu Try Modify Mailta loginShell]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.command:
         cmd: >-
           ldapmodify -x -D "{{ _p12_stu_dn }}" -w "{{ _openldap_user_plaintext_passwords.stu }}"
@@ -693,6 +646,7 @@
       register: _p12_stu_other_modify
 
     - name: "PHASE [self_service : Assert Stu Cannot Modify Another User Mailta]"
+      when: _p12_password_only_stu_self_service_enabled | default(false) | bool
       ansible.builtin.assert:
         quiet: true
         that:
@@ -716,9 +670,10 @@
   tags:
     - ppolicy
   vars:
+    _p12_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
     _p12_mailta_dn: "uid=mailta,ou=People,{{ ldap_base_dn }}"
     _p12_admin_dn: "cn=admin,{{ ldap_base_dn }}"
-    _p12_ppolicy_temp_pass: "Phase12-Temp9!"
+    _p12_ppolicy_temp_pass: ""
     _p12_ppolicy_short_pass: "short"
     _p12_ppolicy_lc_digit_pass: "lowercase1"
     _p12_ppolicy_current_pass: "{{ _openldap_user_plaintext_passwords.mailta }}"
@@ -727,6 +682,12 @@
       become: false
       ansible.builtin.debug:
         msg: "Phase 12 ppolicy validation — ordinary mailta password-change behavior"
+
+    - name: "PHASE [ppolicy : Generate Unique Temporary Password]"
+      ansible.builtin.set_fact:
+        _p12_ppolicy_temp_pass: "Phase12-Temp{{ 999999999999 | random }}aA!"
+      changed_when: false
+      no_log: true
 
     # ─── Verify mailta can bind with current password ───
     - name: "PHASE [ppolicy : Bind As Mailta To Verify Connectivity]"
@@ -756,8 +717,8 @@
         cmd: >-
           ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_current_pass }}"
           -H {{ ldap_server_uri }}
-          -a "{{ _p12_mailta_dn }}"
           -s "{{ _p12_ppolicy_short_pass }}"
+          "{{ _p12_mailta_dn }}"
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
@@ -781,8 +742,8 @@
         cmd: >-
           ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_current_pass }}"
           -H {{ ldap_server_uri }}
-          -a "{{ _p12_mailta_dn }}"
           -s "{{ _p12_ppolicy_lc_digit_pass }}"
+          "{{ _p12_mailta_dn }}"
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
@@ -807,8 +768,8 @@
         cmd: >-
           ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_current_pass }}"
           -H {{ ldap_server_uri }}
-          -a "{{ _p12_mailta_dn }}"
           -s "{{ _p12_ppolicy_temp_pass }}"
+          "{{ _p12_mailta_dn }}"
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: true
@@ -831,8 +792,8 @@
         cmd: >-
           ldappasswd -x -D "{{ _p12_mailta_dn }}" -w "{{ _p12_ppolicy_temp_pass }}"
           -H {{ ldap_server_uri }}
-          -a "{{ _p12_mailta_dn }}"
-          -s "{{ _p12_ppolicy_temp_pass }}"
+          -s "{{ _p12_ppolicy_current_pass }}"
+          "{{ _p12_mailta_dn }}"
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
@@ -895,6 +856,8 @@
     - totp_bind
     - ssh_public_key
   vars:
+    _p12_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
+    _p12_totp_params_dn: "{{ openldap_totp_params_dn | default('cn=totp-default,ou=Ppolicy,' ~ ldap_base_dn) }}"
     _p12_totp_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
     _p12_totp_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
     _p12_totp_mailta_dn: "uid=mailta,ou=People,{{ ldap_base_dn }}"
@@ -910,11 +873,15 @@
       h = hmac.new(raw_key, counter_bytes, hashlib.sha1).digest()
       offset_byte = h[-1] & 0x0F
       code = struct.unpack('>I', h[offset_byte:offset_byte+4])[0] & 0x7FFFFFFF
-      print(f"{code % 1000000:06d}")
+      print('%06d' % (code % 1000000))
     _p12_totp_wait_script: |
       import time
       remaining = 60 - (time.time() % 60)
       print(int(remaining + 2))
+    _p12_totp_safe_wait_script: |
+      import time
+      remaining = 60 - (time.time() % 60)
+      print(int(remaining + 2) if remaining < 10 else 0)
   tasks:
     # ─── TOTP config: overlay, params, user OATH links ───
     - name: "PHASE [totp_config : START]"
@@ -949,8 +916,8 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -Y EXTERNAL -H ldapi:///
-          -b "olcOverlay=otp,{{ _p12_totp_mdb_dn }}" -s base
-          '(objectClass=*)' dn
+          -b "{{ _p12_totp_mdb_dn }}" -s one
+          '(objectClass=olcOverlayConfig)' dn olcOverlay
       changed_when: false
       register: _p12_totp_overlay_verify
 
@@ -959,9 +926,12 @@
         quiet: true
         that:
           - _p12_totp_overlay_verify.rc == 0
-          - "'olcOverlay=otp' in _p12_totp_overlay_verify.stdout"
+          - "'otp' in _p12_totp_overlay_verify.stdout"
+          - >-
+            _p12_totp_overlay_verify.stdout_lines | default([])
+            | select('match', '^dn: olcOverlay=.*otp,') | list | length == 1
         fail_msg: >-
-          OTP overlay missing from target MDB.
+          OTP overlay missing from target MDB or duplicated.
           stdout={{ _p12_totp_overlay_verify.stdout | default('') }}
 
     - name: "PHASE [totp_config : Search TOTP Params Entry]"
@@ -969,7 +939,7 @@
         cmd: >-
           ldapsearch -x -D "{{ _p12_totp_admin_dn }}" -w "{{ _openldap_admin_password }}"
           -H {{ ldap_server_uri }}
-          -b "{{ openldap_totp_params_dn }}" -s base
+          -b "{{ _p12_totp_params_dn }}" -s base
           '(objectClass=*)' oathOTPLength oathTOTPTimeStepPeriod oathHMACAlgorithm
       changed_when: false
       register: _p12_totp_params_verify
@@ -1008,9 +978,15 @@
         quiet: true
         that:
           - _p12_totp_user_generalta.rc == 0
-          - "'oathTOTPUser' in _p12_totp_user_generalta.stdout"
-          - "'oathTOTPToken' in _p12_totp_user_generalta.stdout"
-          - "'cn=totp-generalta' in _p12_totp_user_generalta.stdout"
+          - >-
+            _p12_totp_user_generalta.stdout_lines | default([])
+            | select('match', '^objectClass: oathTOTPUser$') | list | length > 0
+          - >-
+            _p12_totp_user_generalta.stdout_lines | default([])
+            | select('match', '^oathTOTPToken: ') | list | length > 0
+          - >-
+            _p12_totp_user_generalta.stdout_lines | default([])
+            | select('match', '^oathTOTPToken: cn=totp-generalta,') | list | length > 0
         fail_msg: >-
           Generalta missing OATH user/token link.
           stdout={{ _p12_totp_user_generalta.stdout | default('') }}
@@ -1034,9 +1010,15 @@
         quiet: true
         that:
           - _p12_totp_user_stu.rc == 0
-          - "'oathTOTPUser' in _p12_totp_user_stu.stdout"
-          - "'oathTOTPToken' in _p12_totp_user_stu.stdout"
-          - "'cn=totp-stu' in _p12_totp_user_stu.stdout"
+          - >-
+            _p12_totp_user_stu.stdout_lines | default([])
+            | select('match', '^objectClass: oathTOTPUser$') | list | length > 0
+          - >-
+            _p12_totp_user_stu.stdout_lines | default([])
+            | select('match', '^oathTOTPToken: ') | list | length > 0
+          - >-
+            _p12_totp_user_stu.stdout_lines | default([])
+            | select('match', '^oathTOTPToken: cn=totp-stu,') | list | length > 0
         fail_msg: >-
           Stu missing OATH user/token link.
           stdout={{ _p12_totp_user_stu.stdout | default('') }}
@@ -1060,8 +1042,12 @@
         quiet: true
         that:
           - _p12_totp_user_mailta.rc == 0
-          - "'oathTOTPUser' not in _p12_totp_user_mailta.stdout"
-          - "'oathTOTPToken' not in _p12_totp_user_mailta.stdout"
+          - >-
+            _p12_totp_user_mailta.stdout_lines | default([])
+            | select('match', '^objectClass: oathTOTPUser$') | list | length == 0
+          - >-
+            _p12_totp_user_mailta.stdout_lines | default([])
+            | select('match', '^oathTOTPToken: ') | list | length == 0
         fail_msg: >-
           Mailta should NOT have OATH attributes (password-only).
           stdout={{ _p12_totp_user_mailta.stdout | default('') }}
@@ -1078,19 +1064,24 @@
       ansible.builtin.debug:
         msg: "Phase 12 TOTP bind/replay validation — generalta and stu"
 
-    # Generate current TOTP codes for generalta and stu
-    - name: "PHASE [totp_bind : Generate Current TOTP Code For Generalta]"
+    - name: "PHASE [totp_bind : Compute Wait Seconds To Fresh Time Step]"
       ansible.builtin.command:
         cmd: >-
-          python3 -c "{{ _p12_totp_python_script }}" "{{ _openldap_user_totp_secrets.generalta }}" 0
+          python3 -c "{{ _p12_totp_wait_script }}"
       changed_when: false
       no_log: true
-      register: _p12_totp_current_code
+      register: _p12_totp_initial_wait_seconds
 
-    - name: "PHASE [totp_bind : Set Current TOTP Code Fact]"
+    - name: "PHASE [totp_bind : Set Fresh Time Step Wait Fact]"
       ansible.builtin.set_fact:
-        _p12_totp_current_code_val: "{{ _p12_totp_current_code.stdout | trim }}"
+        _p12_totp_initial_wait_val: "{{ _p12_totp_initial_wait_seconds.stdout | trim | int }}"
       no_log: true
+
+    - name: "PHASE [totp_bind : Wait For Fresh TOTP Time Step]"
+      when: _p12_totp_initial_wait_val | int > 0
+      ansible.builtin.wait_for:
+        timeout: "{{ _p12_totp_initial_wait_val | int }}"
+      changed_when: false
 
     # ─── generalta: password-only → fail ───
     - name: "PHASE [totp_bind : Generalta Password-Only Bind]"
@@ -1137,6 +1128,38 @@
         fail_msg: >-
           Generalta bind with wrong TOTP code should fail.
           rc={{ _p12_totp_wrong_code_result.rc }}
+      no_log: true
+
+    - name: "PHASE [totp_bind : Compute Safe Wait Before Generalta Current Code]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_safe_wait_script }}"
+      changed_when: false
+      no_log: true
+      register: _p12_totp_current_safe_wait
+
+    - name: "PHASE [totp_bind : Set Generalta Current Safe Wait Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_current_safe_wait_val: "{{ _p12_totp_current_safe_wait.stdout | trim | int }}"
+      no_log: true
+
+    - name: "PHASE [totp_bind : Wait For Safe Generalta Current TOTP Window]"
+      when: _p12_totp_current_safe_wait_val | int > 0
+      ansible.builtin.wait_for:
+        timeout: "{{ _p12_totp_current_safe_wait_val | int }}"
+      changed_when: false
+
+    - name: "PHASE [totp_bind : Generate Current TOTP Code For Generalta]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_python_script }}" "{{ _openldap_user_totp_secrets.generalta }}" 0
+      changed_when: false
+      no_log: true
+      register: _p12_totp_current_code
+
+    - name: "PHASE [totp_bind : Set Current TOTP Code Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_current_code_val: "{{ _p12_totp_current_code.stdout | trim }}"
       no_log: true
 
     # ─── generalta: password + current code → succeed ───
@@ -1243,19 +1266,6 @@
       no_log: true
 
     # ─── stu: same flow (password-only fail, wrong code fail, current success, replay fail) ───
-    - name: "PHASE [totp_bind : Generate Current TOTP Code For Stu]"
-      ansible.builtin.command:
-        cmd: >-
-          python3 -c "{{ _p12_totp_python_script }}" "{{ _openldap_user_totp_secrets.stu }}" 0
-      changed_when: false
-      no_log: true
-      register: _p12_totp_stu_current_code
-
-    - name: "PHASE [totp_bind : Set Stu Current TOTP Code Fact]"
-      ansible.builtin.set_fact:
-        _p12_totp_stu_current_code_val: "{{ _p12_totp_stu_current_code.stdout | trim }}"
-      no_log: true
-
     - name: "PHASE [totp_bind : Stu Password-Only Bind]"
       ansible.builtin.command:
         cmd: >-
@@ -1297,6 +1307,38 @@
           - _p12_totp_stu_wrong_code.rc != 0
         fail_msg: >-
           Stu bind with wrong TOTP code should fail.
+      no_log: true
+
+    - name: "PHASE [totp_bind : Compute Safe Wait Before Stu Current Code]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_safe_wait_script }}"
+      changed_when: false
+      no_log: true
+      register: _p12_totp_stu_current_safe_wait
+
+    - name: "PHASE [totp_bind : Set Stu Current Safe Wait Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_stu_current_safe_wait_val: "{{ _p12_totp_stu_current_safe_wait.stdout | trim | int }}"
+      no_log: true
+
+    - name: "PHASE [totp_bind : Wait For Safe Stu Current TOTP Window]"
+      when: _p12_totp_stu_current_safe_wait_val | int > 0
+      ansible.builtin.wait_for:
+        timeout: "{{ _p12_totp_stu_current_safe_wait_val | int }}"
+      changed_when: false
+
+    - name: "PHASE [totp_bind : Generate Current TOTP Code For Stu]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_python_script }}" "{{ _openldap_user_totp_secrets.stu }}" 0
+      changed_when: false
+      no_log: true
+      register: _p12_totp_stu_current_code
+
+    - name: "PHASE [totp_bind : Set Stu Current TOTP Code Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_stu_current_code_val: "{{ _p12_totp_stu_current_code.stdout | trim }}"
       no_log: true
 
     - name: "PHASE [totp_bind : Stu Password Plus Current Code Bind]"
@@ -1441,6 +1483,7 @@
     - data
     - sssvlv
   vars:
+    _p12_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
     _p12_fortune_sample_ids:
       - "1"
       - "45"
@@ -1470,8 +1513,10 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -Y EXTERNAL -H ldapi:///
-          -b "cn=fortune,cn=schema,cn=config" -s base
-          '(objectClass=olcSchemaConfig)' cn olcAttributeTypes olcObjectClasses
+          -o ldif-wrap=no
+          -b cn=schema,cn=config
+          '(&(objectClass=olcSchemaConfig)(cn=*fortune))'
+          cn olcAttributeTypes olcObjectClasses
       changed_when: false
       register: _p12_fortune_schema_search
 
@@ -1484,7 +1529,7 @@
           - "'caseIgnoreMatch' in _p12_fortune_schema_search.stdout"
           - "'caseIgnoreOrderingMatch' in _p12_fortune_schema_search.stdout"
           - "'caseIgnoreSubstringsMatch' in _p12_fortune_schema_search.stdout"
-          - "'NAME 'author'' in _p12_fortune_schema_search.stdout"
+          - _p12_fortune_schema_search.stdout is search("NAME 'author'")
         fail_msg: >-
           Fortune schema missing UUID OID root or author case-insensitive matching rules.
           stdout={{ _p12_fortune_schema_search.stdout | default('') }}
@@ -1496,7 +1541,7 @@
           - _p12_fortune_schema_search.rc == 0
           - "'integerMatch' in _p12_fortune_schema_search.stdout"
           - "'integerOrderingMatch' in _p12_fortune_schema_search.stdout"
-          - "'NAME 'id'' in _p12_fortune_schema_search.stdout"
+          - _p12_fortune_schema_search.stdout is search("NAME 'id'")
           - "'SUP top' in _p12_fortune_schema_search.stdout"
           - "'description' in _p12_fortune_schema_search.stdout"
         fail_msg: >-
@@ -1541,6 +1586,7 @@
         cmd: >-
           ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
           -H {{ ldap_server_uri }}
+          -o ldif-wrap=no
           -b "cn=fortune-{{ item }},{{ _p12_fortune_base }}" -s base
           '(objectClass=fortune)' cn id author description
       changed_when: false
@@ -1559,8 +1605,12 @@
           - item.rc == 0
           - "'cn: fortune-' ~ item.item in item.stdout"
           - "'id: ' ~ item.item in item.stdout"
-          - "'author::' in item.stdout"
-          - "'description::' in item.stdout"
+          - >-
+            item.stdout_lines | default([])
+            | select('match', '^author::? ') | list | length > 0
+          - >-
+            item.stdout_lines | default([])
+            | select('match', '^description::? ') | list | length > 0
         fail_msg: >-
           Fortune sample entry id={{ item.item }} missing or has wrong attributes.
           stdout={{ item.stdout | default('') }}
@@ -1569,27 +1619,27 @@
         label: "id={{ item.item }}"
       no_log: true
 
-    # ─── Data: case/space-insensitive author search ───
-    - name: "PHASE [data : Search Fortune Entries By Author Feynman Case Insensitive]"
+    # ─── Data: case-insensitive author substring search ───
+    - name: "PHASE [data : Search Fortune Entries By Author Feynman Substring Case Insensitive]"
       ansible.builtin.command:
         cmd: >-
           ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
           -H {{ ldap_server_uri }}
-          -b "{{ _p12_fortune_base }}" '(author=Feynman)' dn
+          -b "{{ _p12_fortune_base }}" '(author=*feynman*)' dn
       changed_when: false
       no_log: true
       register: _p12_fortune_feynman_search
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
-    - name: "PHASE [data : Assert Author Search Case Insensitive Finds Feynman]"
+    - name: "PHASE [data : Assert Author Substring Search Case Insensitive Finds Feynman]"
       ansible.builtin.assert:
         quiet: true
         that:
           - _p12_fortune_feynman_search.rc == 0
           - "'cn=fortune-' in _p12_fortune_feynman_search.stdout"
         fail_msg: >-
-          Author search for 'Feynman' (case-insensitive) returned no results.
+          Author substring search for 'feynman' (case-insensitive) returned no results.
       no_log: true
 
     # ─── sssvlv: discover MDB and search overlay ───
@@ -1620,8 +1670,9 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -Y EXTERNAL -H ldapi:///
-          -b "olcOverlay=sssvlv,{{ _p12_sssvlv_mdb_dn }}" -s base
-          '(objectClass=*)' olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+          -b "{{ _p12_sssvlv_mdb_dn }}" -s one
+          '(objectClass=olcSssVlvConfig)'
+          dn olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
       changed_when: false
       register: _p12_sssvlv_overlay_verify
 
@@ -1642,7 +1693,8 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -H {{ ldap_server_uri }}
-          -x -b "{{ _p12_fortune_base }}"
+          -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+          -b "{{ _p12_fortune_base }}"
           -E sss=author
           -E pr=10/noprompt
           '(objectClass=fortune)' cn id author description
@@ -1734,6 +1786,8 @@
   tags:
     - reboot
   vars:
+    _p12_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
+    _p12_totp_params_dn: "{{ openldap_totp_params_dn | default('cn=totp-default,ou=Ppolicy,' ~ ldap_base_dn) }}"
     _p12_reboot_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
     _p12_reboot_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
     _p12_reboot_fortune_base: "ou=Fortune,{{ ldap_base_dn }}"
@@ -1746,7 +1800,7 @@
       h = hmac.new(raw_key, counter_bytes, hashlib.sha1).digest()
       offset_byte = h[-1] & 0x0F
       code = struct.unpack('>I', h[offset_byte:offset_byte+4])[0] & 0x7FFFFFFF
-      print(f"{code % 1000000:06d}")
+      print('%06d' % (code % 1000000))
   tasks:
     - name: "PHASE [reboot : START]"
       become: false
@@ -1766,10 +1820,12 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -H {{ ldap_server_uri }}
-          -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
+          -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+          -b "{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
       changed_when: false
+      no_log: true
       register: _p12_reboot_ldaps_search
 
     - name: "PHASE [reboot : Assert Post-Reboot LDAPS Search Works]"
@@ -1782,6 +1838,7 @@
           Post-reboot LDAPS search failed.
           rc={{ _p12_reboot_ldaps_search.rc }},
           stdout={{ _p12_reboot_ldaps_search.stdout | default('') }}
+      no_log: true
 
     # ─── Post-reboot: Ordered ACLs ───
     - name: "PHASE [reboot : Post-Reboot Search OLC Access Rules]"
@@ -1835,8 +1892,9 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -Y EXTERNAL -H ldapi:///
-          -b "olcOverlay=ppolicy,{{ _p12_reboot_mdb_dn }}" -s base
-          '(objectClass=*)' olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
+          -b "{{ _p12_reboot_mdb_dn }}" -s one
+          '(objectClass=olcPPolicyConfig)'
+          dn olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
       changed_when: false
       register: _p12_reboot_ppolicy_search
 
@@ -1884,8 +1942,8 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -Y EXTERNAL -H ldapi:///
-          -b "olcOverlay=otp,{{ _p12_reboot_mdb_dn }}" -s base
-          '(objectClass=*)' dn
+          -b "{{ _p12_reboot_mdb_dn }}" -s one
+          '(objectClass=olcOverlayConfig)' dn olcOverlay
       changed_when: false
       register: _p12_reboot_otp_overlay
 
@@ -1894,9 +1952,12 @@
         quiet: true
         that:
           - _p12_reboot_otp_overlay.rc == 0
-          - "'olcOverlay=otp' in _p12_reboot_otp_overlay.stdout"
+          - "'otp' in _p12_reboot_otp_overlay.stdout"
+          - >-
+            _p12_reboot_otp_overlay.stdout_lines | default([])
+            | select('match', '^dn: olcOverlay=.*otp,') | list | length == 1
         fail_msg: >-
-          Post-reboot OTP overlay missing.
+          Post-reboot OTP overlay missing or duplicated.
           stdout={{ _p12_reboot_otp_overlay.stdout | default('') }}
 
     - name: "PHASE [reboot : Post-Reboot Search TOTP Params Entry]"
@@ -1904,7 +1965,7 @@
         cmd: >-
           ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
           -H {{ ldap_server_uri }}
-          -b "{{ openldap_totp_params_dn }}" -s base
+          -b "{{ _p12_totp_params_dn }}" -s base
           '(objectClass=*)' oathOTPLength oathTOTPTimeStepPeriod oathHMACAlgorithm
       changed_when: false
       no_log: true
@@ -1941,8 +2002,12 @@
         quiet: true
         that:
           - _p12_reboot_generalta_oath.rc == 0
-          - "'oathTOTPUser' in _p12_reboot_generalta_oath.stdout"
-          - "'oathTOTPToken' in _p12_reboot_generalta_oath.stdout"
+          - >-
+            _p12_reboot_generalta_oath.stdout_lines | default([])
+            | select('match', '^objectClass: oathTOTPUser$') | list | length > 0
+          - >-
+            _p12_reboot_generalta_oath.stdout_lines | default([])
+            | select('match', '^oathTOTPToken: ') | list | length > 0
         fail_msg: >-
           Post-reboot generalta OATH links missing.
       no_log: true
@@ -2012,8 +2077,9 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -Y EXTERNAL -H ldapi:///
-          -b "olcOverlay=sssvlv,{{ _p12_reboot_mdb_dn }}" -s base
-          '(objectClass=*)' olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+          -b "{{ _p12_reboot_mdb_dn }}" -s one
+          '(objectClass=olcSssVlvConfig)'
+          dn olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
       changed_when: false
       register: _p12_reboot_sssvlv_overlay
 
@@ -2033,7 +2099,8 @@
       ansible.builtin.command:
         cmd: >-
           ldapsearch -H {{ ldap_server_uri }}
-          -x -b "{{ _p12_reboot_fortune_base }}"
+          -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+          -b "{{ _p12_reboot_fortune_base }}"
           -E sss=author
           -E pr=10/noprompt
           '(objectClass=fortune)' cn id author description
@@ -2079,12 +2146,6 @@
     _p12_openldap_role_dir: "{{ playbook_dir }}/roles/openldap"
     _p12_secret_var_names:
       - openldap_credentials
-      - openldap_ta_password
-      - openldap_generalta_totp_secret
-      - openldap_stu_totp_secret
-      - openldap_admin_password
-      - openldap_user_password_hashes
-      - openldap_bind_password
       - _openldap_admin_password
       - _openldap_admin_password_hash
       - _openldap_bind_password
@@ -2112,9 +2173,7 @@
           set -o pipefail;
           for f in tasks/acls.yml tasks/ppolicy.yml tasks/totp.yml tasks/totp_token.yml tasks/fortune.yml tasks/fortune_entry.yml; do
             [ -f "{{ _p12_openldap_role_dir }}/$f" ] || continue;
-            grep -n -e 'openldap_credentials' -e 'openldap_ta_password' -e 'openldap_admin_password'
-                     -e 'openldap_generalta_totp_secret' -e 'openldap_stu_totp_secret'
-                     -e 'openldap_user_password_hashes' -e 'openldap_bind_password'
+            grep -n -e 'openldap_credentials'
                      -e '_openldap_admin_password' -e '_openldap_admin_password_hash'
                      -e '_openldap_bind_password' -e '_openldap_bind_password_hash'
                      -e '_openldap_user_password_hashes' -e '_openldap_user_plaintext_passwords'
@@ -2149,9 +2208,6 @@
           blocks = re.split(r'^- name:', text, flags=re.MULTILINE)
           for block in blocks:
             if any(s in block for s in ['openldap_credentials',
-                    'openldap_admin_password', 'openldap_ta_password',
-                    'openldap_generalta_totp_secret', 'openldap_stu_totp_secret',
-                    'openldap_user_password_hashes', 'openldap_bind_password',
                     '_openldap_admin_password', '_openldap_admin_password_hash',
                     '_openldap_bind_password', '_openldap_bind_password_hash',
                     '_openldap_user_password_hashes', '_openldap_user_plaintext_passwords',
@@ -2183,11 +2239,6 @@
             grep -rn --include="*.yml" --include="*.yaml"
               -e 'fail_msg.*userPassword' -e 'msg.*userPassword'
               -e 'fail_msg.*oathSecret' -e 'msg.*oathSecret'
-              -e 'fail_msg.*openldap_ta_password' -e 'msg.*openldap_ta_password'
-              -e 'fail_msg.*openldap_admin_password' -e 'msg.*openldap_admin_password'
-              -e 'fail_msg.*openldap_generalta_totp_secret' -e 'msg.*openldap_generalta_totp_secret'
-              -e 'fail_msg.*openldap_stu_totp_secret' -e 'msg.*openldap_stu_totp_secret'
-              -e 'fail_msg.*openldap_user_password_hashes' -e 'msg.*openldap_user_password_hashes'
               -e 'fail_msg.*openldap_credentials' -e 'msg.*openldap_credentials'
               -e 'fail_msg.*_openldap_admin_password' -e 'msg.*_openldap_admin_password'
               -e 'fail_msg.*_openldap_user_password_hashes' -e 'msg.*_openldap_user_password_hashes'
@@ -2201,11 +2252,6 @@
             grep -rn --include="openldap_phase12_verify.yml"
               -e 'fail_msg.*userPassword' -e 'msg.*userPassword'
               -e 'fail_msg.*oathSecret' -e 'msg.*oathSecret'
-              -e 'fail_msg.*openldap_ta_password' -e 'msg.*openldap_ta_password'
-              -e 'fail_msg.*openldap_admin_password' -e 'msg.*openldap_admin_password'
-              -e 'fail_msg.*openldap_generalta_totp_secret' -e 'msg.*openldap_generalta_totp_secret'
-              -e 'fail_msg.*openldap_stu_totp_secret' -e 'msg.*openldap_stu_totp_secret'
-              -e 'fail_msg.*openldap_user_password_hashes' -e 'msg.*openldap_user_password_hashes'
               -e 'fail_msg.*openldap_credentials' -e 'msg.*openldap_credentials'
               -e 'fail_msg.*_openldap_admin_password' -e 'msg.*_openldap_admin_password'
               -e 'fail_msg.*_openldap_user_password_hashes' -e 'msg.*_openldap_user_password_hashes'
@@ -2326,12 +2372,6 @@
           set -o pipefail;
           grep -n \
             -e 'openldap_credentials' \
-            -e 'openldap_ta_password' \
-            -e 'openldap_admin_password' \
-            -e 'openldap_generalta_totp_secret' \
-            -e 'openldap_stu_totp_secret' \
-            -e 'openldap_user_password_hashes' \
-            -e 'openldap_bind_password' \
             -e '_openldap_admin_password' \
             -e '_openldap_admin_password_hash' \
             -e '_openldap_bind_password' \

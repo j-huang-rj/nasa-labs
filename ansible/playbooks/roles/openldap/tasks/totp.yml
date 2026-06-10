@@ -58,14 +58,25 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "olcOverlay=otp,{{ _openldap_mdb_dn }}" -s base
-      '(objectClass=*)' dn
+      -b "{{ _openldap_mdb_dn }}" -s one
+      '(objectClass=olcOverlayConfig)' dn olcOverlay
   changed_when: false
   failed_when: false
   register: _openldap_otp_overlay_search
 
+- name: "PHASE [totp : Extract OTP Overlay DN]"
+  ansible.builtin.set_fact:
+    _openldap_otp_overlay_dn: >-
+      {{ _openldap_otp_overlay_search.stdout_lines | default([])
+         | select('match', '^dn: olcOverlay=.*otp,')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
 - name: "PHASE [totp : Add OTP Overlay If Missing]"
-  when: _openldap_otp_overlay_search.rc != 0
+  when: _openldap_otp_overlay_dn | length == 0
   ansible.builtin.command:
     cmd: >-
       ldapadd -Y EXTERNAL -H ldapi:///
@@ -145,10 +156,11 @@
   environment:
     LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
-- name: "PHASE [totp : Remove oathTOTPUser From Mailta If Present]"
+- name: "PHASE [totp : Remove Mailta TOTP Link And Class If Present]"
   when: >-
     _openldap_mailta_otp_search.rc == 0
-    and 'oathTOTPUser' in _openldap_mailta_otp_search.stdout
+    and _openldap_mailta_otp_search.stdout_lines | default([])
+        | select('match', '^objectClass: oathTOTPUser$') | list | length > 0
   ansible.builtin.command:
     cmd: >-
       ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
@@ -156,6 +168,8 @@
     stdin: |
       dn: uid=mailta,ou=People,{{ ldap_base_dn }}
       changetype: modify
+      delete: oathTOTPToken
+      -
       delete: objectClass
       objectClass: oathTOTPUser
   changed_when: true
@@ -166,7 +180,10 @@
 - name: "PHASE [totp : Remove oathTOTPToken From Mailta If Present]"
   when: >-
     _openldap_mailta_otp_search.rc == 0
-    and 'oathTOTPToken' in _openldap_mailta_otp_search.stdout
+    and _openldap_mailta_otp_search.stdout_lines | default([])
+        | select('match', '^oathTOTPToken: ') | list | length > 0
+    and _openldap_mailta_otp_search.stdout_lines | default([])
+        | select('match', '^objectClass: oathTOTPUser$') | list | length == 0
   ansible.builtin.command:
     cmd: >-
       ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"

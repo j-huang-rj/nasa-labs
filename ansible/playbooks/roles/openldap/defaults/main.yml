@@ -92,7 +92,6 @@ openldap_sssvlv_max_per_conn: 10
 # Canonical credential bundle (directory_manager, service_bind, users.*)
 openldap_credentials: {}
 
-# Secret shapes (legacy flat variables; still used as fallbacks during migration)
-openldap_user_password_hashes: {}
+# Secret shapes outside openldap_credentials
 openldap_tls_private_key: ""
 openldap_tls_certificate: ""

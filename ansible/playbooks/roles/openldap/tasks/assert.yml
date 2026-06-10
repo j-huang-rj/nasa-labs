@@ -88,29 +88,28 @@
       with correct homes, groups, ssh_public_key, and password_hash_key.
 
 # ─────────────────────────────────────────────────────────
-# Normalize credentials to internal facts (canonical first,
-# fallback to legacy flat vars)
+# Normalize credentials to internal facts from canonical openldap_credentials
 # ─────────────────────────────────────────────────────────
 - name: "PHASE [assert : Normalize Admin Password]"
   become: false
   ansible.builtin.set_fact:
     _openldap_admin_password: >-
-      {{ openldap_credentials.directory_manager.password_plaintext
-         | default(openldap_admin_password | default('')) }}
+      {{ (openldap_credentials.directory_manager | default({})).password_plaintext
+         | default('', true) }}
     _openldap_admin_password_hash: >-
-      {{ openldap_credentials.directory_manager.password_hash
-         | default(openldap_admin_password_hash | default('')) }}
+      {{ (openldap_credentials.directory_manager | default({})).password_hash
+         | default('', true) }}
   no_log: true
 
 - name: "PHASE [assert : Normalize Bind Password]"
   become: false
   ansible.builtin.set_fact:
     _openldap_bind_password: >-
-      {{ openldap_credentials.service_bind.password_plaintext
-         | default(openldap_bind_password | default('')) }}
+      {{ (openldap_credentials.service_bind | default({})).password_plaintext
+         | default('', true) }}
     _openldap_bind_password_hash: >-
-      {{ openldap_credentials.service_bind.password_hash
-         | default(openldap_bind_password_hash | default('')) }}
+      {{ (openldap_credentials.service_bind | default({})).password_hash
+         | default('', true) }}
   no_log: true
 
 - name: "PHASE [assert : Normalize User Password Hashes]"
@@ -118,34 +117,30 @@
   ansible.builtin.set_fact:
     _openldap_user_password_hashes: >-
       {%- set hashes = {} -%}
-      {%- for uname in ldap_users.keys() | list -%}
-      {%-   set _ = hashes.update({uname:
-            openldap_credentials.users[uname].password_hash
-            | default(openldap_user_password_hashes[uname]
-            | default(openldap_user_password_hashes[ldap_users[uname].password_hash_key]
-            | default(''))) }) -%}
+      {%- set credential_users = openldap_credentials.users | default({}) -%}
+      {%- for uname, udata in ldap_users.items() -%}
+      {%-   set hash_key = udata.password_hash_key | default(uname) -%}
+      {%-   set user_cred = credential_users[uname] | default({}) -%}
+      {%-   set _ = hashes.update({hash_key:
+            user_cred.password_hash | default('', true) }) -%}
       {%- endfor -%}
       {{ hashes }}
     _openldap_user_plaintext_passwords: >-
       {%- set plains = {} -%}
+      {%- set credential_users = openldap_credentials.users | default({}) -%}
       {%- for uname in ldap_users.keys() | list -%}
+      {%-   set user_cred = credential_users[uname] | default({}) -%}
       {%-   set _ = plains.update({uname:
-            openldap_credentials.users[uname].password_plaintext
-            | default(openldap_ta_password | default('')) }) -%}
+            user_cred.password_plaintext | default('', true) }) -%}
       {%- endfor -%}
       {{ plains }}
     _openldap_user_totp_secrets: >-
       {%- set secrets = {} -%}
+      {%- set credential_users = openldap_credentials.users | default({}) -%}
       {%- for uname in ldap_users.keys() | list -%}
-      {%-   set cred_totp = openldap_credentials.users[uname].totp_secret_raw_b64
-             | default(none) -%}
-      {%-   if cred_totp is not none and cred_totp | length > 0 -%}
-      {%-     set _ = secrets.update({uname: cred_totp}) -%}
-      {%-   elif uname == 'generalta' and openldap_generalta_totp_secret | default('') | length > 0 -%}
-      {%-     set _ = secrets.update({uname: openldap_generalta_totp_secret}) -%}
-      {%-   elif uname == 'stu' and openldap_stu_totp_secret | default('') | length > 0 -%}
-      {%-     set _ = secrets.update({uname: openldap_stu_totp_secret}) -%}
-      {%-   elif cred_totp is not none -%}
+      {%-   set user_cred = credential_users[uname] | default({}) -%}
+      {%-   set cred_totp = user_cred.totp_secret_raw_b64 | default('', true) -%}
+      {%-   if cred_totp | length > 0 -%}
       {%-     set _ = secrets.update({uname: cred_totp}) -%}
       {%-   endif -%}
       {%- endfor -%}
@@ -173,7 +168,6 @@
     that:
       - _openldap_user_password_hashes is defined
       - _openldap_user_password_hashes is mapping
-      - "_openldap_user_password_hashes.keys() | list | sort == ldap_users.keys() | list | sort"
       - item | length > 0
       - >-
         item is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
@@ -186,7 +180,7 @@
     label: "{{ _p12_user.key }}"
   no_log: true
   vars:
-    item: "{{ _openldap_user_password_hashes[_p12_user.key] | default('') }}"
+    item: "{{ _openldap_user_password_hashes[_p12_user.value.password_hash_key] | default('') }}"
 
 - name: "PHASE [assert : Check Required OpenLDAP User Plaintext Password Shapes]"
   become: false
@@ -265,7 +259,7 @@
 
 # ──────────────────────────────────────────
 # Check Required Phase 12 Secret Shapes
-# (validates normalized facts that derive from openldap_credentials or legacy flat vars)
+# (validates normalized facts that derive from openldap_credentials)
 # ──────────────────────────────────────────
 - name: "PHASE [assert : Check Required Phase 12 Secret Shapes]"
   become: false
@@ -289,8 +283,7 @@
       Required Phase 12 secret shapes are missing or empty.
       _openldap_user_plaintext_passwords must have non-empty values for generalta, mailta, stu.
       _openldap_user_totp_secrets must have non-empty values for generalta and stu.
-      Source these from openldap_credentials (preferred) or legacy flat vars in
-      host_vars/ldap-01/secrets.yml.
+      Source these from openldap_credentials in host_vars/ldap-01/secrets.yml.
   no_log: true
 
 # ──────────────────────────────────────────

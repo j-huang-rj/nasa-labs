@@ -51,6 +51,7 @@
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
       -b "{{ _openldap_mdb_dn }}" -s base
+      -o ldif-wrap=no
       '(objectClass=*)' olcAccess
   changed_when: false
   register: _openldap_current_acls
@@ -69,6 +70,7 @@
   ansible.builtin.set_fact:
     _openldap_intended_acls_normalized: >-
       {{ lookup('ansible.builtin.template', 'openldap/olc-access.ldif.j2')
+         | regex_replace('\n[ ]+', ' ')
          | regex_findall('^olcAccess:.*', multiline=True)
          | map('regex_replace', '\\s+', ' ')
          | map('trim')

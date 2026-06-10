@@ -160,14 +160,26 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "olcOverlay=sssvlv,{{ _openldap_mdb_dn }}" -s base
-      '(objectClass=*)' olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+      -b "{{ _openldap_mdb_dn }}" -s one
+      '(objectClass=olcSssVlvConfig)'
+      dn olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
   changed_when: false
   failed_when: false
   register: _openldap_sssvlv_overlay_search
 
+- name: "PHASE [fortune : Extract sssvlv Overlay DN]"
+  ansible.builtin.set_fact:
+    _openldap_sssvlv_overlay_dn: >-
+      {{ _openldap_sssvlv_overlay_search.stdout_lines | default([])
+         | select('match', '^dn: olcOverlay=.*sssvlv,')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
 - name: "PHASE [fortune : Add sssvlv Overlay If Missing]"
-  when: _openldap_sssvlv_overlay_search.rc != 0
+  when: _openldap_sssvlv_overlay_dn | length == 0
   ansible.builtin.command:
     cmd: >-
       ldapadd -Y EXTERNAL -H ldapi:///
@@ -175,7 +187,7 @@
   changed_when: true
 
 - name: "PHASE [fortune : Reconcile sssvlv Overlay Attributes]"
-  when: _openldap_sssvlv_overlay_search.rc == 0
+  when: _openldap_sssvlv_overlay_dn | length > 0
   block:
     - name: "PHASE [fortune : Set Intended sssvlv Overlay Attributes]"
       ansible.builtin.set_fact:
@@ -217,7 +229,7 @@
       ansible.builtin.set_fact:
         _openldap_sssvlv_overlay_modify: >-
           {%- set lines = [] -%}
-          {%- set lines = lines + ['dn: olcOverlay=sssvlv,' ~ _openldap_mdb_dn] -%}
+          {%- set lines = lines + ['dn: ' ~ _openldap_sssvlv_overlay_dn] -%}
           {%- set lines = lines + ['changetype: modify'] -%}
           {%- if _openldap_sssvlv_current_max != _openldap_sssvlv_intended_max | string -%}
           {%-   set lines = lines + ['replace: olcSssVlvMax'] -%}
