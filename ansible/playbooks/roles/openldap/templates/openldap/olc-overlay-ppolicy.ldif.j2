@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+dn: olcOverlay=ppolicy,{{ _openldap_mdb_dn }}
+objectClass: olcOverlayConfig
+objectClass: olcPPolicyConfig
+olcOverlay: ppolicy
+olcPPolicyDefault: cn=default,ou=Ppolicy,{{ ldap_base_dn }}
+olcPPolicyCheckModule: /usr/lib64/openldap/check_password.so
+olcPPolicyHashCleartext: TRUE
