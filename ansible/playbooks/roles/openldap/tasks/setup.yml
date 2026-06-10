@@ -28,6 +28,9 @@
 - name: "PHASE [setup : Configure Password Policy]"
   ansible.builtin.import_tasks: ppolicy.yml
 
+- name: "PHASE [setup : Configure TOTP Authentication]"
+  ansible.builtin.import_tasks: totp.yml
+
 - name: "PHASE [setup : Verify OpenLDAP State]"
   ansible.builtin.import_tasks: verify.yml
 

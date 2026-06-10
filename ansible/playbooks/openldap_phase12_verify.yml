@@ -825,3 +825,552 @@
       become: false
       ansible.builtin.debug:
         msg: "Phase 12 ppolicy validation complete"
+
+# ──────────────────────────────────────────────────────────
+# TOTP Configuration, Bind, Replay, And SSH Key Validation
+# ──────────────────────────────────────────────────────────
+- name: "Phase12 TOTP Bind Replay And SSH Key Validation"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - totp
+    - totp_config
+    - totp_bind
+    - ssh_public_key
+  vars:
+    _p12_totp_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
+    _p12_totp_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
+    _p12_totp_mailta_dn: "uid=mailta,ou=People,{{ ldap_base_dn }}"
+    _p12_totp_admin_dn: "cn=admin,{{ ldap_base_dn }}"
+    _p12_totp_wrong_code: "999999"
+    _p12_totp_python_script: |
+      import base64, hmac, hashlib, struct, time, sys
+      secret_b64 = sys.argv[1]
+      offset = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+      raw_key = base64.b64decode(secret_b64)
+      counter = int(time.time() / 60) + offset
+      counter_bytes = struct.pack('>Q', counter)
+      h = hmac.new(raw_key, counter_bytes, hashlib.sha1).digest()
+      offset_byte = h[-1] & 0x0F
+      code = struct.unpack('>I', h[offset_byte:offset_byte+4])[0] & 0x7FFFFFFF
+      print(f"{code % 1000000:06d}")
+    _p12_totp_wait_script: |
+      import time, sys
+      remaining = 60 - (time.time() % 60)
+      if remaining > 2:
+          print(int(remaining + 2))
+      else:
+          print(0)
+  tasks:
+    # ─── TOTP config: overlay, params, user OATH links ───
+    - name: "PHASE [totp_config : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 TOTP config verification — overlay, params, user OATH links"
+
+    - name: "PHASE [totp_config : Discover Target MDB By Suffix]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b cn=config
+          '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+          dn
+      changed_when: false
+      failed_when: false
+      register: _p12_totp_mdb_search
+
+    - name: "PHASE [totp_config : Extract MDB Database DN]"
+      when: _p12_totp_mdb_search.rc == 0
+      ansible.builtin.set_fact:
+        _p12_totp_mdb_dn: >-
+          {{ _p12_totp_mdb_search.stdout_lines | default([])
+             | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+             | list
+             | first
+             | default('')
+             | regex_replace('^dn: ', '')
+             | trim }}
+
+    - name: "PHASE [totp_config : Search OTP Overlay On Target MDB]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -Y EXTERNAL -H ldapi:///
+          -b "olcOverlay=otp,{{ _p12_totp_mdb_dn }}" -s base
+          '(objectClass=*)' dn
+      changed_when: false
+      register: _p12_totp_overlay_verify
+
+    - name: "PHASE [totp_config : Assert OTP Overlay Present]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_overlay_verify.rc == 0
+          - "'olcOverlay=otp' in _p12_totp_overlay_verify.stdout"
+        fail_msg: >-
+          OTP overlay missing from target MDB.
+          stdout={{ _p12_totp_overlay_verify.stdout | default('') }}
+
+    - name: "PHASE [totp_config : Search TOTP Params Entry]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_totp_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ openldap_totp_params_dn }}" -s base
+          '(objectClass=*)' oathOTPLength oathTOTPTimeStepPeriod oathHMACAlgorithm
+      changed_when: false
+      register: _p12_totp_params_verify
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_config : Assert TOTP Params Correct]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_params_verify.rc == 0
+          - "'oathOTPLength: 6' in _p12_totp_params_verify.stdout"
+          - "'oathTOTPTimeStepPeriod: 60' in _p12_totp_params_verify.stdout"
+          - "'oathHMACAlgorithm: 1.2.840.113549.2.7' in _p12_totp_params_verify.stdout"
+        fail_msg: >-
+          TOTP params entry missing or incorrect.
+          stdout={{ _p12_totp_params_verify.stdout | default('') }}
+      no_log: true
+
+    - name: "PHASE [totp_config : Search Generalta For OATH Attributes]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_totp_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_totp_generalta_dn }}" -s base
+          '(objectClass=posixAccount)' objectClass oathTOTPToken
+      changed_when: false
+      register: _p12_totp_user_generalta
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_config : Assert Generalta Has oathTOTPUser And oathTOTPToken]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_user_generalta.rc == 0
+          - "'oathTOTPUser' in _p12_totp_user_generalta.stdout"
+          - "'oathTOTPToken' in _p12_totp_user_generalta.stdout"
+          - "'cn=totp-generalta' in _p12_totp_user_generalta.stdout"
+        fail_msg: >-
+          Generalta missing OATH user/token link.
+          stdout={{ _p12_totp_user_generalta.stdout | default('') }}
+      no_log: true
+
+    - name: "PHASE [totp_config : Search Stu For OATH Attributes]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_totp_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_totp_stu_dn }}" -s base
+          '(objectClass=posixAccount)' objectClass oathTOTPToken
+      changed_when: false
+      register: _p12_totp_user_stu
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_config : Assert Stu Has oathTOTPUser And oathTOTPToken]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_user_stu.rc == 0
+          - "'oathTOTPUser' in _p12_totp_user_stu.stdout"
+          - "'oathTOTPToken' in _p12_totp_user_stu.stdout"
+          - "'cn=totp-stu' in _p12_totp_user_stu.stdout"
+        fail_msg: >-
+          Stu missing OATH user/token link.
+          stdout={{ _p12_totp_user_stu.stdout | default('') }}
+      no_log: true
+
+    - name: "PHASE [totp_config : Search Mailta For OATH Attributes]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_totp_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_totp_mailta_dn }}" -s base
+          '(objectClass=posixAccount)' objectClass oathTOTPToken
+      changed_when: false
+      register: _p12_totp_user_mailta
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_config : Assert Mailta Has No OATH Attributes]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_user_mailta.rc == 0
+          - "'oathTOTPUser' not in _p12_totp_user_mailta.stdout"
+          - "'oathTOTPToken' not in _p12_totp_user_mailta.stdout"
+        fail_msg: >-
+          Mailta should NOT have OATH attributes (password-only).
+          stdout={{ _p12_totp_user_mailta.stdout | default('') }}
+      no_log: true
+
+    - name: "PHASE [totp_config : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 TOTP config verification complete"
+
+    # ─── TOTP bind: password-only, wrong code, current code, replay, next step ───
+    - name: "PHASE [totp_bind : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 TOTP bind/replay validation — generalta and stu"
+
+    # Generate current TOTP codes for generalta and stu
+    - name: "PHASE [totp_bind : Generate Current TOTP Code For Generalta]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_python_script }}" "{{ openldap_generalta_totp_secret }}" 0
+      changed_when: false
+      no_log: true
+      register: _p12_totp_current_code
+
+    - name: "PHASE [totp_bind : Set Current TOTP Code Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_current_code_val: "{{ _p12_totp_current_code.stdout | trim }}"
+      no_log: true
+
+    # ─── generalta: password-only → fail ───
+    - name: "PHASE [totp_bind : Generalta Password-Only Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_generalta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_totp_password_only_result
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Password-Only Bind Fails]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_password_only_result.rc != 0
+        fail_msg: >-
+          Generalta password-only bind should fail — TOTP code required.
+          rc={{ _p12_totp_password_only_result.rc }}
+      no_log: true
+
+    # ─── generalta: password + wrong code → fail ───
+    - name: "PHASE [totp_bind : Generalta Password Plus Wrong Code Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_generalta_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_totp_wrong_code }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_totp_wrong_code_result
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Wrong Code Bind Fails]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_wrong_code_result.rc != 0
+        fail_msg: >-
+          Generalta bind with wrong TOTP code should fail.
+          rc={{ _p12_totp_wrong_code_result.rc }}
+      no_log: true
+
+    # ─── generalta: password + current code → succeed ───
+    - name: "PHASE [totp_bind : Generalta Password Plus Current Code Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_generalta_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_totp_current_code_val }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      no_log: true
+      register: _p12_totp_correct_code_result
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Current Code Bind Succeeds]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_correct_code_result.rc == 0
+        fail_msg: >-
+          Generalta bind with password + current TOTP code should succeed.
+          rc={{ _p12_totp_correct_code_result.rc }}
+      no_log: true
+
+    # ─── generalta: immediate replay → fail ───
+    - name: "PHASE [totp_bind : Generalta Immediate Replay Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_generalta_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_totp_current_code_val }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_totp_replay_result
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Replay Bind Fails]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_replay_result.rc != 0
+        fail_msg: >-
+          Generalta immediate replay with same TOTP code should fail.
+          rc={{ _p12_totp_replay_result.rc }}
+      no_log: true
+
+    # ─── Wait for next time step + generate next code ───
+    - name: "PHASE [totp_bind : Compute Wait Seconds To Next Time Step]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_wait_script }}"
+      changed_when: false
+      no_log: true
+      register: _p12_totp_wait_seconds
+
+    - name: "PHASE [totp_bind : Set Wait Seconds Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_wait_val: "{{ _p12_totp_wait_seconds.stdout | trim | int }}"
+      no_log: true
+
+    - name: "PHASE [totp_bind : Wait For Next TOTP Time Step]"
+      when: _p12_totp_wait_val | int > 0
+      ansible.builtin.wait_for:
+        timeout: "{{ _p12_totp_wait_val | int }}"
+      changed_when: false
+
+    - name: "PHASE [totp_bind : Generate Next-Step TOTP Code For Generalta]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_python_script }}" "{{ openldap_generalta_totp_secret }}" 0
+      changed_when: false
+      no_log: true
+      register: _p12_totp_next_code
+
+    - name: "PHASE [totp_bind : Set Next-Step TOTP Code Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_next_code_val: "{{ _p12_totp_next_code.stdout | trim }}"
+      no_log: true
+
+    # ─── generalta: next-step code → succeed ───
+    - name: "PHASE [totp_bind : Generalta Next-Step Code Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_generalta_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_totp_next_code_val }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      no_log: true
+      register: _p12_totp_next_step_result
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Next-Step Code Bind Succeeds]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_next_step_result.rc == 0
+        fail_msg: >-
+          Generalta next-step TOTP code bind should succeed.
+          rc={{ _p12_totp_next_step_result.rc }}
+      no_log: true
+
+    # ─── stu: same flow (password-only fail, wrong code fail, current success, replay fail) ───
+    - name: "PHASE [totp_bind : Generate Current TOTP Code For Stu]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "{{ _p12_totp_python_script }}" "{{ openldap_stu_totp_secret }}" 0
+      changed_when: false
+      no_log: true
+      register: _p12_totp_stu_current_code
+
+    - name: "PHASE [totp_bind : Set Stu Current TOTP Code Fact]"
+      ansible.builtin.set_fact:
+        _p12_totp_stu_current_code_val: "{{ _p12_totp_stu_current_code.stdout | trim }}"
+      no_log: true
+
+    - name: "PHASE [totp_bind : Stu Password-Only Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_stu_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_totp_stu_password_only
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Stu Password-Only Bind Fails]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_stu_password_only.rc != 0
+        fail_msg: >-
+          Stu password-only bind should fail — TOTP code required.
+      no_log: true
+
+    - name: "PHASE [totp_bind : Stu Password Plus Wrong Code Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_stu_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_totp_wrong_code }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_totp_stu_wrong_code
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Stu Wrong Code Bind Fails]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_stu_wrong_code.rc != 0
+        fail_msg: >-
+          Stu bind with wrong TOTP code should fail.
+      no_log: true
+
+    - name: "PHASE [totp_bind : Stu Password Plus Current Code Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_stu_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_totp_stu_current_code_val }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      no_log: true
+      register: _p12_totp_stu_correct
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Stu Current Code Bind Succeeds]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_stu_correct.rc == 0
+        fail_msg: >-
+          Stu bind with password + current TOTP code should succeed.
+      no_log: true
+
+    - name: "PHASE [totp_bind : Stu Immediate Replay Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_stu_dn }}"
+          -w "{{ openldap_ta_password }}{{ _p12_totp_stu_current_code_val }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      failed_when: false
+      no_log: true
+      register: _p12_totp_stu_replay
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Stu Replay Bind Fails]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_stu_replay.rc != 0
+        fail_msg: >-
+          Stu immediate replay with same TOTP code should fail.
+      no_log: true
+
+    # ─── mailta: password-only bind → succeed ───
+    - name: "PHASE [totp_bind : Mailta Password-Only Bind]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapwhoami -x -D "{{ _p12_totp_mailta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
+      changed_when: false
+      no_log: true
+      register: _p12_totp_mailta_bind_result
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [totp_bind : Assert Mailta Password-Only Bind Succeeds]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_totp_mailta_bind_result.rc == 0
+        fail_msg: >-
+          Mailta password-only bind should succeed (no TOTP required).
+          rc={{ _p12_totp_mailta_bind_result.rc }}
+      no_log: true
+
+    - name: "PHASE [totp_bind : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 TOTP bind/replay validation complete"
+
+    # ─── SSH public key: assert readable for generalta and stu ───
+    - name: "PHASE [ssh_public_key : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 SSH public key read verification"
+
+    - name: "PHASE [ssh_public_key : Read Generalta sshPublicKey Via LDAPS]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_totp_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_totp_generalta_dn }}" -s base
+          '(objectClass=*)' sshPublicKey
+      changed_when: false
+      register: _p12_sshkey_generalta
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [ssh_public_key : Assert Generalta sshPublicKey Readable]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_sshkey_generalta.rc == 0
+          - "'sshPublicKey' in _p12_sshkey_generalta.stdout"
+          - "'ssh-ed25519' in _p12_sshkey_generalta.stdout"
+        fail_msg: >-
+          Generalta sshPublicKey not readable via LDAPS.
+      no_log: true
+
+    - name: "PHASE [ssh_public_key : Read Stu sshPublicKey Via LDAPS]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -x -D "{{ _p12_totp_admin_dn }}" -w "{{ openldap_admin_password }}"
+          -H {{ ldap_server_uri }}
+          -b "{{ _p12_totp_stu_dn }}" -s base
+          '(objectClass=*)' sshPublicKey
+      changed_when: false
+      register: _p12_sshkey_stu
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+    - name: "PHASE [ssh_public_key : Assert Stu sshPublicKey Readable]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p12_sshkey_stu.rc == 0
+          - "'sshPublicKey' in _p12_sshkey_stu.stdout"
+          - "'ssh-ed25519' in _p12_sshkey_stu.stdout"
+        fail_msg: >-
+          Stu sshPublicKey not readable via LDAPS.
+      no_log: true
+
+    - name: "PHASE [ssh_public_key : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 12 SSH public key read verification complete"

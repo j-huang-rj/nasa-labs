@@ -432,6 +432,130 @@
       stdout={{ _openldap_ppolicy_entry_search.stdout | default('') }}
   no_log: true
 
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 12: TOTP verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search OTP Overlay On Target MDB]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "olcOverlay=otp,{{ _openldap_mdb_dn }}" -s base
+      '(objectClass=*)' dn
+  changed_when: false
+  register: _openldap_otp_overlay_verify
+
+- name: "PHASE [verify : Assert OTP Overlay Present On Target MDB]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_otp_overlay_verify.rc == 0
+      - "'olcOverlay=otp' in _openldap_otp_overlay_verify.stdout"
+    fail_msg: >-
+      OTP overlay not present on target MDB.
+      stdout={{ _openldap_otp_overlay_verify.stdout | default('') }}
+
+- name: "PHASE [verify : Search TOTP Params Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "{{ openldap_totp_params_dn }}" -s base
+      '(objectClass=*)' oathOTPLength oathTOTPTimeStepPeriod oathHMACAlgorithm
+  changed_when: false
+  register: _openldap_totp_params_verify
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert TOTP Params Correct]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_totp_params_verify.rc == 0
+      - "'oathOTPLength: 6' in _openldap_totp_params_verify.stdout"
+      - "'oathTOTPTimeStepPeriod: 60' in _openldap_totp_params_verify.stdout"
+      - "'oathHMACAlgorithm' in _openldap_totp_params_verify.stdout"
+    fail_msg: >-
+      TOTP params entry missing or has wrong attributes.
+      stdout={{ _openldap_totp_params_verify.stdout | default('') }}
+  no_log: true
+
+- name: "PHASE [verify : Search Generalta For OATH Attributes]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "uid=generalta,ou=People,{{ ldap_base_dn }}" -s base
+      '(objectClass=posixAccount)' objectClass oathTOTPToken
+  changed_when: false
+  register: _openldap_totp_generalta_verify
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert Generalta Has oathTOTPUser And oathTOTPToken]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_totp_generalta_verify.rc == 0
+      - "'oathTOTPUser' in _openldap_totp_generalta_verify.stdout"
+      - "'oathTOTPToken' in _openldap_totp_generalta_verify.stdout"
+    fail_msg: >-
+      Generalta missing oathTOTPUser or oathTOTPToken.
+      stdout={{ _openldap_totp_generalta_verify.stdout | default('') }}
+  no_log: true
+
+- name: "PHASE [verify : Search Stu For OATH Attributes]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "uid=stu,ou=People,{{ ldap_base_dn }}" -s base
+      '(objectClass=posixAccount)' objectClass oathTOTPToken
+  changed_when: false
+  register: _openldap_totp_stu_verify
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert Stu Has oathTOTPUser And oathTOTPToken]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_totp_stu_verify.rc == 0
+      - "'oathTOTPUser' in _openldap_totp_stu_verify.stdout"
+      - "'oathTOTPToken' in _openldap_totp_stu_verify.stdout"
+    fail_msg: >-
+      Stu missing oathTOTPUser or oathTOTPToken.
+      stdout={{ _openldap_totp_stu_verify.stdout | default('') }}
+  no_log: true
+
+- name: "PHASE [verify : Search Mailta For OATH Attributes]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "uid=mailta,ou=People,{{ ldap_base_dn }}" -s base
+      '(objectClass=posixAccount)' objectClass oathTOTPToken
+  changed_when: false
+  register: _openldap_totp_mailta_verify
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert Mailta Has No OATH Attributes]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_totp_mailta_verify.rc == 0
+      - "'oathTOTPUser' not in _openldap_totp_mailta_verify.stdout"
+      - "'oathTOTPToken' not in _openldap_totp_mailta_verify.stdout"
+    fail_msg: >-
+      Mailta should NOT have oathTOTPUser or oathTOTPToken.
+      stdout={{ _openldap_totp_mailta_verify.stdout | default('') }}
+  no_log: true
+
 - name: "PHASE [verify : END]"
   become: false
   ansible.builtin.debug:
