@@ -508,19 +508,23 @@
     - name: "PHASE [acl : Generalta Search cn=config]"
       ansible.builtin.command:
         cmd: >-
-          ldapsearch -Y EXTERNAL -H ldapi:///
+          ldapsearch -x -D "{{ _p12_generalta_dn }}" -w "{{ openldap_ta_password }}"
+          -H {{ ldap_server_uri }}
           -b cn=config -s base '(objectClass=*)' dn
       changed_when: false
       failed_when: false
-      register: _p12_cnconfig_via_ldapi
+      no_log: true
+      register: _p12_cnconfig_via_generalta
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
 
-    - name: "PHASE [acl : Assert Generalta Cannot Access cn=config Via Delegated Bind]"
+    - name: "PHASE [acl : Assert Generalta Cannot Access cn=config]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - _p12_cnconfig_via_ldapi.rc != 0 or 'cn=config' not in _p12_cnconfig_via_ldapi.stdout
+          - _p12_cnconfig_via_generalta.rc != 0 or 'cn=config' not in _p12_cnconfig_via_generalta.stdout
         fail_msg: >-
-          Delegated admin should not be able to access cn=config via SASL EXTERNAL.
+          Delegated admin generalta should not be able to access cn=config.
       no_log: true
 
     # ─── SELF-SERVICE: stu can read normal user attributes ───
