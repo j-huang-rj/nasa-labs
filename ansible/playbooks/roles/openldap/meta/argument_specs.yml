@@ -253,6 +253,7 @@ argument_specs:
       openldap_tls_private_key:
         type: str
         required: false
+        no_log: true
         description: >-
           LDAPS TLS private key PEM content.
           Populated from gitignored host_vars/*/secrets.yml.

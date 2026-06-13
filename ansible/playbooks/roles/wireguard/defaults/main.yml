@@ -5,6 +5,7 @@ wireguard_enabled: false
 wireguard_healthcheck_targets:
   - 192.168.255.1
 
+wireguard_persistent_keepalive: 5
 wireguard_healthcheck_retries: 3
 wireguard_healthcheck_delay: 2
 wireguard_healthcheck_timeout: 2

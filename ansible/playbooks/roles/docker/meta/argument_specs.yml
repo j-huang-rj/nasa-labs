@@ -4,6 +4,12 @@ argument_specs:
     short_description: Validate docker role variables
 
     options:
+      docker_enabled:
+        type: bool
+        required: false
+        default: false
+        description: Whether the docker role should be active on this host
+
       docker_binfmt_enabled:
         type: bool
         required: false
@@ -14,13 +20,13 @@ argument_specs:
       docker_binfmt_image:
         type: str
         required: false
-        default: tonistiigi/binfmt:latest
+        default: tonistiigi/binfmt:qemu-v10.0.4
         description: Container image that installs binfmt handlers on the host
 
       docker_binfmt_test_image:
         type: str
         required: false
-        default: alpine:3.22
+        default: alpine:3.23
         description: Container image used to verify cross-architecture emulation works
 
       docker_image_archives:

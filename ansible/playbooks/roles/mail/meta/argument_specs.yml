@@ -243,6 +243,7 @@ argument_specs:
       mail_local_user_password_hashes:
         type: dict
         required: false
+        no_log: true
         description: >-
           Dictionary mapping local user names to hashed passwords for Dovecot passwd-file.
           Must contain keys for all entries in mail_local_users.
@@ -259,6 +260,7 @@ argument_specs:
       mail_tls_private_key:
         type: str
         required: false
+        no_log: true
         description: >-
           PEM-encoded TLS private key content.
           Asserted non-empty at runtime when mail_enabled is true (no_log: true).
@@ -282,6 +284,7 @@ argument_specs:
       mail_dkim_private_keys:
         type: dict
         required: false
+        no_log: true
         description: >-
           Dictionary mapping DKIM selector names to PEM-encoded private keys.
           Must contain a key matching mail_dkim_selector.
@@ -581,6 +584,7 @@ argument_specs:
       mail_ldap_bind_password:
         type: str
         required: false
+        no_log: true
         description: >-
           Optional LDAP bind password for mail-role LDAPS verification searches
 

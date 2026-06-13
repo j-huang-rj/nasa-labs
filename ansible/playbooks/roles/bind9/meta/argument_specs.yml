@@ -159,6 +159,20 @@ argument_specs:
           host_vars/*/secrets.yml on authoritative hosts. Contains name, algorithm, and secret fields.
           The default provides the name and algorithm with an empty secret; the real secret must come
           from secrets.yml.
+        options:
+          name:
+            type: str
+            required: false
+            description: TSIG key name
+          algorithm:
+            type: str
+            required: false
+            description: TSIG key algorithm
+          secret:
+            type: str
+            required: false
+            no_log: true
+            description: Base64 TSIG secret value
 
       bind9_axfr_key:
         type: dict
@@ -168,6 +182,20 @@ argument_specs:
           IP-based view selection. Referenced by the primary's public-view match-clients
           and by the secondary's public-zone slave masters. When the secret is empty the
           key block is not rendered into named.keys.conf and the key is treated as absent.
+        options:
+          name:
+            type: str
+            required: false
+            description: TSIG key name
+          algorithm:
+            type: str
+            required: false
+            description: TSIG key algorithm
+          secret:
+            type: str
+            required: false
+            no_log: true
+            description: Base64 TSIG secret value
 
       bind9_keys_conf_path:
         type: str
@@ -204,6 +232,28 @@ argument_specs:
           CSK) so dnssec-policy's keymgr accepts the pre-distributed key instead of retiring it and
           minting a fresh one on every restart. Populated from secrets.yml; empty default means no keys
           are distributed when omitted.
+        options:
+          zone:
+            type: str
+            required: true
+            description: Zone name the DNSSEC key material belongs to
+          basename:
+            type: str
+            required: true
+            description: DNSSEC key basename without extension
+          public:
+            type: str
+            required: true
+            description: Contents of the DNSSEC .key file
+          private:
+            type: str
+            required: true
+            no_log: true
+            description: Contents of the DNSSEC .private file
+          state:
+            type: str
+            required: true
+            description: Contents of the DNSSEC .state file
 
       bind9_dnssec_delegated_child_zones:
         type: list
