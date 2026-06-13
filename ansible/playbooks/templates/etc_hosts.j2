@@ -3,14 +3,6 @@
 127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
 ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
 
-{% set hosts_entries = dns_hosts_file_self_entries.get(inventory_hostname, []) %}
-{% set ns = namespace(current_view='') %}
-{% for entry in hosts_entries %}
-{%   if entry.view != ns.current_view %}
-{%     if ns.current_view != '' %}
-
-{%     endif %}
-{%     set ns.current_view = entry.view %}
-{%   endif %}
+{% for entry in hosts_file_entries | default([]) %}
 {{ entry.address }} {{ entry.canonical }}{{ (' ' ~ (entry.aliases | join(' '))) if (entry.aliases | default([]) | length > 0) else '' }}
 {% endfor %}

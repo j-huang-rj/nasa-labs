@@ -19,8 +19,20 @@ all:
           ansible_ssh_common_args: >-
             -o ProxyJump=student@127.0.0.1:2787
 
-        dmz-client-01:
+        smtp-01:
           ansible_host: 172.16.0.25
+          ansible_port: 22
+          ansible_ssh_common_args: >-
+            -o ProxyJump=student@127.0.0.1:2787
+
+        imap-01:
+          ansible_host: 172.16.0.26
+          ansible_port: 22
+          ansible_ssh_common_args: >-
+            -o ProxyJump=student@127.0.0.1:2787
+
+        dmz-client-01:
+          ansible_host: 172.16.0.100
           ansible_port: 22
           ansible_ssh_common_args: >-
             -o ProxyJump=student@127.0.0.1:2787
@@ -77,7 +89,16 @@ all:
 
     mail:
       hosts:
-        dmz-client-01:
+        smtp-01:
+        imap-01:
+
+    mail_smtp:
+      hosts:
+        smtp-01:
+
+    mail_imap:
+      hosts:
+        imap-01:
 
     ldap_servers:
       hosts:
@@ -87,7 +108,7 @@ all:
       hosts:
         workstation-01:
         workstation-02:
-        dmz-client-01:
+        smtp-01:
 
     nfs_servers:
       hosts:

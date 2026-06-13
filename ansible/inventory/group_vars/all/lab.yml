@@ -1,0 +1,45 @@
+---
+# Lab identity and topology constants.
+
+lab_id: 14
+lab_domain: 14.nasa
+
+# Network ranges
+lab_dmz_cidr: 172.16.0.0/24
+lab_internal_cidr: 172.16.1.0/24
+lab_vpn_cidr: 192.168.0.224/28
+
+# Router
+lab_router_dmz_ip: 172.16.0.254
+lab_router_internal_ip: 172.16.1.254
+lab_vpn_router_ip: 192.168.0.225
+
+# Agents and client
+lab_dmz_agent_ip: 172.16.0.123
+lab_internal_agent_ip: 172.16.1.123
+lab_dmz_client_ip: 172.16.0.100
+lab_vpn_client_ip: 192.168.0.226
+
+# DNS
+lab_secondary_ns_ip: 172.16.0.53
+lab_vpn_ns_ip: 192.168.0.227
+lab_primary_ns_ip: 172.16.1.53
+lab_resolver_ip: 172.16.1.153
+
+# Bootstrap/fallback DNS resolver
+lab_bootstrap_dns_ip: 1.1.1.1
+
+# Mail
+lab_smtp_ip: 172.16.0.25
+lab_vpn_smtp_ip: 192.168.0.228
+lab_imap_ip: 172.16.0.26
+lab_vpn_imap_ip: 192.168.0.229
+
+# Workstations
+lab_workstation1_ip: 172.16.0.1
+lab_vpn_workstation1_ip: 192.168.0.230
+lab_workstation2_ip: 172.16.0.2
+lab_vpn_workstation2_ip: 192.168.0.231
+
+# Directory services
+lab_ldap_ip: 172.16.1.10

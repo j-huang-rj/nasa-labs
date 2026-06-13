@@ -447,9 +447,7 @@
             firewall_policy_rich_rule_current_map
             | combine({
               item.item.name: (
-                (item.stdout | trim | split('\n') | map('trim') | reject('equalto', '') | list)
-                if (item.stdout | trim | length > 0)
-                else []
+                item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list
               )
             })
           }}

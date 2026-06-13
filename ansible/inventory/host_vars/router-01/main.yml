@@ -8,15 +8,27 @@ network_interfaces:
 
   - ifname: eth1
     zone: dmz
-    ip4: 172.16.0.254/24
+    ip4: "{{ lab_router_dmz_ip }}/24"
     conn_name: dmz-static
     default_conn_name: "cloud-init eth1"
 
   - ifname: eth2
     zone: internal
-    ip4: 172.16.1.254/24
+    ip4: "{{ lab_router_internal_ip }}/24"
     conn_name: internal-static
     default_conn_name: "cloud-init eth2"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_router_dmz_ip }}"
+    canonical: "router.{{ lab_domain }}"
+    aliases:
+      - router
+      - router-01
+
+  - address: "{{ lab_router_internal_ip }}"
+    canonical: "router.{{ lab_domain }}"
+    aliases: []
 
 # WireGuard Config
 wireguard_enabled: true
@@ -78,14 +90,14 @@ firewall_policies:
     rich_rules:
       - >-
         rule family="ipv4"
-        source address="172.16.0.1/32"
-        destination address="172.16.1.10/32"
+        source address="{{ lab_workstation1_ip }}/32"
+        destination address="{{ lab_ldap_ip }}/32"
         port port="2049" protocol="tcp"
         accept
       - >-
         rule family="ipv4"
-        source address="172.16.0.2/32"
-        destination address="172.16.1.10/32"
+        source address="{{ lab_workstation2_ip }}/32"
+        destination address="{{ lab_ldap_ip }}/32"
         port port="2049" protocol="tcp"
         accept
 
@@ -147,35 +159,35 @@ firewall_masquerade_zones:
 
 # Preserve resolver client source IPs
 firewall_masquerade_exempt_destinations:
-  - 172.16.1.153/32
+  - "{{ lab_resolver_ip }}/32"
 
 # Preserve source IPs for authoritative DNS transfers/NOTIFY between primary
 # and secondary NS hosts even though general inter-LAN traffic is masqueraded
 firewall_masquerade_preserve_source_pairs:
-  - source: 172.16.0.53
-    destination: 172.16.1.53
+  - source: "{{ lab_secondary_ns_ip }}"
+    destination: "{{ lab_primary_ns_ip }}"
 
-  - source: 172.16.1.53
-    destination: 172.16.0.53
+  - source: "{{ lab_primary_ns_ip }}"
+    destination: "{{ lab_secondary_ns_ip }}"
 
-  - source: 172.16.0.1
-    destination: 172.16.1.10
+  - source: "{{ lab_workstation1_ip }}"
+    destination: "{{ lab_ldap_ip }}"
 
-  - source: 172.16.0.2
-    destination: 172.16.1.10
+  - source: "{{ lab_workstation2_ip }}"
+    destination: "{{ lab_ldap_ip }}"
 
 firewall_forward_ports:
   - zone: vpn
     port: 10001
     proto: tcp
     toport: 2222
-    toaddr: 172.16.0.123
+    toaddr: "{{ lab_dmz_agent_ip }}"
 
   - zone: vpn
     port: 10002
     proto: tcp
     toport: 2222
-    toaddr: 172.16.1.123
+    toaddr: "{{ lab_internal_agent_ip }}"
 
 firewall_rich_rules:
   - zone: vpn

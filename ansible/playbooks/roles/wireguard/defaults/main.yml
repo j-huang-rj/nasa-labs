@@ -1,4 +1,7 @@
 ---
+# Component gate. Hosts opt into WireGuard by setting this true in host_vars.
+wireguard_enabled: false
+
 wireguard_healthcheck_targets:
   - 192.168.255.1
 
