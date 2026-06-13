@@ -3,7 +3,7 @@
 wireguard_enabled: false
 
 wireguard_healthcheck_targets:
-  - 192.168.255.1
+  - "{{ lab_nasa_root_ip }}"
 
 wireguard_persistent_keepalive: 5
 wireguard_healthcheck_retries: 3

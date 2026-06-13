@@ -13,7 +13,7 @@ bind9_dmz_reverse_zone: "{{ (bind9_dmz_cidr.split('/')[0].split('.')[:3] | rever
 bind9_internal_reverse_zone: "{{ (bind9_internal_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
 
 # DNS infrastructure
-bind9_nasa_root_ip: "192.168.255.1"
+bind9_nasa_root_ip: "{{ lab_nasa_root_ip }}"
 bind9_primary_ns_ip: "{{ lab_primary_ns_ip }}"
 bind9_secondary_ns_ip: "{{ lab_secondary_ns_ip }}"
 bind9_dns_resolver_ip: "{{ lab_resolver_ip }}"

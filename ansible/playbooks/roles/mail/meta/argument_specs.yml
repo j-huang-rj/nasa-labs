@@ -206,7 +206,7 @@ argument_specs:
         required: false
         description: >-
           List of trusted network CIDR ranges for Postfix mynetworks.
-          Defaults to [127.0.0.0/8, 192.168.255.0/28].
+          Defaults to [127.0.0.0/8, lab_nasa_root_cidr].
 
       # Managed domains
       mail_managed_domains:

@@ -512,27 +512,28 @@
         quiet: true
         that:
           - (_p10_nfs_rich_rules | length) == 2
-          - (_p10_nfs_rich_rules | select('search', '172.16.0.1/32') | list | length) > 0
-          - (_p10_nfs_rich_rules | select('search', '172.16.0.2/32') | list | length) > 0
-          - (_p10_nfs_rich_rules | select('search', '172.16.1.10/32') | list | length) == 2
+          - (_p10_nfs_rich_rules | select('search', lab_workstation1_ip ~ '/32') | list | length) > 0
+          - (_p10_nfs_rich_rules | select('search', lab_workstation2_ip ~ '/32') | list | length) > 0
+          - (_p10_nfs_rich_rules | select('search', lab_ldap_ip ~ '/32') | list | length) == 2
           - (_p10_nfs_rich_rules | select('search', 'port="2049"') | list | length) == 2
           - (_p10_nfs_rich_rules | select('search', 'protocol="tcp"') | list | length) == 2
           - (_p10_nfs_rich_rules | select('search', 'accept') | list | length) == 2
         fail_msg: >-
           NFS policy rich rules shape mismatch.
-          Expected: 2 rules each matching source 172.16.0.1/32 or 172.16.0.2/32,
-          destination 172.16.1.10/32, port 2049, protocol tcp, accept.
+          Expected: 2 rules each matching source {{ lab_workstation1_ip }}/32 or {{ lab_workstation2_ip }}/32,
+          destination {{ lab_ldap_ip }}/32, port 2049, protocol tcp, accept.
           Got: {{ _p10_nfs_rich_rules }}.
 
     - name: "PHASE [nfs-path-source : Assert Preserve-Source Pairs For NFS]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - (_p10_preserve_pairs | selectattr('source', 'equalto', '172.16.0.1') | selectattr('destination', 'equalto', '172.16.1.10') | list | length) > 0
-          - (_p10_preserve_pairs | selectattr('source', 'equalto', '172.16.0.2') | selectattr('destination', 'equalto', '172.16.1.10') | list | length) > 0
+          - (_p10_preserve_pairs | selectattr('source', 'equalto', lab_workstation1_ip) | selectattr('destination', 'equalto', lab_ldap_ip) | list | length) > 0
+          - (_p10_preserve_pairs | selectattr('source', 'equalto', lab_workstation2_ip) | selectattr('destination', 'equalto', lab_ldap_ip) | list | length) > 0
         fail_msg: >-
           Preserve-source pairs missing expected NFS entries.
-          Expected pairs: 172.16.0.1 -> 172.16.1.10, 172.16.0.2 -> 172.16.1.10.
+          Expected pairs: {{ lab_workstation1_ip }} -> {{ lab_ldap_ip }},
+          {{ lab_workstation2_ip }} -> {{ lab_ldap_ip }}.
           Got: {{ _p10_preserve_pairs }}.
 
     - name: "PHASE [nfs-path-source : Assert ldap-01 Has Source-Restricted NFS Rich Rules]"
@@ -542,13 +543,13 @@
           - >-
             (_p10_ldap_rich_rules
              | selectattr('zone', 'equalto', 'internal')
-             | selectattr('rule', 'search', '172.16.0.1/32')
+             | selectattr('rule', 'search', lab_workstation1_ip ~ '/32')
              | selectattr('rule', 'search', 'port="2049"')
              | list | length) > 0
           - >-
             (_p10_ldap_rich_rules
              | selectattr('zone', 'equalto', 'internal')
-             | selectattr('rule', 'search', '172.16.0.2/32')
+             | selectattr('rule', 'search', lab_workstation2_ip ~ '/32')
              | selectattr('rule', 'search', 'port="2049"')
              | list | length) > 0
           - >-
@@ -561,7 +562,7 @@
         fail_msg: >-
           ldap-01 host-local NFS rich rules missing or incorrect.
           Expected: internal-zone rich rules accepting port 2049/tcp from
-          172.16.0.1/32 and 172.16.0.2/32.
+          {{ lab_workstation1_ip }}/32 and {{ lab_workstation2_ip }}/32.
           Got: {{ _p10_ldap_rich_rules | selectattr('zone', 'equalto', 'internal') | list }}.
 
     - name: "PHASE [nfs-path-source : Assert No Broad 2049/tcp On ldap-01 Zone Ports]"
@@ -658,19 +659,19 @@
              | selectattr('port', 'equalto', 10001)
              | selectattr('proto', 'equalto', 'tcp')
              | selectattr('toport', 'equalto', 2222)
-             | selectattr('toaddr', 'equalto', '172.16.0.123')
+             | selectattr('toaddr', 'equalto', lab_dmz_agent_ip)
              | list | length) > 0
           - >-
             (_p10_dnat_ports
              | selectattr('port', 'equalto', 10002)
              | selectattr('proto', 'equalto', 'tcp')
              | selectattr('toport', 'equalto', 2222)
-             | selectattr('toaddr', 'equalto', '172.16.1.123')
+             | selectattr('toaddr', 'equalto', lab_internal_agent_ip)
              | list | length) > 0
         fail_msg: >-
           DNAT port-forwarding rules changed.
-          Expected: 10001/tcp -> dmz-agent-01:2222 (172.16.0.123),
-          10002/tcp -> internal-agent-01:2222 (172.16.1.123).
+          Expected: 10001/tcp -> dmz-agent-01:2222 ({{ lab_dmz_agent_ip }}),
+          10002/tcp -> internal-agent-01:2222 ({{ lab_internal_agent_ip }}).
           Got: {{ _p10_dnat_ports }}.
 
     # --- VPN SSH reject preservation ---

@@ -18,6 +18,7 @@
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _e2e_forward_zone: "{{ lab_domain }}"
+    _e2e_primary_ns_ip: "{{ lab_primary_ns_ip }}"
   tasks:
     - name: "PHASE [e2e-dmz : START]"
       ansible.builtin.debug:
@@ -31,23 +32,23 @@
       changed_when: false
       register: _e2e_dmz_private_ns
 
-    - name: "PHASE [e2e-dmz : Assert Private-NS Resolves To 172.16.1.53]"
+    - name: "PHASE [e2e-dmz : Assert Private-NS Resolves To Primary NS IP]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'172.16.1.53' in _e2e_dmz_private_ns.stdout"
+          - _e2e_primary_ns_ip in _e2e_dmz_private_ns.stdout
         fail_msg: >-
-          DMZ agent private-ns forward lookup did not return 172.16.1.53 via resolver.
+          DMZ agent private-ns forward lookup did not return {{ _e2e_primary_ns_ip }} via resolver.
           Got: {{ _e2e_dmz_private_ns.stdout | default('') }}
 
     # Reverse lookup through resolver
-    - name: "PHASE [e2e-dmz : Resolver Reverse Lookup For 172.16.1.53]"
+    - name: "PHASE [e2e-dmz : Resolver Reverse Lookup For Primary NS IP]"
       ansible.builtin.command:
-        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
+        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} -x {{ _e2e_primary_ns_ip }} +short"
       changed_when: false
       register: _e2e_dmz_reverse
 
-    - name: "PHASE [e2e-dmz : Assert 172.16.1.53 Reverse Returns Private-NS]"
+    - name: "PHASE [e2e-dmz : Assert Primary NS Reverse Returns Private-NS]"
       ansible.builtin.assert:
         quiet: true
         that:
@@ -55,7 +56,7 @@
             ('private-ns.' ~ _e2e_forward_zone ~ '.')
             in _e2e_dmz_reverse.stdout
         fail_msg: >-
-          DMZ agent reverse lookup for 172.16.1.53 did not return private-ns.{{ _e2e_forward_zone }}.
+          DMZ agent reverse lookup for {{ _e2e_primary_ns_ip }} did not return private-ns.{{ _e2e_forward_zone }}.
           Got: {{ _e2e_dmz_reverse.stdout | default('') }}
 
     # Cloudflare forwarding
@@ -117,6 +118,7 @@
   vars:
     _e2e_resolver: "{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _e2e_forward_zone: "{{ lab_domain }}"
+    _e2e_primary_ns_ip: "{{ lab_primary_ns_ip }}"
   tasks:
     - name: "PHASE [e2e-private : START]"
       ansible.builtin.debug:
@@ -130,23 +132,23 @@
       changed_when: false
       register: _e2e_private_private_ns
 
-    - name: "PHASE [e2e-private : Assert Private-NS Resolves To 172.16.1.53]"
+    - name: "PHASE [e2e-private : Assert Private-NS Resolves To Primary NS IP]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'172.16.1.53' in _e2e_private_private_ns.stdout"
+          - _e2e_primary_ns_ip in _e2e_private_private_ns.stdout
         fail_msg: >-
-          Private agent private-ns forward lookup did not return 172.16.1.53 via resolver.
+          Private agent private-ns forward lookup did not return {{ _e2e_primary_ns_ip }} via resolver.
           Got: {{ _e2e_private_private_ns.stdout | default('') }}
 
     # Reverse lookup through resolver
-    - name: "PHASE [e2e-private : Resolver Reverse Lookup For 172.16.1.53]"
+    - name: "PHASE [e2e-private : Resolver Reverse Lookup For Primary NS IP]"
       ansible.builtin.command:
-        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} -x 172.16.1.53 +short"
+        cmd: "docker exec nap-agent dig @{{ _e2e_resolver }} -x {{ _e2e_primary_ns_ip }} +short"
       changed_when: false
       register: _e2e_private_reverse
 
-    - name: "PHASE [e2e-private : Assert 172.16.1.53 Reverse Returns Private-NS]"
+    - name: "PHASE [e2e-private : Assert Primary NS Reverse Returns Private-NS]"
       ansible.builtin.assert:
         quiet: true
         that:
@@ -154,7 +156,7 @@
             ('private-ns.' ~ _e2e_forward_zone ~ '.')
             in _e2e_private_reverse.stdout
         fail_msg: >-
-          Private agent reverse lookup for 172.16.1.53 did not return private-ns.{{ _e2e_forward_zone }}.
+          Private agent reverse lookup for {{ _e2e_primary_ns_ip }} did not return private-ns.{{ _e2e_forward_zone }}.
           Got: {{ _e2e_private_reverse.stdout | default('') }}
 
     # Cloudflare forwarding
