@@ -12,30 +12,44 @@
 
 - name: "PHASE [main : Create vmail Identity And Passwd-File]"
   ansible.builtin.import_tasks: users.yml
+  when: >-
+    (mail_vmail_identity_enabled | bool) or
+    (mail_dovecot_passwd_file_enabled | bool)
 
 - name: "PHASE [main : Deploy TLS Certificates]"
   ansible.builtin.import_tasks: tls.yml
+  when: mail_tls_enabled | bool
 
 - name: "PHASE [main : Deploy LDAP CA Certificate]"
   ansible.builtin.import_tasks: ldap_ca_cert.yml
 
+- name: "PHASE [main : Verify LDAP Connectivity]"
+  ansible.builtin.import_tasks: ldap_verify.yml
+  when: mail_ldap_verify_enabled | bool
+
 - name: "PHASE [main : Configure Dovecot]"
   ansible.builtin.import_tasks: dovecot.yml
+  when: mail_dovecot_enabled | bool
 
 - name: "PHASE [main : Configure OpenDKIM Signing]"
   ansible.builtin.import_tasks: opendkim.yml
+  when: mail_opendkim_enabled | bool
 
 - name: "PHASE [main : Configure Filter/Rewrite Milter]"
   ansible.builtin.import_tasks: filter_milter.yml
+  when: mail_filter_milter_enabled | bool
 
 - name: "PHASE [main : Configure Postfix]"
   ansible.builtin.import_tasks: postfix.yml
+  when: mail_postfix_enabled | bool
 
 - name: "PHASE [main : Configure Mailing-List Aliases]"
   ansible.builtin.import_tasks: list_aliases.yml
+  when: mail_list_aliases_enabled | bool
 
 - name: "PHASE [main : Deploy Mailing-List API]"
   ansible.builtin.import_tasks: list_api.yml
+  when: mail_list_api_enabled | bool
 
 - name: "END"
   become: false

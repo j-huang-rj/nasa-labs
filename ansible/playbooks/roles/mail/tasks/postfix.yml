@@ -39,6 +39,49 @@
     mode: "0644"
   notify: "PHASE [handler : Restart Postfix]"
 
+- name: "PHASE [postfix : Render Virtual Mailbox Maps]"
+  ansible.builtin.template:
+    src: postfix/virtual_mailbox_maps.j2
+    dest: "{{ mail_virtual_mailbox_maps_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [postfix : Render LDAP Sender Login Maps]"
+  ansible.builtin.template:
+    src: postfix/ldap_sender_login_maps.cf.j2
+    dest: "{{ mail_postfix_ldap_sender_login_maps_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: mail_ldap_enabled | default(false)
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [postfix : Render LDAP Virtual Mailbox Maps]"
+  ansible.builtin.template:
+    src: postfix/ldap_virtual_mailbox_maps.cf.j2
+    dest: "{{ mail_postfix_ldap_virtual_mailbox_maps_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: mail_ldap_enabled | default(false)
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [postfix : Remove LDAP Sender Login Maps When Disabled]"
+  ansible.builtin.file:
+    path: "{{ mail_postfix_ldap_sender_login_maps_path }}"
+    state: absent
+  when: not (mail_ldap_enabled | default(false))
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [postfix : Remove LDAP Virtual Mailbox Maps When Disabled]"
+  ansible.builtin.file:
+    path: "{{ mail_postfix_ldap_virtual_mailbox_maps_path }}"
+    state: absent
+  when: not (mail_ldap_enabled | default(false))
+  notify: "PHASE [handler : Restart Postfix]"
+
 - name: "PHASE [postfix : Render Postfix Master Configuration]"
   ansible.builtin.template:
     src: postfix/master.cf.j2
@@ -85,6 +128,26 @@
     not mail_virtual_mailbox_domains_db_stat.stat.exists or
     (mail_virtual_mailbox_domains_src_stat.stat.exists and
      mail_virtual_mailbox_domains_db_stat.stat.mtime < mail_virtual_mailbox_domains_src_stat.stat.mtime)
+  changed_when: true
+  notify: "PHASE [handler : Restart Postfix]"
+
+- name: "PHASE [postfix : Stat Virtual Mailbox Maps Source]"
+  ansible.builtin.stat:
+    path: "{{ mail_virtual_mailbox_maps_path }}"
+  register: mail_virtual_mailbox_maps_src_stat
+
+- name: "PHASE [postfix : Stat Virtual Mailbox Maps Database]"
+  ansible.builtin.stat:
+    path: "{{ mail_virtual_mailbox_maps_path }}.lmdb"
+  register: mail_virtual_mailbox_maps_db_stat
+
+- name: "PHASE [postfix : Build Virtual Mailbox Maps Database]"
+  ansible.builtin.command:
+    cmd: postmap lmdb:"{{ mail_virtual_mailbox_maps_path }}"
+  when: >-
+    not mail_virtual_mailbox_maps_db_stat.stat.exists or
+    (mail_virtual_mailbox_maps_src_stat.stat.exists and
+     mail_virtual_mailbox_maps_db_stat.stat.mtime < mail_virtual_mailbox_maps_src_stat.stat.mtime)
   changed_when: true
   notify: "PHASE [handler : Restart Postfix]"
 

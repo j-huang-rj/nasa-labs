@@ -1,7 +1,7 @@
 # Dovecot main configuration - managed by Ansible
 
-# Listen on IMAP port 143 for STARTTLS and expose LMTP to Postfix
-protocols = imap lmtp
+# Protocols enabled on this host.
+protocols = {{ mail_dovecot_protocols | join(' ') }}
 
 # Include conf.d snippets
 !include conf.d/*.conf

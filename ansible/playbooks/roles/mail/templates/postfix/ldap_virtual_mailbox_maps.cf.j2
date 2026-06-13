@@ -1,0 +1,15 @@
+# Postfix LDAP virtual mailbox recipient map - managed by Ansible
+# Lookup key: recipient address. A non-empty result means the localpart is a
+# dynamic LDAP account and can be delivered to Dovecot LMTP. Explicitly
+# forbidden static accounts such as stu are excluded.
+
+server_host = {{ mail_ldap_uri }}
+version = 3
+bind = no
+search_base = ou=People,{{ mail_ldap_base_dn }}
+scope = sub
+query_filter = (&(uid=%u){% for user in mail_ldap_forbidden_users | default([]) %}(!(uid={{ user }})){% endfor %})
+result_attribute = uid
+result_format = %s
+timeout = 10
+tls_ca_cert_file = {{ mail_ldap_ca_cert_path }}

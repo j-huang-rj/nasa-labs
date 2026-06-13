@@ -6,6 +6,11 @@
   "active_source_path": "{{ mail_list_dynamic_source_path }}",
   "managed_domains": {{ mail_managed_domains | to_json }},
   "reserved_names": {{ mail_list_reserved_names | to_json }},
+  "ldap_enabled": {{ (mail_ldap_enabled | default(false) | bool) | to_json }},
+  "ldap_uri": {{ mail_ldap_uri | to_json }},
+  "ldap_ca_cert_path": {{ mail_ldap_ca_cert_path | to_json }},
+  "ldap_base_dn": {{ mail_ldap_base_dn | to_json }},
+  "ldap_forbidden_users": {{ (mail_ldap_forbidden_users | default([])) | to_json }},
   "listen_host": "{{ mail_list_api_listen_host }}",
   "listen_port": {{ mail_list_api_listen_port }}
 }

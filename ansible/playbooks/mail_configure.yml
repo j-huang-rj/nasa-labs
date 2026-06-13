@@ -9,4 +9,4 @@
   become: true
   roles:
     - role: mail
-      when: mail_enabled
+      when: mail_enabled | default(false) | bool

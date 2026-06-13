@@ -8,15 +8,22 @@
   ansible.builtin.dnf:
     name: epel-release
     state: present
+  when: mail_opendkim_enabled | bool
+
+- name: "PHASE [install : Build Mail Package List]"
+  ansible.builtin.set_fact:
+    _mail_packages: >-
+      {{ (mail_postfix_packages if (mail_postfix_enabled | bool) else [])
+         + (mail_dovecot_packages if (mail_dovecot_enabled | bool) else [])
+         + (mail_opendkim_packages if (mail_opendkim_enabled | bool) else [])
+         + (mail_dovecot_ldap_packages if ((mail_ldap_enabled | default(false) | bool) and (mail_dovecot_enabled | bool)) else [])
+         + (mail_ldap_assert_packages if ((mail_ldap_enabled | default(false) | bool) and (mail_ldap_verify_enabled | bool)) else []) }}
 
 - name: "PHASE [install : Install Mail Packages]"
   ansible.builtin.dnf:
-    name: >-
-      {{ mail_postfix_packages
-         + mail_dovecot_packages
-         + mail_opendkim_packages
-         + (mail_dovecot_ldap_packages + mail_ldap_assert_packages if (mail_ldap_enabled | default(false)) else []) }}
+    name: "{{ _mail_packages }}"
     state: present
+  when: _mail_packages | length > 0
 
 - name: "PHASE [install : END]"
   become: false

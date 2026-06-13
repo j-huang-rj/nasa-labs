@@ -6,8 +6,13 @@ myorigin = {{ mail_managed_domains | first }}
 mydestination = localhost
 
 # Virtual mailbox domains — accept delivery from trusted networks or authenticated users
-virtual_mailbox_domains = lmdb:/etc/postfix/virtual_mailbox_domains
-virtual_transport = lmtp:unix:private/dovecot-lmtp
+virtual_mailbox_domains = lmdb:{{ mail_postfix_conf_dir }}/virtual_mailbox_domains
+virtual_mailbox_maps =
+    lmdb:{{ mail_virtual_mailbox_maps_path }}
+{% if mail_ldap_enabled | default(false) %}
+    ldap:{{ mail_postfix_ldap_virtual_mailbox_maps_path }}
+{% endif %}
+virtual_transport = {{ mail_postfix_virtual_transport }}
 
 # Virtual alias expansion for mailing lists
 virtual_alias_maps =
@@ -19,18 +24,22 @@ recipient_delimiter = +
 
 # Dovecot SASL authentication
 smtpd_sasl_type = dovecot
-smtpd_sasl_path = private/auth
+smtpd_sasl_path = {{ mail_postfix_smtpd_sasl_path }}
 
 # Global policy — require SASL auth for submission, allow MX delivery from trusted networks
 smtpd_sasl_auth_enable = yes
-smtpd_sender_login_maps = lmdb:/etc/postfix/sender_login_maps
+smtpd_sender_login_maps =
+    lmdb:{{ mail_postfix_conf_dir }}/sender_login_maps
+{% if mail_ldap_enabled | default(false) %}
+    ldap:{{ mail_postfix_ldap_sender_login_maps_path }}
+{% endif %}
 smtpd_sender_restrictions = reject_sender_login_mismatch
 smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject
 smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject
 smtpd_tls_security_level = may
 
 # Trusted networks
-mynetworks = 127.0.0.0/8, 192.168.255.0/28
+mynetworks = {{ mail_postfix_mynetworks | join(', ') }}
 
 # TLS certificate
 smtpd_tls_cert_file = {{ mail_tls_cert_path }}

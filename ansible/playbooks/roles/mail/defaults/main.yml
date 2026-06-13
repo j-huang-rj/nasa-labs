@@ -1,11 +1,40 @@
 ---
+# Component gate. Hosts opt into mail by setting this true in host_vars.
+mail_enabled: false
+
+# Feature gates. Defaults represent a unified mail host (Postfix + Dovecot
+# with IMAP, LMTP via Unix socket, auth socket, OpendDKIM, filter milter,
+# list API/aliases, vmail identity, passwd-file, and TLS). Split-host overrides
+# disable the features not needed on each side (e.g. smtp-01 disables IMAP/LMTP
+# while imap-01 disables Postfix/OpenDKIM).
+mail_postfix_enabled: true
+mail_dovecot_enabled: true
+mail_dovecot_auth_enabled: true
+mail_dovecot_imap_enabled: true
+mail_dovecot_lmtp_enabled: true
+mail_dovecot_auth_socket_enabled: true
+mail_dovecot_lmtp_unix_socket_enabled: true
+mail_dovecot_lmtp_inet_listener_enabled: false
+mail_opendkim_enabled: true
+mail_filter_milter_enabled: true
+mail_list_aliases_enabled: true
+mail_list_api_enabled: true
+mail_vmail_identity_enabled: true
+mail_vmail_home_enabled: true
+mail_dovecot_passwd_file_enabled: true
+mail_tls_enabled: true
+mail_ldap_verify_enabled: true
+
 # Postfix
 mail_postfix_packages:
   - postfix
   - postfix-lmdb
+  - postfix-ldap
   - cyrus-sasl-plain
 mail_postfix_service_name: postfix
 mail_postfix_conf_dir: /etc/postfix
+mail_postfix_ldap_sender_login_maps_path: "{{ mail_postfix_conf_dir }}/ldap_sender_login_maps.cf"
+mail_postfix_ldap_virtual_mailbox_maps_path: "{{ mail_postfix_conf_dir }}/ldap_virtual_mailbox_maps.cf"
 
 # Dovecot
 mail_dovecot_packages:
@@ -13,8 +42,19 @@ mail_dovecot_packages:
 mail_dovecot_service_name: dovecot
 mail_dovecot_conf_dir: /etc/dovecot
 mail_dovecot_passwd_path: "{{ mail_dovecot_conf_dir }}/passwd"
+mail_dovecot_ldap_account_gate_path: "{{ mail_dovecot_conf_dir }}/dovecot-ldap-account-gate.conf.ext"
 mail_dovecot_auth_socket_path: /var/spool/postfix/private/auth
 mail_dovecot_lmtp_socket_path: /var/spool/postfix/private/dovecot-lmtp
+mail_dovecot_lmtp_listen_address: "{{ mail_lmtp_private_ip | default(ansible_host) }}"
+mail_dovecot_lmtp_listen_port: "{{ mail_lmtp_port | default(24) | int }}"
+mail_dovecot_protocols:
+  - imap
+  - lmtp
+mail_postfix_virtual_transport: lmtp:unix:private/dovecot-lmtp
+mail_postfix_smtpd_sasl_path: private/auth
+mail_postfix_mynetworks:
+  - 127.0.0.0/8
+  - 192.168.255.0/28
 
 # Managed domains
 mail_managed_domains:
@@ -39,7 +79,6 @@ mail_tls_cert_path: /etc/pki/tls/certs/mail.crt
 mail_tls_key_path: /etc/pki/tls/private/mail.key
 
 # DKIM
-mail_dkim_selector: "2026-na"
 mail_dkim_private_keys: {}
 
 # OpenDKIM
@@ -73,6 +112,7 @@ mail_list_api_app_dir: /opt/nasa-mail-list-api/app
 mail_list_api_state_dir: /var/lib/nasa-mail-list-api
 mail_list_static_alias_path: "{{ mail_postfix_conf_dir }}/list_static_aliases"
 mail_list_dynamic_source_path: "{{ mail_list_api_state_dir }}/dynamic_aliases"
+mail_virtual_mailbox_maps_path: "{{ mail_postfix_conf_dir }}/virtual_mailbox_maps"
 mail_list_reserved_names:
   - local_users
 
@@ -104,12 +144,14 @@ mail_pre_dkim_milters:
 
 # LDAP
 mail_ldap_enabled: false
-mail_ldap_host: "ldap.{{ mail_zone_name }}"
-mail_ldap_base_dn: "dc={{ mail_zone_name | regex_replace('\\.', ',dc=') }}"
-mail_ldap_uri: "ldaps://{{ mail_ldap_host }}:636"
-mail_ldap_ca_cert_path: /etc/pki/ca-trust/source/anchors/ldap-ca.crt
-mail_dovecot_ldap_packages:
-  - dovecot-ldap
+mail_ldap_host: "{{ ldap_server_fqdn }}"
+mail_ldap_base_dn: "{{ ldap_base_dn }}"
+mail_ldap_uri: "{{ ldap_server_uri }}"
+mail_ldap_ca_cert_path: "{{ ldap_tls_ca_cert_path }}"
+mail_ldap_ca_cert: "{{ ldap_tls_ca_certificate }}"
+mail_dovecot_ldap_packages: []
 mail_ldap_assert_packages:
   - openldap-clients
 mail_ldap_users: []
+mail_ldap_forbidden_users:
+  - stu

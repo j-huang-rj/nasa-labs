@@ -9,8 +9,51 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - mail_enabled | bool
+      - mail_enabled | default(false) | bool
     fail_msg: "mail_enabled must be true when the mail role is invoked"
+
+- name: "PHASE [assert : Check At Least One Mail Feature Is Enabled]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (mail_postfix_enabled | bool) or
+        (mail_dovecot_enabled | bool) or
+        (mail_opendkim_enabled | bool) or
+        (mail_filter_milter_enabled | bool) or
+        (mail_list_api_enabled | bool)
+    fail_msg: >-
+      At least one mail feature gate must be enabled when mail_enabled is true.
+
+- name: "PHASE [assert : Check Dovecot Protocol Gates Are Consistent]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_dovecot_protocols is sequence
+      - >-
+        (not (mail_dovecot_imap_enabled | bool)) or
+        ('imap' in mail_dovecot_protocols)
+      - >-
+        (not (mail_dovecot_lmtp_enabled | bool)) or
+        ('lmtp' in mail_dovecot_protocols)
+    fail_msg: >-
+      Dovecot protocol gates and mail_dovecot_protocols are inconsistent.
+  when: mail_dovecot_enabled | bool
+
+- name: "PHASE [assert : Check Postfix Delivery And SASL Paths Are Defined]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_postfix_virtual_transport is defined
+      - mail_postfix_virtual_transport | length > 0
+      - mail_postfix_smtpd_sasl_path is defined
+      - mail_postfix_smtpd_sasl_path | length > 0
+    fail_msg: >-
+      Postfix delivery/SASL path variables must be non-empty when Postfix is enabled.
+  when: mail_postfix_enabled | bool
 
 - name: "PHASE [assert : Check mail_managed_domains Is Defined And Non-Empty]"
   become: false
@@ -31,6 +74,7 @@
       mail_tls_certificate must be non-empty. Provide the PEM certificate content
       in host_vars/*/secrets.yml.
   no_log: true
+  when: mail_tls_enabled | bool
 
 - name: "PHASE [assert : Check mail_tls_private_key Is Non-Empty]"
   ansible.builtin.assert:
@@ -42,6 +86,7 @@
       mail_tls_private_key must be non-empty. Provide the PEM private key content
       in host_vars/*/secrets.yml.
   no_log: true
+  when: mail_tls_enabled | bool
 
 - name: "PHASE [assert : Check mail_local_user_password_hashes Are Defined And Non-Empty]"
   ansible.builtin.assert:
@@ -55,6 +100,7 @@
       Provide the password hash in host_vars/*/secrets.yml.
   loop: "{{ mail_local_users }}"
   no_log: true
+  when: mail_dovecot_passwd_file_enabled | bool
 
 - name: "PHASE [assert : Check DKIM Selector Is 2026-na]"
   become: false
@@ -64,7 +110,8 @@
       - mail_dkim_selector | string == '2026-na'
     fail_msg: >-
       DKIM selector must be exactly '2026-na'. Got: '{{ mail_dkim_selector }}'.
-      Update the selector in secrets or inventory to match the published DNS key.
+      Update the selector in group_vars/all/mail_dns.yml to match the published DNS key.
+  when: mail_opendkim_enabled | bool
 
 - name: "PHASE [assert : Check DKIM Private Keys Dict Is Defined]"
   become: false
@@ -77,6 +124,7 @@
       mail_dkim_private_keys must be defined as a dictionary mapping selector
       names to PEM-encoded private keys. Provide it in host_vars/*/secrets.yml.
   no_log: true
+  when: mail_opendkim_enabled | bool
 
 - name: "PHASE [assert : Check DKIM Private Key Is Present And Non-Empty]"
   become: false
@@ -98,8 +146,10 @@
       DKIM private key for selector '{{ mail_dkim_selector }}' is missing, empty,
       or malformed (must contain valid PEM BEGIN/END PRIVATE KEY markers).
       Provide mail_dkim_private_keys['{{ mail_dkim_selector }}'] with a valid
-      PEM-encoded private key in host_vars/dmz-client-01/secrets.yml.
+      PEM-encoded private key in host_vars/smtp-01/secrets.yml or generic
+      host_vars/*/secrets.yml.
   no_log: true
+  when: mail_opendkim_enabled | bool
 
 - name: "PHASE [assert : Check mail_pre_dkim_milters Is A Clean Sequence]"
   become: false
@@ -113,8 +163,9 @@
       mail_pre_dkim_milters must be a list and must not already contain the
       OpenDKIM milter socket '{{ mail_opendkim_postfix_socket }}'. The socket
       is appended automatically; do not duplicate it in the pre-DKIM slot.
+  when: mail_opendkim_enabled | bool
 
-- name: "PHASE [assert : Assert LDAP Variables When Enabled]"
+- name: "PHASE [assert : Assert LDAP TLS Trust Variables Are Defined]"
   become: false
   ansible.builtin.assert:
     quiet: true
@@ -127,52 +178,55 @@
       - mail_ldap_uri | length > 0
       - mail_ldap_ca_cert_path is defined
       - mail_ldap_ca_cert_path | length > 0
+      - mail_ldap_uri is regex('^ldaps://')
+      - mail_ldap_uri is regex(':636$')
+      - >-
+        ((mail_ldap_ca_cert | default('') | length > 0)
+         or (ldap_tls_ca_certificate | default('') | length > 0))
+        or (ldap_tls_ca_source_host is defined and ldap_tls_ca_source_host | length > 0
+            and ldap_tls_ca_source_path is defined and ldap_tls_ca_source_path | length > 0)
     fail_msg: >-
-      LDAP integration is enabled but required LDAP variables are missing.
-      Define mail_ldap_host, mail_ldap_base_dn, mail_ldap_uri, and
-      mail_ldap_ca_cert_path.
-  when: mail_ldap_enabled | default(false)
-
-- name: "PHASE [assert : Check LDAP CA Certificate Is Present]"
-  ansible.builtin.stat:
-    path: "{{ mail_ldap_ca_cert_path }}"
-  register: _mail_ldap_ca_cert_stat
-  when: mail_ldap_enabled | default(false)
-
-- name: "PHASE [assert : Assert LDAP CA Certificate Exists]"
-  ansible.builtin.assert:
-    quiet: true
-    that:
-      - _mail_ldap_ca_cert_stat.stat.exists
-    fail_msg: >-
-      LDAP CA certificate not found at {{ mail_ldap_ca_cert_path }}.
-      Deploy the LDAP CA cert from secrets before enabling LDAP.
-  when: mail_ldap_enabled | default(false)
-
-- name: "PHASE [assert : Check LDAP Server Reachability]"
-  ansible.builtin.command:
-    cmd: >-
-      ldapsearch -H {{ mail_ldap_uri }}
-      -b "{{ mail_ldap_base_dn }}"
-      -D "{{ mail_ldap_bind_dn | default('') }}"
-      -w "{{ mail_ldap_bind_password | default('') }}"
-      -x "(objectClass=posixAccount)"
-      dn
-  changed_when: false
-  failed_when: false
+      LDAP integration is enabled but required TLS trust variables are missing.
+      mail_ldap_host, mail_ldap_base_dn, mail_ldap_uri, and mail_ldap_ca_cert_path
+      must be defined and non-empty. mail_ldap_uri must start with ldaps:// and end
+      with :636. At least one TLS CA cert source must be available: mail_ldap_ca_cert,
+      ldap_tls_ca_certificate, or both ldap_tls_ca_source_host and ldap_tls_ca_source_path.
   no_log: true
-  register: _mail_ldap_connectivity_check
-  when: mail_ldap_enabled | default(false)
+  when: mail_ldap_enabled | default(false) | bool
 
-- name: "PHASE [assert : Assert LDAP Server Is Reachable]"
+- name: "PHASE [assert : Assert LDAP Users Is Non-Empty]"
+  become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      - _mail_ldap_connectivity_check.rc == 0
+      - mail_ldap_users is defined
+      - mail_ldap_users | length > 0
     fail_msg: >-
-      LDAP server at {{ mail_ldap_uri }} is unreachable.
-      When mail_ldap_enabled is true, the LDAP server must be
-      available at deploy time.
+      mail_ldap_users must be a non-empty list when LDAP integration is enabled.
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [assert : Assert No Forbidden Users In LDAP User List]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - (mail_ldap_forbidden_users | default([])) | intersect(mail_ldap_users) | length == 0
+    fail_msg: >-
+      Forbidden users '{{ (mail_ldap_forbidden_users | default([])) | intersect(mail_ldap_users) }}'
+      must not appear in mail_ldap_users.
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [assert : Assert No Insecure LDAP Or StartTLS Variables]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - mail_ldap_starttls is not defined or not (mail_ldap_starttls | default(false) | bool)
+      - mail_ldap_validate_certs is not defined or (mail_ldap_validate_certs | default(true) | bool)
+      - mail_ldap_uri is not regex('^ldap://')
+    fail_msg: >-
+      Insecure LDAP configuration detected. LDAPS only: no ldap:// URIs,
+      StartTLS, or TLS certificate validation bypass.
   when: mail_ldap_enabled | default(false)
 
 - name: "PHASE [assert : END]"

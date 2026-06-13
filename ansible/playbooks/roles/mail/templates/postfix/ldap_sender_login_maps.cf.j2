@@ -1,0 +1,13 @@
+# Postfix LDAP sender-login map - managed by Ansible
+# Lookup key: sender address. Result: allowed SASL login username.
+
+server_host = {{ mail_ldap_uri }}
+version = 3
+bind = no
+search_base = ou=People,{{ mail_ldap_base_dn }}
+scope = sub
+query_filter = (&(objectClass=posixAccount)(uid=%u))
+result_attribute = uid
+result_format = %s
+timeout = 10
+tls_ca_cert_file = {{ mail_ldap_ca_cert_path }}

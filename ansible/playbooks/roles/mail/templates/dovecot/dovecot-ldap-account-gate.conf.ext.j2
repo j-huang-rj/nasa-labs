@@ -1,0 +1,16 @@
+# Dovecot LDAP account gate configuration - managed by Ansible
+
+# LDAPS connection on port 636
+uris = {{ mail_ldap_uri }}
+
+# TLS trust for LDAPS certificate verification
+tls_ca_cert_file = {{ mail_ldap_ca_cert_path }}
+tls_require_cert = hard
+
+# Search dynamic LDAP mail accounts directly. OJ-created mail users are regular
+# entries under ou=People and may not carry static TA memberUid/gidNumber data.
+base = ou=People,{{ mail_ldap_base_dn }}
+scope = subtree
+deref = never
+pass_filter = (&(uid=%n){% for user in mail_ldap_forbidden_users | default([]) %}(!(uid={{ user }})){% endfor %})
+pass_attrs = =noauthenticate=y

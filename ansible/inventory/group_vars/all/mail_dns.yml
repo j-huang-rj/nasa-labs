@@ -1,22 +1,32 @@
 ---
-# Mail DNS service identity variables shared by DNS and mail hosts
+# Shared mail service DNS contract.
 
-# Mail endpoint host
-mail_endpoint_host: dmz-client-01
+# Mail hosts
+mail_smtp_host: smtp-01
+mail_imap_host: imap-01
 
-# Mail endpoint IPs (split-view)
-mail_endpoint_dmz_ip: "{{ hostvars[mail_endpoint_host].ansible_host }}"
-mail_endpoint_vpn_ip: "{{ bind9_vpn_client_ip }}"
+# Split service addresses
+mail_smtp_private_ip: "{{ lab_smtp_ip }}"
+mail_imap_private_ip: "{{ lab_imap_ip }}"
+mail_smtp_public_ip: "{{ lab_vpn_smtp_ip }}"
+mail_imap_public_ip: "{{ lab_vpn_imap_ip }}"
 
-# DNS zone bridge
-mail_zone_name: "{{ bind9_forward_zone_name }}"
+# LMTP destination identity
+mail_lmtp_private_ip: "{{ mail_imap_private_ip }}"
+mail_lmtp_port: 24
 
-# Second managed domain
+# Split-view DNS endpoint addresses
+mail_smtp_endpoint_dmz_ip: "{{ mail_smtp_private_ip }}"
+mail_imap_endpoint_dmz_ip: "{{ mail_imap_private_ip }}"
+mail_smtp_endpoint_vpn_ip: "{{ mail_smtp_public_ip }}"
+mail_imap_endpoint_vpn_ip: "{{ mail_imap_public_ip }}"
+
+# Domains
+mail_zone_name: "{{ lab_domain }}"
 mail_alias_domain: "mail.{{ mail_zone_name }}"
 
-# Mail service FQDNs
+# Service FQDNs
 mail_smtp_fqdn: "smtp.{{ mail_zone_name }}"
-mail_imap_fqdn: "imap.{{ mail_zone_name }}"
 
 # MX record
 mail_mx_target: "smtp.{{ mail_zone_name }}."
@@ -27,7 +37,7 @@ mail_mx_priority: 10
 mail_dkim_selector: "2026-na"
 
 # SPF
-mail_spf_value: '"v=spf1 ip4:{{ mail_endpoint_vpn_ip }} ~all"'
+mail_spf_value: '"v=spf1 ip4:{{ mail_smtp_endpoint_vpn_ip }} ~all"'
 
 # DMARC
 mail_dmarc_value: '"v=DMARC1; p=quarantine; rua=mailto:dmarc-report-rua@{{ mail_zone_name }}"'

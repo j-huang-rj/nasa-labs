@@ -16,20 +16,6 @@
   failed_when: false
   register: _mail_list_api_venv_probe
 
-- name: "PHASE [list_api : Probe Postmap Availability]"
-  ansible.builtin.command:
-    cmd: postmap -?
-  changed_when: false
-  failed_when: false
-  register: _mail_list_api_postmap_probe
-
-- name: "PHASE [list_api : Probe Postfix Availability]"
-  ansible.builtin.command:
-    cmd: postfix -?
-  changed_when: false
-  failed_when: false
-  register: _mail_list_api_postfix_probe
-
 - name: "PHASE [list_api : Create API Application Directory]"
   ansible.builtin.file:
     path: "{{ mail_list_api_app_dir }}"

@@ -8,6 +8,7 @@
   ansible.builtin.group:
     name: "{{ mail_vmail_group }}"
     system: true
+  when: mail_vmail_identity_enabled | bool
 
 - name: "PHASE [users : Create vmail System User]"
   ansible.builtin.user:
@@ -17,6 +18,7 @@
     create_home: false
     home: "{{ mail_vmail_home }}"
     shell: /sbin/nologin
+  when: mail_vmail_identity_enabled | bool
 
 - name: "PHASE [users : Create vmail Home Directory]"
   ansible.builtin.file:
@@ -26,6 +28,7 @@
     group: "{{ mail_vmail_group }}"
     mode: "0750"
     setype: mail_spool_t
+  when: mail_vmail_home_enabled | bool
 
 - name: "PHASE [users : Create Dovecot Configuration Directory]"
   ansible.builtin.file:
@@ -34,6 +37,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: mail_dovecot_passwd_file_enabled | bool
 
 - name: "PHASE [users : Render Dovecot Passwd-File]"
   ansible.builtin.template:
@@ -42,6 +46,7 @@
     owner: root
     group: dovecot
     mode: "0640"
+  when: mail_dovecot_passwd_file_enabled | bool
   no_log: true
 
 - name: "PHASE [users : END]"

@@ -5,16 +5,15 @@ uris = {{ mail_ldap_uri }}
 
 # TLS trust for LDAPS certificate verification
 tls_ca_cert_file = {{ mail_ldap_ca_cert_path }}
+tls_require_cert = hard
 
 # Base DN for searches
 base = {{ mail_ldap_base_dn }}
 
-# Auth bind as user — DN template avoids extra LDAP lookup
+# Auth bind as user — DN template avoids extra LDAP lookup.
+# Mail account eligibility is enforced by the preceding noauthenticate LDAP passdb.
 auth_bind = yes
 auth_bind_userdn = uid=%n,ou=People,{{ mail_ldap_base_dn }}
-
-# Restrict to posixAccount entries under ou=People
-pass_filter = (&(objectClass=posixAccount)(uid=%n))
 
 # Search scope
 scope = subtree
