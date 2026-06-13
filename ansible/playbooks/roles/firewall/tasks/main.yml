@@ -4,10 +4,10 @@
   ansible.builtin.debug:
     msg: "Starting execution of firewall role"
 
-- name: Validate Firewall Role Variables
+- name: "PHASE [main : Validate Firewall Role Variables]"
   ansible.builtin.import_tasks: assert.yml
 
-- name: Configure Firewall Workflow
+- name: "PHASE [main : Configure Firewall Workflow]"
   ansible.builtin.import_tasks: setup.yml
 
 - name: "END"

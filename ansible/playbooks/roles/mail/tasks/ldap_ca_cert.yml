@@ -46,13 +46,16 @@
   ansible.builtin.file:
     state: absent
     path: "{{ mail_ldap_ca_cert_path }}"
+  register: _mail_ldap_ca_remove
   when: not (mail_ldap_enabled | default(false))
 
 - name: "PHASE [ldap_ca_cert : Rebuild CA Trust Bundle After Removal]"
   ansible.builtin.command:
     cmd: update-ca-trust extract
-  when: not (mail_ldap_enabled | default(false))
-  changed_when: false
+  when:
+    - not (mail_ldap_enabled | default(false))
+    - _mail_ldap_ca_remove is changed
+  changed_when: true
 
 - name: "PHASE [ldap_ca_cert : END]"
   become: false
