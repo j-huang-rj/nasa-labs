@@ -39,7 +39,7 @@
   tags:
     - dns-ldap-workstations
   vars:
-    _p10_forward_zone: "{{ bind9_forward_zone_name }}"
+    _p10_forward_zone: "{{ lab_domain }}"
     _p10_primary: "{{ bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}"
     _p10_a_checks:
       - name: ldap
@@ -110,7 +110,7 @@
     - name: "PHASE [dns-ldap-workstations : Resolver LDAP/Workstation A Lookups]"
       ansible.builtin.command:
         cmd: >-
-          dig @{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}
+          docker exec nap-agent dig @{{ hostvars['dns-01'].bind9_listen_ipv4 | reject('equalto', '127.0.0.1') | first }}
           {{ item.name }}.{{ _p10_forward_zone }} A +short
       changed_when: false
       register: _p10_resolver_a
@@ -138,30 +138,45 @@
         msg: "Phase 10 DNS private-view validation complete"
 
 # ──────────────────────────────────────────────────────────
-# Public-View No-LDAP/Workstation Gate (D-01)
+# Public-View Workstation And Private-Only LDAP Gate
 # ──────────────────────────────────────────────────────────
-- name: "Phase10 No-Public-LDAP/Workstation Gate"
+- name: "Phase10 Public Workstation DNS Gate"
   hosts: primary-ns-01
   gather_facts: false
   become: false
   tags:
     - dns-ldap-workstations
   vars:
-    _p10_forward_zone: "{{ bind9_forward_zone_name }}"
+    _p10_forward_zone: "{{ lab_domain }}"
+    _p10_public_workstation_checks:
+      - name: workstation1
+        ip: "{{ lab_vpn_workstation1_ip }}"
+      - name: workstation2
+        ip: "{{ lab_vpn_workstation2_ip }}"
   tasks:
-    - name: "PHASE [dns-ldap-workstations : START - No Public LDAP/Workstation]"
+    - name: "PHASE [dns-ldap-workstations : START - Public Workstation DNS]"
       ansible.builtin.debug:
-        msg: "Phase 10 public-view negative gate — LDAP/workstation names must not appear in public zone"
+        msg: "Phase 10 public-view workstation DNS gate — workstations are VPN-visible while LDAP remains private-view only"
 
     - name: "PHASE [dns-ldap-workstations : Collect Public-Zone Record Names]"
       ansible.builtin.set_fact:
         _p10_public_records: >-
           {{ bind9_zones
              | selectattr('view', 'equalto', 'public')
-             | selectattr('name', 'equalto', bind9_forward_zone_name)
+             | selectattr('name', 'equalto', _p10_forward_zone)
              | map(attribute='records')
              | flatten
              | map(attribute='name')
+             | list }}
+
+    - name: "PHASE [dns-ldap-workstations : Collect Public-Zone Records]"
+      ansible.builtin.set_fact:
+        _p10_public_zone_records: >-
+          {{ bind9_zones
+             | selectattr('view', 'equalto', 'public')
+             | selectattr('name', 'equalto', _p10_forward_zone)
+             | map(attribute='records')
+             | flatten
              | list }}
 
     - name: "PHASE [dns-ldap-workstations : Assert No ldap In Public View]"
@@ -170,30 +185,62 @@
         that:
           - "'ldap' not in _p10_public_records"
         fail_msg: >-
-          Public forward zone contains 'ldap' record — Phase 10 requires
-          private-view-only LDAP DNS per D-01. Public records: {{ _p10_public_records }}
+          Public forward zone contains 'ldap' record. LDAP remains
+          private-view-only because there is no router LDAPS DNAT path.
+          Public records: {{ _p10_public_records }}
 
-    - name: "PHASE [dns-ldap-workstations : Assert No workstation1 In Public View]"
+    - name: "PHASE [dns-ldap-workstations : Assert Public Workstation A Records]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'workstation1' not in _p10_public_records"
+          - >-
+            item.ip in (
+              _p10_public_zone_records
+              | selectattr('name', 'equalto', item.name)
+              | selectattr('type', 'equalto', 'A')
+              | map(attribute='value')
+              | list
+            )
         fail_msg: >-
-          Public forward zone contains 'workstation1' record — Phase 10 requires
-          private-view-only workstation DNS per D-01. Public records: {{ _p10_public_records }}
+          Public forward zone does not map {{ item.name }}.{{ _p10_forward_zone }}
+          to VPN IP {{ item.ip }}. Public records: {{ _p10_public_zone_records }}
+      loop: "{{ _p10_public_workstation_checks }}"
+      loop_control:
+        label: "{{ item.name }}.{{ _p10_forward_zone }} A → {{ item.ip }}"
 
-    - name: "PHASE [dns-ldap-workstations : Assert No workstation2 In Public View]"
+    - name: "PHASE [dns-ldap-workstations : Collect Public VPN PTR Records]"
+      ansible.builtin.set_fact:
+        _p10_public_vpn_ptr_records: >-
+          {{ bind9_zones
+             | selectattr('view', 'equalto', 'public')
+             | selectattr('name', 'equalto', bind9_vpn_child_reverse_zone_name)
+             | map(attribute='records')
+             | flatten
+             | list }}
+
+    - name: "PHASE [dns-ldap-workstations : Assert Public Workstation PTR Records]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'workstation2' not in _p10_public_records"
+          - >-
+            (item.name ~ '.' ~ _p10_forward_zone ~ '.') in (
+              _p10_public_vpn_ptr_records
+              | selectattr('name', 'equalto', item.ip.split('.')[-1])
+              | selectattr('type', 'equalto', 'PTR')
+              | map(attribute='value')
+              | list
+            )
         fail_msg: >-
-          Public forward zone contains 'workstation2' record — Phase 10 requires
-          private-view-only workstation DNS per D-01. Public records: {{ _p10_public_records }}
+          Public VPN reverse zone does not map {{ item.ip }}
+          to {{ item.name }}.{{ _p10_forward_zone }}.
+          Public PTR records: {{ _p10_public_vpn_ptr_records }}
+      loop: "{{ _p10_public_workstation_checks }}"
+      loop_control:
+        label: "{{ item.ip }} PTR → {{ item.name }}.{{ _p10_forward_zone }}."
 
-    - name: "PHASE [dns-ldap-workstations : END - No Public LDAP/Workstation]"
+    - name: "PHASE [dns-ldap-workstations : END - Public Workstation DNS]"
       ansible.builtin.debug:
-        msg: "Phase 10 public-view no-LDAP/workstation gate passed"
+        msg: "Phase 10 public-view workstation DNS gate passed"
 
 # ──────────────────────────────────────────────────────────
 # LDAP Identity Validation (D-04)
@@ -209,20 +256,20 @@
     _p10_ldap_base_dn: "{{ ldap_base_dn }}"
     _p10_ldap_server_fqdn: "{{ ldap_server_fqdn }}"
     _p10_ldap_server_uri: "{{ ldap_server_uri }}"
-    _p10_forward_zone: "{{ bind9_forward_zone_name }}"
+    _p10_forward_zone: "{{ lab_domain }}"
   tasks:
     - name: "PHASE [ldap-identity : START]"
       ansible.builtin.debug:
         msg: "Phase 10 LDAP identity derivation validation"
 
-    - name: "PHASE [ldap-identity : Assert ldap_domain Equals bind9_forward_zone_name]"
+    - name: "PHASE [ldap-identity : Assert ldap_domain Equals lab_domain]"
       ansible.builtin.assert:
         quiet: true
         that:
           - _p10_ldap_domain == _p10_forward_zone
         fail_msg: >-
           ldap_domain ({{ _p10_ldap_domain }})
-          must equal bind9_forward_zone_name ({{ _p10_forward_zone }}).
+          must equal lab_domain ({{ _p10_forward_zone }}).
 
     - name: "PHASE [ldap-identity : Compute Expected ldap_base_dn]"
       ansible.builtin.set_fact:
@@ -235,7 +282,7 @@
           - _p10_ldap_base_dn == _p10_expected_base_dn
         fail_msg: >-
           ldap_base_dn ({{ _p10_ldap_base_dn }})
-          does not match expected derivation from bind9_forward_zone_name
+          does not match expected derivation from lab_domain
           ({{ _p10_forward_zone }}):
           expected={{ _p10_expected_base_dn }}.
 
@@ -294,7 +341,7 @@
       {{ hostvars['ldap-01'].firewall_zone_ports | default([]) }}
     _p10_ldap_rich_rules: >-
       {{ hostvars['ldap-01'].firewall_rich_rules | default([]) }}
-    _p10_mail_ldap: "{{ hostvars['dmz-client-01'].mail_ldap_enabled | default(false) }}"
+    _p10_dmz_client_mail_ldap: "{{ hostvars['dmz-client-01'].mail_ldap_enabled | default(false) }}"
   tasks:
     - name: "PHASE [ldaps-policy : START]"
       ansible.builtin.debug:
@@ -381,11 +428,11 @@
         fail_msg: >-
           ldap-01 firewall_rich_rules contain port 389 — Phase 10 forbids LDAP/389.
 
-    - name: "PHASE [ldaps-policy : Assert mail_ldap_enabled Is False]"
+    - name: "PHASE [ldaps-policy : Assert dmz-client-01 mail_ldap_enabled Is False]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - not _p10_mail_ldap
+          - not _p10_dmz_client_mail_ldap
         fail_msg: >-
           dmz-client-01 mail_ldap_enabled is true — must remain false until Phase 15 per D-15.
 

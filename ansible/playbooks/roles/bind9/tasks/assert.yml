@@ -9,7 +9,7 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - bind9_enabled | bool
+      - bind9_enabled | default(false) | bool
     fail_msg: "bind9_enabled must be true when the bind9 role is invoked"
 
 - name: "PHASE [assert : Check bind9_mode Is Valid]"
@@ -202,65 +202,46 @@
       Ensure host_vars/*/secrets.yml provides the AXFR key.
   no_log: true
 
-- name: "PHASE [assert : Check WireGuard Address Of Identity Source Host Is Available]"
+- name: "PHASE [assert : Check Lab Identity Variables Are Defined]"
   become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      - _bind9_source_wg_address is defined
-      - _bind9_source_wg_address | length > 0
+      - lab_id is defined
+      - lab_id | int > 0
+      - lab_domain is defined
+      - lab_domain | length > 0
+      - lab_vpn_cidr is defined
+      - lab_vpn_cidr | length > 0
+      - bind9_forward_zone_name is defined
+      - bind9_forward_zone_name | length > 0
+      - bind9_forward_zone_name == lab_domain
+      - bind9_vpn_child_reverse_zone_name is defined
+      - bind9_vpn_child_reverse_zone_name | length > 0
+      - bind9_vpn_router_ip is defined
+      - bind9_vpn_router_ip | length > 0
+      - bind9_vpn_client_ip is defined
+      - bind9_vpn_client_ip | length > 0
+      - bind9_vpn_ns_ip is defined
+      - bind9_vpn_ns_ip | length > 0
     fail_msg: >-
-      bind9 role requires a WireGuard address from
-      '{{ bind9_identity_source_host | default("(undefined)") }}' to derive lab identity
-      (forward zone, MNAME, VPN host IPs), but wireguard_address is undefined or empty.
-      Ensure WireGuard is configured on
-      '{{ bind9_identity_source_host | default("(undefined)") }}' and the host is reachable
-      from the play (run bootstrap.yml first if needed).
+      bind9 role requires lab identity variables
+      (forward zone, reverse zone, VPN host IPs) sourced from group_vars/all/lab.yml.
+      Ensure lab.yml is present and lab_* constants are defined.
 
 - name: "PHASE [assert : Validate Lab Identity Coherence]"
   become: false
-  block:
-    - name: "PHASE [assert : Initialize WireGuard Peer Lab IDs]"
-      ansible.builtin.set_fact:
-        _bind9_peer_lab_ids: []
-      changed_when: false
-
-    - name: "PHASE [assert : Compute Lab IDs From All WireGuard-Enabled Peers]"
-      ansible.builtin.set_fact:
-        _bind9_peer_lab_ids: >-
-          {{ _bind9_peer_lab_ids
-             + [(item.split('/')[0].split('.')[2] | int * 16)
-                + (item.split('/')[0].split('.')[3] | int // 16)] }}
-      loop: >-
-        {{ groups['all']
-           | map('extract', hostvars)
-           | selectattr('wireguard_address', 'defined')
-           | rejectattr('wireguard_address', 'equalto', '')
-           | map(attribute='wireguard_address')
-           | list }}
-      loop_control:
-        label: "{{ item }}"
-      changed_when: false
-
-    - name: "PHASE [assert : Assert WireGuard-Enabled Peers Agree On Lab ID]"
-      ansible.builtin.assert:
-        quiet: true
-        that:
-          - _bind9_peer_lab_ids | length > 0
-          - _bind9_peer_lab_ids | unique | length == 1
-          - (_bind9_peer_lab_ids | first) == (bind9_derived_lab_id | int)
-        fail_msg: >-
-          WireGuard-enabled peers disagree on derived lab ID
-          (got {{ _bind9_peer_lab_ids | unique }} from
-          {{ groups['all']
-             | map('extract', hostvars)
-             | selectattr('wireguard_address', 'defined')
-             | rejectattr('wireguard_address', 'equalto', '')
-             | map(attribute='inventory_hostname')
-             | list }}).
-          All WG-enabled hosts must share the same /28 subnet so that
-          lab identity is unambiguous. Check wireguard_address values
-          in inventory.
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - lab_domain == (lab_id | string) ~ '.nasa'
+      - bind9_primary_mname == 'private-ns.' ~ lab_domain ~ '.'
+      - bind9_vpn_router_ip == lab_vpn_router_ip
+      - bind9_vpn_client_ip == lab_vpn_client_ip
+      - bind9_vpn_ns_ip == lab_vpn_ns_ip
+    fail_msg: >-
+      Lab identity variables are inconsistent. Check group_vars/all/lab.yml and
+      DNS-scoped BIND aliases in group_vars/dns.yml.
 
 - name: "PHASE [assert : Check Derived Identity Facts Are Defined For Non-Resolver Modes]"
   when: bind9_mode != 'resolver'
@@ -273,9 +254,8 @@
       - bind9_vpn_child_reverse_zone_name | length > 0
     fail_msg: >-
       bind9_forward_zone_name and bind9_vpn_child_reverse_zone_name must be defined for
-      authoritative modes. These facts are derived lazily in group_vars/dns.yml from
-      hostvars[bind9_identity_source_host].wireguard_address; ensure WireGuard is
-      configured on the source host before invoking this role.
+      authoritative modes. These facts are aliased from lab_* constants in
+      group_vars/dns.yml; ensure lab.yml is present.
 
 - name: "PHASE [assert : Check Primary Identity Facts Are Defined For authoritative_primary]"
   when: bind9_mode == 'authoritative_primary'
@@ -287,9 +267,10 @@
       - bind9_soa_serial_date is defined
       - bind9_soa_serial_date | length > 0
     fail_msg: >-
-      bind9_primary_mname and bind9_soa_serial_date must be defined for authoritative_primary
-      mode. These facts are derived from group_vars/all/dns_identity.yml and ansible_facts; ensure facts are
-      gathered before invoking this role.
+      bind9_primary_mname and bind9_soa_serial_date must be defined and non-empty for
+      authoritative_primary mode. bind9_soa_serial_date is derived from ansible_date_time
+      in the derive phase; verify that ansible_date_time is available or override the
+      bind9_soa_serial_date default in host_vars.
 
 - name: "PHASE [assert : Check bind9_dnssec_key_material Is Populated For authoritative_primary]"
   when: bind9_mode == 'authoritative_primary'
@@ -311,8 +292,10 @@
     quiet: true
     that:
       - bind9_dmz_client_ip is defined and bind9_dmz_client_ip | length > 0
-      - mail_endpoint_dmz_ip is defined and mail_endpoint_dmz_ip | length > 0
-      - mail_endpoint_vpn_ip is defined and mail_endpoint_vpn_ip | length > 0
+      - mail_smtp_endpoint_dmz_ip is defined and mail_smtp_endpoint_dmz_ip | length > 0
+      - mail_imap_endpoint_dmz_ip is defined and mail_imap_endpoint_dmz_ip | length > 0
+      - mail_smtp_endpoint_vpn_ip is defined and mail_smtp_endpoint_vpn_ip | length > 0
+      - mail_imap_endpoint_vpn_ip is defined and mail_imap_endpoint_vpn_ip | length > 0
       - mail_mx_value is defined and mail_mx_value | length > 0
       - mail_spf_value is defined and mail_spf_value | length > 0
       - mail_dkim_selector is defined and mail_dkim_selector | length > 0

@@ -36,13 +36,13 @@ options {
 {% endif %}
     allow-query {
         localhost;
-        dmz_clients;
-        internal_clients;
+        {{ bind9_acl_dmz }};
+        {{ bind9_acl_internal }};
     };
     allow-recursion {
         localhost;
-        dmz_clients;
-        internal_clients;
+        {{ bind9_acl_dmz }};
+        {{ bind9_acl_internal }};
     };
 {% else %}
     recursion no;

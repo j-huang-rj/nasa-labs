@@ -1,50 +1,54 @@
 ---
-# Cross-host topology vars shared by all members of the DNS group
+# BIND role inputs for the dns inventory group.
 
-# Topology CIDRs
-bind9_dmz_cidr: "172.16.0.0/24"
-bind9_internal_cidr: "172.16.1.0/24"
+# Zone identity
+bind9_forward_zone_name: "{{ lab_domain }}"
+bind9_vpn_child_reverse_zone_name: "{{ lab_id }}-sub28.0.168.192.in-addr.arpa"
+bind9_primary_mname: "private-ns.{{ lab_domain }}."
 
-# NASA-root server IP
-bind9_nasa_root_ip: "192.168.255.1"
-
-# Authoritative pair
-bind9_primary_ns_ip: "{{ hostvars['primary-ns-01'].ansible_host }}"
-bind9_secondary_ns_ip: "{{ hostvars['secondary-ns-01'].ansible_host }}"
-
-# Internal recursive resolver
-bind9_dns_resolver_ip: "{{ hostvars['dns-01'].ansible_host }}"
-
-# Router gateway IPs
-bind9_router_dmz_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'dmz') | first).ip4.split('/')[0] }}"
-bind9_router_internal_ip: "{{ (hostvars['router-01'].network_interfaces | selectattr('zone', 'equalto', 'internal') | first).ip4.split('/')[0] }}"
-
-# Lab agent IPs
-bind9_dmz_agent_ip: "{{ hostvars['dmz-agent-01'].ansible_host }}"
-bind9_internal_agent_ip: "{{ hostvars['internal-agent-01'].ansible_host }}"
-
-# DMZ client IP
-bind9_dmz_client_ip: "{{ hostvars['dmz-client-01'].ansible_host }}"
-
-# DMZ workstation IPs
-bind9_workstation1_ip: "{{ hostvars['workstation-01'].ansible_host }}"
-bind9_workstation2_ip: "{{ hostvars['workstation-02'].ansible_host }}"
-
-# LDAP server IP
-bind9_ldap_ip: "{{ hostvars['ldap-01'].ansible_host }}"
-
-# Reverse zone names
+# Network ranges and reverse zones
+bind9_dmz_cidr: "{{ lab_dmz_cidr }}"
+bind9_internal_cidr: "{{ lab_internal_cidr }}"
 bind9_dmz_reverse_zone: "{{ (bind9_dmz_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
 bind9_internal_reverse_zone: "{{ (bind9_internal_cidr.split('/')[0].split('.')[:3] | reverse | join('.')) ~ '.in-addr.arpa' }}"
 
+# DNS infrastructure
+bind9_nasa_root_ip: "192.168.255.1"
+bind9_primary_ns_ip: "{{ lab_primary_ns_ip }}"
+bind9_secondary_ns_ip: "{{ lab_secondary_ns_ip }}"
+bind9_dns_resolver_ip: "{{ lab_resolver_ip }}"
+
+# Private lab addresses
+bind9_router_dmz_ip: "{{ lab_router_dmz_ip }}"
+bind9_router_internal_ip: "{{ lab_router_internal_ip }}"
+bind9_dmz_agent_ip: "{{ lab_dmz_agent_ip }}"
+bind9_internal_agent_ip: "{{ lab_internal_agent_ip }}"
+bind9_dmz_client_ip: "{{ lab_dmz_client_ip }}"
+bind9_workstation1_ip: "{{ lab_workstation1_ip }}"
+bind9_workstation2_ip: "{{ lab_workstation2_ip }}"
+bind9_ldap_ip: "{{ lab_ldap_ip }}"
+
+# VPN/public addresses
+bind9_vpn_router_ip: "{{ lab_vpn_router_ip }}"
+bind9_vpn_client_ip: "{{ lab_vpn_client_ip }}"
+bind9_vpn_ns_ip: "{{ lab_vpn_ns_ip }}"
+bind9_vpn_workstation1_ip: "{{ lab_vpn_workstation1_ip }}"
+bind9_vpn_workstation2_ip: "{{ lab_vpn_workstation2_ip }}"
+
 # Resolver routing groups
+bind9_nasa_root_forward_zone: nasa
+bind9_nasa_root_reverse_zone: 168.192.in-addr.arpa
+
 bind9_nasa_root_zones:
-  - nasa
-  - 168.192.in-addr.arpa
+  - "{{ bind9_nasa_root_forward_zone }}"
+  - "{{ bind9_nasa_root_reverse_zone }}"
+
+bind9_lab_forward_zone: "{{ lab_domain }}"
+bind9_lab_reverse_superzone: 16.172.in-addr.arpa
 
 bind9_lab_primary_zones:
-  - "{{ bind9_forward_zone_name }}"
-  - 16.172.in-addr.arpa
+  - "{{ bind9_lab_forward_zone }}"
+  - "{{ bind9_lab_reverse_superzone }}"
 
 bind9_dnssec_delegated_child_zones:
   - "{{ mail_alias_domain }}"

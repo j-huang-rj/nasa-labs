@@ -3,12 +3,20 @@
 network_interfaces:
   - ifname: eth0
     zone: internal
-    ip4: 172.16.1.153/24
-    gw4: 172.16.1.254
+    ip4: "{{ lab_resolver_ip }}/24"
+    gw4: "{{ lab_router_internal_ip }}"
     dns4:
-      - 1.1.1.1
+      - "{{ lab_bootstrap_dns_ip }}"
     conn_name: internal-static
     default_conn_name: "cloud-init eth0"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_resolver_ip }}"
+    canonical: "dns.{{ lab_domain }}"
+    aliases:
+      - dns
+      - dns-01
 
 # Firewall Config
 firewall_zone_ports:
@@ -26,19 +34,19 @@ bind9_mode: resolver
 
 bind9_listen_ipv4:
   - 127.0.0.1
-  - "{{ ansible_host }}"
+  - "{{ bind9_dns_resolver_ip }}"
 
 bind9_forwarders:
-  - 1.1.1.1
+  - "{{ lab_bootstrap_dns_ip }}"
 
 bind9_zones:
-  - name: "{{ bind9_nasa_root_zones[0] }}"
+  - name: "{{ bind9_nasa_root_forward_zone }}"
     type: static-stub
     forwarders: []
     server_addresses:
       - "{{ bind9_nasa_root_ip }}"
 
-  - name: "{{ bind9_nasa_root_zones[1] }}"
+  - name: "{{ bind9_nasa_root_reverse_zone }}"
     type: static-stub
     forwarders: []
     server_addresses:
@@ -50,13 +58,13 @@ bind9_zones:
     forwarders:
       - "{{ bind9_primary_ns_ip }}"
 
-  - name: "{{ bind9_lab_primary_zones[0] }}"
+  - name: "{{ bind9_lab_forward_zone }}"
     type: forward
     forward: only
     forwarders:
       - "{{ bind9_primary_ns_ip }}"
 
-  - name: "{{ bind9_lab_primary_zones[1] }}"
+  - name: "{{ bind9_lab_reverse_superzone }}"
     type: forward
     forward: only
     forwarders:

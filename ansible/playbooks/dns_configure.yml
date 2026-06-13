@@ -8,7 +8,7 @@
   become: true
   roles:
     - role: bind9
-      when: bind9_enabled
+      when: bind9_enabled | default(false) | bool
 
 - name: DNS Client Resolver Configuration
   hosts: "dmz:internal:!dns"
@@ -38,10 +38,10 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - dns_hosts_file_self_entries[inventory_hostname] is defined
-          - dns_hosts_file_self_entries[inventory_hostname] | length > 0
+          - hosts_file_entries is defined
+          - hosts_file_entries | length > 0
         fail_msg: >-
-          Missing dns_hosts_file_self_entries for {{ inventory_hostname }}.
+          Missing hosts_file_entries for {{ inventory_hostname }}.
 
     - name: Deploy managed /etc/hosts
       ansible.builtin.template:

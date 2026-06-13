@@ -373,6 +373,7 @@
         item.file: item | bind9_zone_serial(
           primary_mname=bind9_primary_mname,
           date_prefix=bind9_soa_serial_date,
+          ttl=bind9_zone_ttl,
           current_serial=bind9_zone_current_state[item.file].serial,
           current_hash=bind9_zone_current_state[item.file].hash
         )
