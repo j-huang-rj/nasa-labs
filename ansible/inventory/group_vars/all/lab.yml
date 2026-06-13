@@ -43,3 +43,4 @@ lab_vpn_workstation2_ip: 192.168.0.231
 
 # Directory services
 lab_ldap_ip: 172.16.1.10
+lab_home_root: /u

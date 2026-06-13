@@ -1059,7 +1059,7 @@
           rc=$?; rm -rf "${_p14_tmpdir}" /tmp/_p14_ldap_tmpdir 2>/dev/null; exit $rc
         executable: /bin/bash
       environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
+        LDAPTLS_CACERT: "{{ ldap_tls_ca_cert_path | default(openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt')) }}"
       changed_when: false
       no_log: true
       register: _p14_reboot_ldap

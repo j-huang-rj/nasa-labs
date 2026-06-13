@@ -41,7 +41,7 @@ nfs_enabled: true
 
 # NFS Server Exports
 nfs_exports:
-  - path: /u
+  - path: "{{ lab_home_root }}"
     clients:
       - "{{ lab_workstation1_ip }}"
       - "{{ lab_workstation2_ip }}"

@@ -57,7 +57,7 @@ nfs_enabled: true
 nfs_client_enabled: true
 
 nfs_mounts:
-  - path: /u
-    src: "{{ lab_ldap_ip }}:/u"
+  - path: "{{ lab_home_root }}"
+    src: "{{ lab_ldap_ip }}:{{ lab_home_root }}"
     fstype: nfs
     opts: "rw,hard,noatime,nfsvers=4,proto=tcp,_netdev"

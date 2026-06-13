@@ -14,7 +14,7 @@ nfs_client_packages:
 nfs_server_service_name: nfs-server
 
 # ───────────────────────────── Filesystem paths ──────────────────────────
-nfs_export_root: /u
+nfs_export_root: "{{ lab_home_root }}"
 nfs_export_conf_path: /etc/exports.d/nasa-homes.exports
 nfs_export_conf_dir: /etc/exports.d
 

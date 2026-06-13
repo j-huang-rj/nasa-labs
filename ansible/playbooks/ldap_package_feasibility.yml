@@ -42,9 +42,9 @@
         that:
           - inventory_hostname == 'ldap-01'
           - ansible_facts['distribution'] == 'AlmaLinux'
-          - ansible_host | default('') == '172.16.1.10'
+          - ansible_host | default('') == lab_ldap_ip
         fail_msg: >-
-          Phase 8 must run only on prepared AlmaLinux ldap-01 (172.16.1.10);
+          Phase 8 must run only on prepared AlmaLinux ldap-01 ({{ lab_ldap_ip }});
           refusing to run on {{ inventory_hostname }}.
 
     - name: "PHASE [preflight : END]"
@@ -236,7 +236,7 @@
         openldap_feasibility_report_content: |
           # Phase 8: OpenLDAP Package Feasibility Report
 
-          **Target:** ldap-01 (172.16.1.10)
+          **Target:** ldap-01 ({{ lab_ldap_ip }})
           **Executed:** {{ ansible_facts['date_time']['iso8601'] }}
           **Playbook:** `ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/ldap_package_feasibility.yml --limit ldap-01`
 
@@ -481,7 +481,7 @@
           - openldap_blocking_findings | length == 0
         fail_msg: |-
           Phase 8 feasibility HARD-BLOCK: {{ openldap_blocking_findings | length }} required
-          OpenLDAP capabilities are missing on ldap-01 (172.16.1.10).
+          OpenLDAP capabilities are missing on ldap-01 ({{ lab_ldap_ip }}).
 
           {% for finding in openldap_blocking_findings %}
           - [{{ finding.category }}] {{ finding.detail }}

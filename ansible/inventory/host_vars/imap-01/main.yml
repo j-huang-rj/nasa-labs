@@ -39,7 +39,7 @@ mail_dovecot_lmtp_enabled: true
 mail_dovecot_auth_socket_enabled: false
 mail_dovecot_lmtp_unix_socket_enabled: false
 mail_dovecot_lmtp_inet_listener_enabled: true
-mail_dovecot_lmtp_listen_address: "{{ ansible_host }}"
+mail_dovecot_lmtp_listen_address: "{{ mail_lmtp_private_ip }}"
 mail_dovecot_lmtp_listen_port: "{{ mail_lmtp_port }}"
 
 mail_vmail_identity_enabled: true

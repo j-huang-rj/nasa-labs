@@ -92,7 +92,7 @@ argument_specs:
         required: false
         description: >-
           Whether to enable authselect with-mkhomedir or oddjob-mkhomedir.
-          Must remain false because Phase 13 NFS /u is the required home path.
+          Must remain false because Phase 13 NFS lab_home_root is the required home path.
 
       ldap_client_sssd_domain:
         type: str

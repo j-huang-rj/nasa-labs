@@ -55,7 +55,7 @@
       # generalta: exact uid_number, gid_number, home, groups, ssh_public_key, password_hash_key
       - ldap_users.generalta.uid_number | default(-1) == 10000
       - ldap_users.generalta.gid_number | default(-1) == 10000
-      - ldap_users.generalta.home | default('') == '/u/ta/generalta'
+      - ldap_users.generalta.home | default('') == lab_home_root ~ '/ta/generalta'
       - "'ta' in (ldap_users.generalta.groups | default([]))"
       - ldap_users.generalta.ssh_public_key is defined
       - ldap_users.generalta.password_hash_key is defined
@@ -64,7 +64,7 @@
       # mailta: exact uid_number, gid_number, home, groups, ssh_public_key, password_hash_key
       - ldap_users.mailta.uid_number | default(-1) == 10001
       - ldap_users.mailta.gid_number | default(-1) == 10000
-      - ldap_users.mailta.home | default('') == '/u/ta/mailta'
+      - ldap_users.mailta.home | default('') == lab_home_root ~ '/ta/mailta'
       - "'ta' in (ldap_users.mailta.groups | default([]))"
       - ldap_users.mailta.ssh_public_key is defined
       - ldap_users.mailta.password_hash_key is defined
@@ -73,7 +73,7 @@
       # stu: exact uid_number, gid_number, home, groups, ssh_public_key, password_hash_key
       - ldap_users.stu.uid_number | default(-1) == 20000
       - ldap_users.stu.gid_number | default(-1) == 20000
-      - ldap_users.stu.home | default('') == '/u/stu/stu'
+      - ldap_users.stu.home | default('') == lab_home_root ~ '/stu/stu'
       - "'stu' in (ldap_users.stu.groups | default([]))"
       - ldap_users.stu.ssh_public_key is defined
       - ldap_users.stu.password_hash_key is defined

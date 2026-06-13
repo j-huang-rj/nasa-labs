@@ -252,11 +252,11 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - hostvars['ldap-01'].ansible_host in _p13_df_u.stdout
+          - lab_ldap_ip in _p13_df_u.stdout
         fail_msg: >-
           /u backing source does not reference ldap-01.
           df source: {{ _p13_df_u.stdout | default('N/A') }},
-          expected IP: {{ hostvars['ldap-01'].ansible_host }}
+          expected IP: {{ lab_ldap_ip }}
 
     - name: "PHASE [client : END]"
       become: false
@@ -294,7 +294,7 @@
     - name: "PHASE [cross_visibility : Write Canary File On workstation-01 As UID 10000]"
       ansible.builtin.command:
         cmd: python3 -c "{{ _p13_write_script }}"
-      changed_when: true
+      changed_when: false
 
     - name: "PHASE [cross_visibility : Set Canary Content Fact For Cross-Host Use]"
       ansible.builtin.set_fact:
@@ -325,7 +325,7 @@
       ansible.builtin.command:
         cmd: >-
           python3 -c "import os; os.setgid(10000); os.setuid(10000); os.remove('{{ _p13_canary_path }}')"
-      changed_when: true
+      changed_when: false
 
     - name: "PHASE [cross_visibility : END]"
       become: false
@@ -475,7 +475,7 @@
     - name: "PHASE [reboot : Write Pre-Reboot Canary On workstation-01 As UID 10000]"
       ansible.builtin.command:
         cmd: python3 -c "{{ _p13_reboot_write_script }}"
-      changed_when: true
+      changed_when: false
 
 - name: "Phase13 Reboot Targets"
   hosts: ldap-01,workstation-01,workstation-02
@@ -545,7 +545,7 @@
       ansible.builtin.command:
         cmd: >-
           python3 -c "import os; p='{{ _p13_canary_reboot_path }}'; os.setgid(10000); os.setuid(10000); os.path.exists(p) and os.remove(p)"
-      changed_when: true
+      changed_when: false
 
     - name: "PHASE [reboot : END]"
       become: false

@@ -40,7 +40,7 @@ ldap_users:
   generalta:
     uid_number: 10000
     gid_number: 10000
-    home: /u/ta/generalta
+    home: "{{ lab_home_root }}/ta/generalta"
     mail: "generalta@{{ ldap_domain }}"
     groups: [ta]
     totp_required: true
@@ -50,7 +50,7 @@ ldap_users:
   mailta:
     uid_number: 10001
     gid_number: 10000
-    home: /u/ta/mailta
+    home: "{{ lab_home_root }}/ta/mailta"
     mail: "mailta@{{ ldap_domain }}"
     groups: [ta]
     totp_required: false
@@ -60,7 +60,7 @@ ldap_users:
   stu:
     uid_number: 20000
     gid_number: 20000
-    home: /u/stu/stu
+    home: "{{ lab_home_root }}/stu/stu"
     mail: "stu@{{ ldap_domain }}"
     groups: [stu]
     totp_required: true

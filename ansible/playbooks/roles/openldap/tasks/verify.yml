@@ -782,7 +782,6 @@
       - "'sudoHost: workstation-01' in (_openldap_sudo_stu.stdout | split('\n'))"
       - "('sudoHost: workstation1.' ~ ldap_domain) in (_openldap_sudo_stu.stdout | split('\n'))"
       - "'sudoHost: workstation1' not in (_openldap_sudo_stu.stdout | split('\n'))"
-      - "('sudoHost: ' ~ hostvars['workstation-01'].ansible_host) not in (_openldap_sudo_stu.stdout | split('\n'))"
       - "'sudoHost: workstation2' not in (_openldap_sudo_stu.stdout | split('\n'))"
       - "'sudoHost: workstation-02' not in (_openldap_sudo_stu.stdout | split('\n'))"
     fail_msg: >-

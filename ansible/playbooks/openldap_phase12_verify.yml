@@ -398,7 +398,7 @@
           description: ACL delegation test - mailta
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
+      changed_when: false
       no_log: true
       register: _p12_delegate_write
 
@@ -424,7 +424,7 @@
           delete: description
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
+      changed_when: false
       no_log: true
 
     # ─── ACL delegation: mailta can read group entry ───
@@ -571,7 +571,7 @@
           loginShell: /bin/sh
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
+      changed_when: false
       no_log: true
       register: _p12_self_service_modify
 
@@ -599,7 +599,7 @@
           loginShell: /bin/bash
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
+      changed_when: false
       no_log: true
 
     # ─── SELF-SERVICE: stu cannot modify own mail ───
@@ -782,7 +782,7 @@
           "{{ _p12_mailta_dn }}"
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
+      changed_when: false
       no_log: true
       register: _p12_ppolicy_valid_pass_result
 
@@ -834,7 +834,7 @@
           userPassword: {{ _openldap_user_password_hashes.mailta }}
       environment:
         LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
-      changed_when: true
+      changed_when: false
       no_log: true
       register: _p12_ppolicy_cleanup_result
 

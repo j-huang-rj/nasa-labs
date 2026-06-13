@@ -101,7 +101,7 @@
       - not (ldap_client_enable_mkhomedir | bool)
     fail_msg: >-
       ldap_client_enable_mkhomedir is true, which enables local home creation
-      and can hide the Phase 13 NFS /u mount. Set to false.
+      and can hide the Phase 13 NFS lab_home_root mount. Set to false.
 
 - name: "PHASE [assert : END]"
   become: false

@@ -45,7 +45,7 @@ mail_dovecot_passwd_path: "{{ mail_dovecot_conf_dir }}/passwd"
 mail_dovecot_ldap_account_gate_path: "{{ mail_dovecot_conf_dir }}/dovecot-ldap-account-gate.conf.ext"
 mail_dovecot_auth_socket_path: /var/spool/postfix/private/auth
 mail_dovecot_lmtp_socket_path: /var/spool/postfix/private/dovecot-lmtp
-mail_dovecot_lmtp_listen_address: "{{ mail_lmtp_private_ip | default(ansible_host) }}"
+mail_dovecot_lmtp_listen_address: "{{ mail_lmtp_private_ip | default('127.0.0.1') }}"
 mail_dovecot_lmtp_listen_port: "{{ mail_lmtp_port | default(24) | int }}"
 mail_dovecot_protocols:
   - imap

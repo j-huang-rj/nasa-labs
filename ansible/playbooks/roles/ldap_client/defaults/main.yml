@@ -4,7 +4,7 @@ ldap_client_enabled: false
 
 # ───────────────────────────── Workstation-auth gate ─────────────────────
 # Only workstation-01 and workstation-02 are graded workstations.
-# dmz-client-01 is in ldap_clients for Phase 15 mail LDAP only.
+# smtp-01 remains a non-workstation LDAP consumer for Phase 15 mail.
 ldap_client_workstation_auth_enabled: false
 ldap_client_workstation_auth_hosts:
   - workstation-01
@@ -39,7 +39,7 @@ ldap_client_sshd_dropin_name: 49-ldap-keys.conf
 # ───────────────────────────── authselect profile ────────────────────────
 ldap_client_authselect_profile: sssd
 # with-sudo is required per LCLI-05; with-mkhomedir is explicitly NOT
-# enabled because Phase 13 NFS /u is the required home path per D-04.
+# enabled because Phase 13 NFS lab_home_root is the required home path per D-04.
 ldap_client_authselect_features:
   - with-sudo
 
