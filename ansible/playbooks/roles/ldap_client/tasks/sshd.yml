@@ -1,0 +1,133 @@
+---
+- name: "PHASE [sshd : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure sshd LDAP public-key lookup through SSSD"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: only configure sshd on workstation-auth hosts
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sshd : Skip sshd Config For Non-Workstation Hosts]"
+  ansible.builtin.debug:
+    msg: >-
+      Skipping sshd LDAP key lookup configuration on {{ inventory_hostname }}:
+      ldap_client_workstation_auth_enabled is false or undefined.
+  when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Deploy sshd AuthorizedKeysCommand drop-in
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sshd : Create sshd Drop-In Directory]"
+  ansible.builtin.file:
+    path: "{{ ldap_client_sshd_dropin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : Remove Legacy 50-ldap-keys Drop-In]"
+  ansible.builtin.file:
+    path: "{{ ldap_client_sshd_dropin_dir }}/50-ldap-keys.conf"
+    state: absent
+  when:
+    - ldap_client_workstation_auth_enabled | default(false) | bool
+    - ldap_client_sshd_dropin_name != '50-ldap-keys.conf'
+  notify: "PHASE [handler : Restart sshd]"
+
+- name: "PHASE [sshd : Render AuthorizedKeysCommand Drop-In]"
+  ansible.builtin.template:
+    src: sshd_ldap_keys.conf.j2
+    dest: "{{ ldap_client_sshd_dropin_dir }}/{{ ldap_client_sshd_dropin_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: sshd -t -f %s
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+  register: _ldap_client_sshd_dropin
+  notify: "PHASE [handler : Restart sshd]"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Flush handlers so new sshd config is active
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sshd : Flush Handlers]"
+  ansible.builtin.meta: flush_handlers
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Post-config validation
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sshd : Validate sshd Configuration]"
+  ansible.builtin.command:
+    cmd: sshd -t
+  changed_when: false
+  register: _ldap_client_sshd_test
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : Assert sshd Configuration Valid]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sshd_test.rc == 0
+    fail_msg: >-
+      sshd -t failed on {{ inventory_hostname }}.
+      stderr={{ _ldap_client_sshd_test.stderr | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : Verify sshd -T Reflects AuthorizedKeysCommand]"
+  ansible.builtin.command:
+    cmd: sshd -T
+  changed_when: false
+  register: _ldap_client_sshd_dump
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : Assert sshd Uses SSSD AuthorizedKeysCommand]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'authorizedkeyscommand /usr/bin/sss_ssh_authorizedkeys %u' in _ldap_client_sshd_dump.stdout"
+      - "'usepam yes' in _ldap_client_sshd_dump.stdout"
+      - "'passwordauthentication yes' in _ldap_client_sshd_dump.stdout"
+    fail_msg: >-
+      sshd is not configured with AuthorizedKeysCommand, UsePAM, and password auth
+      on {{ inventory_hostname }} for LDAP SSH login.
+      sshd -T output: {{ _ldap_client_sshd_dump.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : Verify sss_ssh_authorizedkeys Generalta]"
+  ansible.builtin.command:
+    cmd: sss_ssh_authorizedkeys generalta
+  changed_when: false
+  register: _ldap_client_keys_generalta
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : Verify sss_ssh_authorizedkeys Mailta]"
+  ansible.builtin.command:
+    cmd: sss_ssh_authorizedkeys mailta
+  changed_when: false
+  register: _ldap_client_keys_mailta
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : Assert sss_ssh_authorizedkeys Returns Keys]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_keys_generalta.rc == 0
+      - _ldap_client_keys_generalta.stdout | length > 0
+      - _ldap_client_keys_mailta.rc == 0
+      - _ldap_client_keys_mailta.stdout | length > 0
+    fail_msg: >-
+      sss_ssh_authorizedkeys did not return LDAP public keys for TA users
+      on {{ inventory_hostname }}.
+      generalta rc={{ _ldap_client_keys_generalta.rc }}
+      mailta rc={{ _ldap_client_keys_mailta.rc }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sshd : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed sshd phase"

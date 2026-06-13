@@ -1,0 +1,36 @@
+[sssd]
+services = nss, pam, ssh, sudo
+domains = {{ ldap_client_sssd_domain }}
+
+[nss]
+filter_users = root
+filter_groups = root
+
+[pam]
+
+[domain/{{ ldap_client_sssd_domain }}]
+enumerate = false
+cache_credentials = false
+
+id_provider = ldap
+auth_provider = ldap
+chpass_provider = ldap
+access_provider = simple
+sudo_provider = ldap
+
+ldap_schema = rfc2307
+ldap_uri = {{ ldap_server_uri }}
+
+ldap_search_base = {{ ldap_base_dn }}
+ldap_user_search_base = ou=People,{{ ldap_base_dn }}
+ldap_group_search_base = ou=Group,{{ ldap_base_dn }}
+ldap_sudo_search_base = ou=SUDOers,{{ ldap_base_dn }}
+
+ldap_tls_cacert = {{ ldap_client_ca_cert_path }}
+ldap_tls_reqcert = demand
+
+ldap_user_ssh_public_key = sshPublicKey
+
+# Host-specific simple access policy from host_vars
+simple_allow_groups = {{ ldap_client_allowed_groups | join(', ') }}
+simple_allow_users = {{ ldap_client_allowed_users | join(', ') }}

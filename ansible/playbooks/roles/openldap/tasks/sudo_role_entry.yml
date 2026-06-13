@@ -1,0 +1,132 @@
+---
+- name: "PHASE [sudo_roles : Render sudoRole LDIF] | {{ _sudo_role_def.key }}"
+  ansible.builtin.template:
+    src: openldap/sudo-role.ldif.j2
+    dest: "/tmp/openldap-sudo-roles/{{ _sudo_role_def.key }}.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+  vars:
+    _sudo_role: "{{ _sudo_role_def.value }}"
+
+- name: "PHASE [sudo_roles : Search Existing sudoRole] | {{ _sudo_role_def.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -y /tmp/openldap-sudo-roles/.admin-password
+      -H {{ ldap_server_uri }} -b "cn={{ _sudo_role_def.key }},ou=SUDOers,{{ ldap_base_dn }}" -s base
+      '(objectClass=sudoRole)' dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _openldap_sudo_role_exists
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [sudo_roles : Create sudoRole If Missing] | {{ _sudo_role_def.key }}"
+  when: _openldap_sudo_role_exists.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -y /tmp/openldap-sudo-roles/.admin-password
+      -H {{ ldap_server_uri }} -f /tmp/openldap-sudo-roles/{{ _sudo_role_def.key }}.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [sudo_roles : Search Existing sudoRole Attributes] | {{ _sudo_role_def.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -y /tmp/openldap-sudo-roles/.admin-password
+      -H {{ ldap_server_uri }} -b "cn={{ _sudo_role_def.key }},ou=SUDOers,{{ ldap_base_dn }}" -s base
+      -o ldif-wrap=no
+      '(objectClass=sudoRole)' cn sudoUser sudoHost sudoCommand sudoRunAsUser sudoRunAsGroup sudoOption
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _openldap_sudo_role_current
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Compute expected multi-value attributes for comparison
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo_roles : Compute Expected sudoRole Values] | {{ _sudo_role_def.key }}"
+  ansible.builtin.set_fact:
+    _openldap_sudo_role_expected_sudouser: "{{ _sudo_role_def.value.sudoUser }}"
+    _openldap_sudo_role_expected_sudohost_sorted: "{{ _sudo_role_def.value.sudoHost | sort }}"
+    _openldap_sudo_role_expected_sudocommand_sorted: "{{ _sudo_role_def.value.sudoCommand | sort }}"
+    _openldap_sudo_role_expected_sudooption_sorted: "{{ _sudo_role_def.value.sudoOption | sort }}"
+    _openldap_sudo_role_expected_cn: "{{ _sudo_role_def.key }}"
+  no_log: true
+
+- name: "PHASE [sudo_roles : Compute Current sudoRole Values] | {{ _sudo_role_def.key }}"
+  ansible.builtin.set_fact:
+    _openldap_sudo_role_current_sudohost_sorted: >-
+      {{ _openldap_sudo_role_current.stdout | default('')
+         | regex_findall('^sudoHost:\s+(\S.+)', multiline=true)
+         | map('trim') | sort }}
+    _openldap_sudo_role_current_sudocommand_sorted: >-
+      {{ _openldap_sudo_role_current.stdout | default('')
+         | regex_findall('^sudoCommand:\s+(\S.+)', multiline=true)
+         | map('trim') | sort }}
+    _openldap_sudo_role_current_sudooption_sorted: >-
+      {{ _openldap_sudo_role_current.stdout | default('')
+         | regex_findall('^sudoOption:\s+(\S.+)', multiline=true)
+         | map('trim') | sort }}
+  no_log: true
+
+- name: "PHASE [sudo_roles : Evaluate sudoRole Modify Gate] | {{ _sudo_role_def.key }}"
+  ansible.builtin.set_fact:
+    _openldap_sudo_role_needs_modify: >-
+      {{ _openldap_sudo_role_current.rc != 0
+         or _openldap_sudo_role_current.stdout | default('')
+            | regex_search('^sudoUser:\s*' ~ (_sudo_role_def.value.sudoUser | regex_escape()) ~ '\s*$', multiline=true) is none
+         or (_openldap_sudo_role_current_sudohost_sorted | default([])) != (_openldap_sudo_role_expected_sudohost_sorted | default([]))
+         or (_openldap_sudo_role_current_sudocommand_sorted | default([])) != (_openldap_sudo_role_expected_sudocommand_sorted | default([]))
+         or (_openldap_sudo_role_current_sudooption_sorted | default([])) != (_openldap_sudo_role_expected_sudooption_sorted | default([]))
+         or _openldap_sudo_role_current.stdout | default('')
+            | regex_search('^sudoRunAsUser:\s*ALL\s*$', multiline=true) is none
+         or _openldap_sudo_role_current.stdout | default('')
+            | regex_search('^sudoRunAsGroup:\s*ALL\s*$', multiline=true) is none }}
+  no_log: true
+
+- name: "PHASE [sudo_roles : Modify sudoRole To Exact State] | {{ _sudo_role_def.key }}"
+  when: _openldap_sudo_role_needs_modify | default(false) | bool
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -y /tmp/openldap-sudo-roles/.admin-password
+      -H {{ ldap_server_uri }}
+    stdin: |
+      dn: cn={{ _sudo_role_def.key }},ou=SUDOers,{{ ldap_base_dn }}
+      changetype: modify
+      replace: cn
+      cn: {{ _sudo_role_def.key }}
+      -
+      replace: sudoUser
+      sudoUser: {{ _sudo_role_def.value.sudoUser }}
+      -
+      replace: sudoHost
+      {% for host in _sudo_role_def.value.sudoHost %}
+      sudoHost: {{ host }}
+      {% endfor %}
+      -
+      replace: sudoCommand
+      {% for cmd in _sudo_role_def.value.sudoCommand %}
+      sudoCommand: {{ cmd }}
+      {% endfor %}
+      -
+      replace: sudoRunAsUser
+      sudoRunAsUser: ALL
+      -
+      replace: sudoRunAsGroup
+      sudoRunAsGroup: ALL
+      -
+      replace: sudoOption
+      {% for opt in _sudo_role_def.value.sudoOption %}
+      sudoOption: {{ opt }}
+      {% endfor %}
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"

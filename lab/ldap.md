@@ -57,7 +57,7 @@ Add a user with DN “`uid=generalta, ou=People, <Base DN>`”
   * uid: `generalta`
   * uid number: `10000`
   * homeDirectory: `/u/ta/generalta`
-  * public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXop004xu2hOBxNY 2026 NAP`
+  * public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXopO04xu2hOBxNY 2026 NAP`
   * user password: `<TA_PASSWORD>`
     * user’s password must be hashed
   * mail: `generalta@{STUID}.nasa`
@@ -69,7 +69,7 @@ Add a user with DN “`uid=mailta, ou=People, <Base DN>`”
   * uid: `mailta`
   * uid number: `10001`
   * homeDirectory: `/u/ta/mailta`
-  * public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXop004xu2hOBxNY 2026 NAP`
+  * public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXopO04xu2hOBxNY 2026 NAP`
   * user password: `<TA_PASSWORD>`
     * user’s password must be hashed
   * mail: `mailta@{STUID}.nasa`
@@ -81,7 +81,7 @@ Add a user with DN “`uid=stu, ou=People, <Base DN>`”
   * uid: `stu`
   * uid number: `20000`
   * homeDirectory: `/u/stu/stu`
-  * public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXop004xu2hOBxNY 2026 NAP`
+  * public key: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXopO04xu2hOBxNY 2026 NAP`
   * user password: `<TA_PASSWORD>`
     * user’s password must be hashed
   * mail: `stu@{STUID}.nasa`

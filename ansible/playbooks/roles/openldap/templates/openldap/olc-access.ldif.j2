@@ -4,44 +4,55 @@ changetype: modify
 replace: olcAccess
 olcAccess: {0}to attrs=userPassword
   by anonymous auth
-  by self =w
   by dn.exact="uid=generalta,ou=People,{{ ldap_base_dn }}" =w
   by dn.exact="uid=mailta,ou=People,{{ ldap_base_dn }}" =w
+  by self write
   by * none
 olcAccess: {1}to attrs=oathSecret,oathTOTPLastTimeStep,oathTOTPTimeStepDrift
   by * none
-olcAccess: {2}to dn.subtree="ou=People,{{ ldap_base_dn }}"
+olcAccess: {2}to dn.base="{{ ldap_base_dn }}"
+  by users read
+  by anonymous read
+  by * none
+olcAccess: {3}to dn.subtree="ou=People,{{ ldap_base_dn }}"
   attrs=loginShell,sshPublicKey
   by dn.exact="uid=generalta,ou=People,{{ ldap_base_dn }}" write
   by dn.exact="uid=mailta,ou=People,{{ ldap_base_dn }}" write
   by self write
   by users read
+  by anonymous read
   by * none
-olcAccess: {3}to dn.base="ou=People,{{ ldap_base_dn }}"
+olcAccess: {4}to dn.base="ou=People,{{ ldap_base_dn }}"
   attrs=children
   by dn.exact="uid=generalta,ou=People,{{ ldap_base_dn }}" write
   by dn.exact="uid=mailta,ou=People,{{ ldap_base_dn }}" write
   by * none
-olcAccess: {4}to dn.subtree="ou=People,{{ ldap_base_dn }}"
+olcAccess: {5}to dn.subtree="ou=People,{{ ldap_base_dn }}"
   by dn.exact="uid=generalta,ou=People,{{ ldap_base_dn }}" write
   by dn.exact="uid=mailta,ou=People,{{ ldap_base_dn }}" write
   by users read
+  by anonymous read
   by * none
-olcAccess: {5}to dn.base="ou=Group,{{ ldap_base_dn }}"
+olcAccess: {6}to dn.base="ou=Group,{{ ldap_base_dn }}"
   attrs=children
   by dn.exact="uid=generalta,ou=People,{{ ldap_base_dn }}" write
   by dn.exact="uid=mailta,ou=People,{{ ldap_base_dn }}" write
   by * none
-olcAccess: {6}to dn.subtree="ou=Group,{{ ldap_base_dn }}"
+olcAccess: {7}to dn.subtree="ou=Group,{{ ldap_base_dn }}"
   by dn.exact="uid=generalta,ou=People,{{ ldap_base_dn }}" write
   by dn.exact="uid=mailta,ou=People,{{ ldap_base_dn }}" write
   by users read
+  by anonymous read
   by * none
-olcAccess: {7}to dn.subtree="ou=SUDOers,{{ ldap_base_dn }}"
+olcAccess: {8}to dn.subtree="ou=SUDOers,{{ ldap_base_dn }}"
   by users read
+  by anonymous read
   by * none
-olcAccess: {8}to dn.subtree="ou=Fortune,{{ ldap_base_dn }}"
+olcAccess: {9}to dn.subtree="ou=Fortune,{{ ldap_base_dn }}"
   by users read
+  by anonymous read
   by * none
-olcAccess: {9}to dn.subtree="ou=Ppolicy,{{ ldap_base_dn }}"
+olcAccess: {10}to dn.subtree="ou=Ppolicy,{{ ldap_base_dn }}"
+  by users read
+  by anonymous read
   by * none

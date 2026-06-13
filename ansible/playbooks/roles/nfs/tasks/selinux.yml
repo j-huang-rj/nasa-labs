@@ -1,0 +1,19 @@
+---
+- name: "PHASE [selinux : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure SELinux booleans and contexts for NFS home directories"
+
+- name: "PHASE [selinux : Set SELinux Booleans]"
+  ansible.posix.seboolean:
+    name: "{{ item.name }}"
+    state: "{{ item.state }}"
+    persistent: true
+  loop: "{{ _nfs_selinux_booleans | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}={{ item.state }}"
+
+- name: "PHASE [selinux : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "SELinux NFS home configuration complete"

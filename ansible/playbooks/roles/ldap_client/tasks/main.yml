@@ -7,6 +7,27 @@
 - name: "PHASE [main : Validate Variables]"
   ansible.builtin.import_tasks: assert.yml
 
+- name: "PHASE [main : Install LDAP Client Packages]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [main : Deploy LDAP CA Certificate]"
+  ansible.builtin.import_tasks: ca.yml
+
+- name: "PHASE [main : Configure Authselect]"
+  ansible.builtin.import_tasks: authselect.yml
+
+- name: "PHASE [main : Configure SSSD]"
+  ansible.builtin.import_tasks: sssd.yml
+
+- name: "PHASE [main : Configure SSH LDAP Key Lookup]"
+  ansible.builtin.import_tasks: sshd.yml
+
+- name: "PHASE [main : Configure LDAP Sudo]"
+  ansible.builtin.import_tasks: sudo.yml
+
+- name: "PHASE [main : Verify LDAP Client State]"
+  ansible.builtin.import_tasks: verify.yml
+
 - name: "END"
   become: false
   ansible.builtin.debug:

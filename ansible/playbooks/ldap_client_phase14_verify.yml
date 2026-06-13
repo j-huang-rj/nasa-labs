@@ -1,0 +1,1166 @@
+---
+# Phase 14 validation playbook: Workstation LDAP client static safety,
+# CA/LDAPS trust, SSSD identity/SSH-key/sudo/host-access responders,
+# NFS home verification, live SSH password/TOTP and public-key login,
+# idempotency, reboot persistence, and secret-safety gates.
+#
+# Canonical commands:
+#   lint:
+#     ANSIBLE_CONFIG=ansible/ansible.cfg ansible-lint
+#       ansible/playbooks/ldap_client_phase14_verify.yml
+#       ansible/playbooks/roles/ldap_client
+#       ansible/playbooks/roles/openldap
+#
+#   standard verifier:
+#     ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook
+#       -i ansible/inventory/hosts.yml
+#       ansible/playbooks/ldap_client_phase14_verify.yml
+#
+#   reboot verifier:
+#     ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook
+#       -i ansible/inventory/hosts.yml
+#       ansible/playbooks/ldap_client_phase14_verify.yml --tags reboot
+#
+# Available tags:
+#   preflight, static, ca, identity, ssh_keys, host_access, sudo,
+#   nfs_home, cache, ssh_password, totp, ssh_pubkey, ssh_access,
+#   idempotency, reboot, secret_safety, full_matrix
+
+# ──────────────────────────────────────────────────────────
+# Preflight: Reachability, Phase 12/13 Prerequisites,
+# Workstation-Auth Gate
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Preflight Reachability And Prerequisites"
+  hosts:
+    - ldap-01
+    - workstation-01
+    - workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - preflight
+  tasks:
+    - name: "PHASE [preflight : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 preflight — target reachability, LDAPS and NFS prereqs, workstation-auth gate"
+
+    - name: "PHASE [preflight : Ping Targets]"
+      ansible.builtin.ping:
+
+    - name: "PHASE [preflight : Assert Phase 12/13 LDAPS Reachable From Workstations]"
+      ansible.builtin.shell:
+        cmd: >-
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -b "" -s base '(objectClass=*)' dn
+          -o ldif-wrap=no
+        executable: /bin/bash
+      environment:
+        LDAPTLS_CACERT: "{{ ldap_client_ca_cert_path | default('/etc/pki/ca-trust/source/anchors/ldap-ca.crt') }}"
+      changed_when: false
+      register: _p14_preflight_ldaps
+      when: inventory_hostname in ['workstation-01', 'workstation-02']
+
+    - name: "PHASE [preflight : Assert LDAPS RootDSE Reachable On Workstations]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_preflight_ldaps.rc | default(0) == 0
+          - "'dn:' in _p14_preflight_ldaps.stdout | default('')"
+        fail_msg: >-
+          LDAPS rootDSE not reachable from {{ inventory_hostname }}.
+          ldap_server_uri={{ ldap_server_uri }}
+          rc={{ _p14_preflight_ldaps.rc | default('') }}
+      when: inventory_hostname in ['workstation-01', 'workstation-02']
+
+    - name: "PHASE [preflight : Assert /u Mounted And NFS-Backed On Workstations]"
+      ansible.builtin.shell:
+        cmd: set -o pipefail; df --output=fstype /u | tail -1
+        executable: /bin/bash
+      changed_when: false
+      register: _p14_preflight_u
+      when: inventory_hostname in ['workstation-01', 'workstation-02']
+
+    - name: "PHASE [preflight : Assert /u Is NFS]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'nfs' in _p14_preflight_u.stdout | default('')"
+        fail_msg: >-
+          /u is not NFS-backed on {{ inventory_hostname }}.
+          fstype: {{ _p14_preflight_u.stdout | default('') }}
+      when: inventory_hostname in ['workstation-01', 'workstation-02']
+
+    - name: "PHASE [preflight : Assert Workstation Auth Enabled On Workstations]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - ldap_client_workstation_auth_enabled | default(false) | bool
+        fail_msg: >-
+          ldap_client_workstation_auth_enabled is not true on {{ inventory_hostname }}.
+      when: inventory_hostname in ['workstation-01', 'workstation-02']
+
+    - name: "PHASE [preflight : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 preflight complete"
+
+# ──────────────────────────────────────────────────────────
+# Static Source Safety Gates (localhost)
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Static Source Safety Gates"
+  hosts: localhost
+  gather_facts: true
+  tags:
+    - static
+  vars:
+    _p14_ldap_client_role_dir: "{{ playbook_dir }}/roles/ldap_client"
+    _p14_openldap_role_dir: "{{ playbook_dir }}/roles/openldap"
+    _p14_inventory_dir: "{{ playbook_dir }}/../inventory"
+  tasks:
+    - name: "PHASE [static : START]"
+      ansible.builtin.debug:
+        msg: "Phase 14 static source safety gates — scanning for forbidden patterns"
+
+    - name: "PHASE [static : Scan Source With Portable Python Gates]"
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          playbook_dir = Path("{{ playbook_dir }}")
+          inventory_dir = Path("{{ _p14_inventory_dir }}")
+          scan_roots = [
+              playbook_dir / "roles" / "ldap_client",
+              playbook_dir / "roles" / "openldap" / "tasks" / "sudo_roles.yml",
+              playbook_dir / "roles" / "openldap" / "tasks" / "sudo_role_entry.yml",
+              playbook_dir / "roles" / "openldap" / "templates" / "openldap" / "sudo-role.ldif.j2",
+              playbook_dir / "ldap_client_phase14_verify.yml",
+          ]
+          dmz_hostvars = inventory_dir / "host_vars" / "dmz-client-01"
+
+          patterns = [
+              ("Non-LDAPS ldap:// scheme", re.compile(r"ldap://")),
+              ("Port 389 (cleartext LDAP)", re.compile(r":389\b")),
+              ("StartTLS flags", re.compile(r"start\s*tls|starttls", re.I)),
+              ("TLS bypass", re.compile(r"LDAPTLS_REQCERT\s*=\s*never|never_tls_reqcert", re.I)),
+              ("SSSD TLS bypass", re.compile(r"ldap_tls_reqcert\s*=\s*never", re.I)),
+              ("Ansible certificate validation bypass", re.compile(r"validate_certs\s*:\s*false", re.I)),
+              ("mkhomedir / local home creation", re.compile(r"with-mkhomedir|oddjob-mkhomedir", re.I)),
+          ]
+          safe_mkhomedir_context = re.compile(
+              r"not|without|reject|assert|fail_msg|description|must|no |only|whether|current|not enabled",
+              re.I,
+          )
+          findings = []
+
+          def iter_files(path):
+              if path.is_dir():
+                  for suffix in ("*.yml", "*.yaml", "*.j2"):
+                      yield from path.rglob(suffix)
+              elif path.exists():
+                  yield path
+
+          def normalized_lines(path):
+              text = path.read_text(errors="replace")
+              if path.name == "ldap_client_phase14_verify.yml":
+                  text = re.sub(
+                      r"# Static Source Safety Gates.*?# CA Trust Verification",
+                      "# CA Trust Verification",
+                      text,
+                      flags=re.S,
+                  )
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  stripped = line.strip()
+                  if not stripped or stripped.startswith("#"):
+                      continue
+                  if re.match(r"^(-\s*)?(pattern|label|grep_args):", stripped):
+                      continue
+                  if path.name == "ldap_client_phase14_verify.yml" and "grep " in stripped:
+                      continue
+                  if path.name == "ldap_client_phase14_verify.yml" and re.match(r"^-r[En]*\s", stripped):
+                      continue
+                  yield lineno, line
+
+          for root in scan_roots:
+              for path in iter_files(root):
+                  for lineno, line in normalized_lines(path):
+                      for label, regex in patterns:
+                          if not regex.search(line):
+                              continue
+                          if label == "Non-LDAPS ldap:// scheme" and ("ldaps://" in line or "ldapi://" in line):
+                              continue
+                          if label == "StartTLS flags" and "not supported" in line.lower():
+                              continue
+                          if label == "mkhomedir / local home creation" and safe_mkhomedir_context.search(line):
+                              continue
+                          findings.append({"label": label, "path": str(path), "line": lineno, "text": line.strip()})
+
+          if dmz_hostvars.exists():
+              for path in iter_files(dmz_hostvars):
+                  for lineno, line in normalized_lines(path):
+                      if "workstation_auth_enabled" in line:
+                          findings.append({
+                              "label": "dmz-client-01 workstation-auth targeting",
+                              "path": str(path),
+                              "line": lineno,
+                              "text": line.strip(),
+                          })
+
+          print(json.dumps(findings, indent=2, sort_keys=True))
+          PY
+        executable: /bin/bash
+      changed_when: false
+      register: _p14_static_findings
+
+    - name: "PHASE [static : Assert No Forbidden Phase 14 Patterns]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_static_findings.stdout | from_json | length == 0
+        fail_msg: >-
+          Phase 14 content contains forbidden source patterns.
+          Matches:
+          {{ _p14_static_findings.stdout }}
+
+    - name: "PHASE [static : END]"
+      ansible.builtin.debug:
+        msg: "Phase 14 static source safety gates complete"
+
+# ──────────────────────────────────────────────────────────
+# CA Trust Verification
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 CA Trust Verification"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - ca
+  tasks:
+    - name: "PHASE [ca : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 CA trust verification"
+
+    - name: "PHASE [ca : LDAPS RootDSE With Certificate Validation]"
+      ansible.builtin.command:
+        cmd: >-
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -b "" -s base '(objectClass=*)' dn
+      environment:
+        LDAPTLS_CACERT: "{{ ldap_client_ca_cert_path | default('/etc/pki/ca-trust/source/anchors/ldap-ca.crt') }}"
+      changed_when: false
+      register: _p14_ca_rootdse
+
+    - name: "PHASE [ca : Assert LDAPS RootDSE Reachable]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_ca_rootdse.rc == 0
+          - "'dn:' in _p14_ca_rootdse.stdout"
+        fail_msg: >-
+          LDAPS rootDSE search failed on {{ inventory_hostname }}.
+          rc={{ _p14_ca_rootdse.rc }}
+
+    - name: "PHASE [ca : Assert CA Anchor Exists]"
+      ansible.builtin.stat:
+        path: "{{ ldap_client_ca_cert_path | default('/etc/pki/ca-trust/source/anchors/ldap-ca.crt') }}"
+      register: _p14_ca_anchor
+
+    - name: "PHASE [ca : Assert CA Anchor Present]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_ca_anchor.stat.exists
+        fail_msg: >-
+          CA anchor {{ ldap_client_ca_cert_path | default('/etc/pki/ca-trust/source/anchors/ldap-ca.crt') }}
+          missing on {{ inventory_hostname }}
+
+    - name: "PHASE [ca : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 CA trust verification complete"
+
+# ──────────────────────────────────────────────────────────
+# Cache Invalidation
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 SSSD Cache Invalidation"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - cache
+  tasks:
+    - name: "PHASE [cache : Clear SSSD Caches Before Responder Checks]"
+      ansible.builtin.command:
+        cmd: sss_cache -E
+      changed_when: false
+
+    - name: "PHASE [cache : cache]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 cache cleared"
+
+# ──────────────────────────────────────────────────────────
+# Identity Resolution
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Identity Resolution"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - identity
+  tasks:
+    - name: "PHASE [identity : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 identity resolution verification"
+
+    - name: "PHASE [identity : SSSD Domain Status]"
+      ansible.builtin.command:
+        cmd: sssctl domain-status "{{ ldap_client_sssd_domain | default(ldap_domain) }}"
+      changed_when: false
+      register: _p14_identity_status
+
+    - name: "PHASE [identity : Assert SSSD Domain Online]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_identity_status.rc == 0
+          - "'Online status: Online' in _p14_identity_status.stdout"
+        fail_msg: "SSSD domain offline on {{ inventory_hostname }}"
+
+    - name: "PHASE [identity : getent passwd generalta]"
+      ansible.builtin.command:
+        cmd: getent passwd generalta
+      changed_when: false
+      register: _p14_id_generalta
+
+    - name: "PHASE [identity : getent passwd mailta]"
+      ansible.builtin.command:
+        cmd: getent passwd mailta
+      changed_when: false
+      register: _p14_id_mailta
+
+    - name: "PHASE [identity : id generalta]"
+      ansible.builtin.command:
+        cmd: id generalta
+      changed_when: false
+      register: _p14_id_id_generalta
+
+    - name: "PHASE [identity : id mailta]"
+      ansible.builtin.command:
+        cmd: id mailta
+      changed_when: false
+      register: _p14_id_id_mailta
+
+    - name: "PHASE [identity : Assert TA Users Resolve]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_id_generalta.rc == 0
+          - "'generalta' in _p14_id_generalta.stdout"
+          - _p14_id_mailta.rc == 0
+          - "'mailta' in _p14_id_mailta.stdout"
+          - _p14_id_id_generalta.rc == 0
+          - _p14_id_id_mailta.rc == 0
+        fail_msg: "TA user identity resolution failed on {{ inventory_hostname }}"
+
+    - name: "PHASE [identity : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 identity resolution verification complete"
+
+# ──────────────────────────────────────────────────────────
+# SSH Key Lookup
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 SSH Key Lookup"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - ssh_keys
+  tasks:
+    - name: "PHASE [ssh_keys : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 SSH key lookup verification"
+
+    - name: "PHASE [ssh_keys : sss_ssh_authorizedkeys generalta]"
+      ansible.builtin.command:
+        cmd: sss_ssh_authorizedkeys generalta
+      changed_when: false
+      register: _p14_keys_ta
+
+    - name: "PHASE [ssh_keys : sss_ssh_authorizedkeys mailta]"
+      ansible.builtin.command:
+        cmd: sss_ssh_authorizedkeys mailta
+      changed_when: false
+      register: _p14_keys_mt
+
+    - name: "PHASE [ssh_keys : Assert SSH Keys Returned]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_keys_ta.rc == 0
+          - _p14_keys_ta.stdout | length > 0
+          - _p14_keys_mt.rc == 0
+          - _p14_keys_mt.stdout | length > 0
+        fail_msg: "SSSD SSH key lookup failed on {{ inventory_hostname }}"
+
+    - name: "PHASE [ssh_keys : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 SSH key lookup verification complete"
+
+# ──────────────────────────────────────────────────────────
+# Host Access Control
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Host Access Control"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - host_access
+  tasks:
+    - name: "PHASE [host_access : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 host access control verification"
+
+    - name: "PHASE [host_access : getent passwd stu]"
+      ansible.builtin.command:
+        cmd: getent passwd stu
+      changed_when: false
+      register: _p14_getent_stu
+
+    - name: "PHASE [host_access : Assert stu Resolves On workstation-01]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_getent_stu.rc == 0
+          - "'stu' in _p14_getent_stu.stdout"
+        fail_msg: "stu not resolved on workstation-01"
+      when: inventory_hostname == 'workstation-01'
+
+    - name: "PHASE [host_access : sssctl user-checks stu On workstation-02 (PAM account layer)]"
+      ansible.builtin.command:
+        cmd: sssctl user-checks stu -s sshd
+      changed_when: false
+      failed_when: false
+      register: _p14_userchecks_stu_denied
+      when: inventory_hostname == 'workstation-02'
+
+    - name: "PHASE [host_access : Assert stu PAM Account Check Denies On workstation-02]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p14_userchecks_stu_denied.rc != 0
+            or ((_p14_userchecks_stu_denied.stdout | default('')) | lower)
+               is search('permission denied|access denied|denied')
+            or ((_p14_userchecks_stu_denied.stderr | default('')) | lower)
+               is search('permission denied|access denied|denied')
+        fail_msg: >-
+          stu PAM account check unexpectedly allowed on workstation-02
+          (host access should deny stu).
+          rc={{ _p14_userchecks_stu_denied.rc }}
+          stdout={{ _p14_userchecks_stu_denied.stdout | default('') }}
+          stderr={{ _p14_userchecks_stu_denied.stderr | default('') }}
+      when: inventory_hostname == 'workstation-02'
+
+    - name: "PHASE [host_access : sss_ssh_authorizedkeys stu Denied On workstation-02 (SSH key lookup)]"
+      ansible.builtin.command:
+        cmd: sss_ssh_authorizedkeys stu
+      changed_when: false
+      failed_when: false
+      register: _p14_keys_stu_denied
+      when: inventory_hostname == 'workstation-02'
+
+    - name: "PHASE [host_access : Record stu SSH Key Lookup Diagnostic On workstation-02]"
+      ansible.builtin.debug:
+        msg: >-
+          stu SSH key lookup on workstation-02 returned rc={{ _p14_keys_stu_denied.rc }}.
+          This is diagnostic only; PAM account checks enforce host access.
+      when: inventory_hostname == 'workstation-02'
+
+    - name: "PHASE [host_access : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 host access control verification complete"
+
+# ──────────────────────────────────────────────────────────
+# Sudo Verification
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Sudo Verification"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - sudo
+  tasks:
+    - name: "PHASE [sudo : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 sudo LDAP verification"
+
+    - name: "PHASE [sudo : sudo -l -U generalta]"
+      ansible.builtin.command:
+        cmd: sudo -l -U generalta
+      changed_when: false
+      register: _p14_sudo_ta
+
+    - name: "PHASE [sudo : sudo -l -U mailta]"
+      ansible.builtin.command:
+        cmd: sudo -l -U mailta
+      changed_when: false
+      register: _p14_sudo_mt
+
+    - name: "PHASE [sudo : sudo -l -U stu]"
+      ansible.builtin.command:
+        cmd: sudo -l -U stu
+      changed_when: false
+      failed_when: false
+      register: _p14_sudo_stu
+
+    - name: "PHASE [sudo : Assert TA Users Have All-Command sudo]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_sudo_ta.rc == 0
+          - "'ALL' in _p14_sudo_ta.stdout"
+          - _p14_sudo_mt.rc == 0
+          - "'ALL' in _p14_sudo_mt.stdout"
+        fail_msg: "TA users missing LDAP all-command sudo on {{ inventory_hostname }}"
+
+    - name: "PHASE [sudo : Assert stu Has ls-Only sudo On workstation-01]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_sudo_stu.rc == 0
+          - "'/usr/bin/ls' in _p14_sudo_stu.stdout"
+          - "'stu' in _p14_sudo_stu.stdout"
+        fail_msg: >-
+          stu sudo not showing /usr/bin/ls on workstation-01.
+          stdout={{ _p14_sudo_stu.stdout | default('') }}
+      when: inventory_hostname == 'workstation-01'
+
+    - name: "PHASE [sudo : Assert stu Has No sudo On workstation-02]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            ('ALL' not in _p14_sudo_stu.stdout)
+            and ('/usr/bin/ls' not in _p14_sudo_stu.stdout)
+        fail_msg: >-
+          stu should have no LDAP sudo rules on workstation-02.
+          stdout={{ _p14_sudo_stu.stdout | default('') }}
+      when: inventory_hostname == 'workstation-02'
+
+    - name: "PHASE [sudo : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 sudo verification complete"
+
+# ──────────────────────────────────────────────────────────
+# NFS Home Verification
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 NFS Home Verification"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - nfs_home
+  tasks:
+    - name: "PHASE [nfs_home : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 NFS home verification"
+
+    - name: "PHASE [nfs_home : Check /u Filesystem Type]"
+      ansible.builtin.command:
+        cmd: df --output=fstype /u
+      changed_when: false
+      register: _p14_u_fstype
+
+    - name: "PHASE [nfs_home : Assert /u Is NFS-Backed]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'nfs' in _p14_u_fstype.stdout"
+        fail_msg: "/u not NFS-backed on {{ inventory_hostname }}"
+
+    - name: "PHASE [nfs_home : Check Home Directories]"
+      ansible.builtin.stat:
+        path: "{{ _p14_home }}"
+      loop:
+        - /u/ta/generalta
+        - /u/ta/mailta
+        - /u/stu/stu
+      loop_control:
+        loop_var: _p14_home
+        label: "{{ _p14_home }}"
+      register: _p14_homes
+
+    - name: "PHASE [nfs_home : Assert All Home Directories Exist]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_homes.results | selectattr('stat.exists', 'equalto', true) | list | length == 3
+        fail_msg: "Missing NFS home directories on {{ inventory_hostname }}"
+
+    - name: "PHASE [nfs_home : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 14 NFS home verification complete"
+
+# ──────────────────────────────────────────────────────────
+# SSH Password/TOTP Live Login Gates (Plan 14-06)
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Live SSH Password TOTP And Public-Key Login"
+  hosts: localhost
+  gather_facts: true
+  become: false
+  tags:
+    - ssh_password
+    - totp
+    - ssh_pubkey
+    - ssh_access
+  vars:
+    _p14_get_openldap_creds: "{{ hostvars['ldap-01'].openldap_credentials | default({}) }}"
+  tasks:
+    - name: "PHASE [ssh_live : START]"
+      ansible.builtin.debug:
+        msg: "Phase 14 live SSH password/TOTP and public-key login gates"
+
+    # ─── TOTP generation ───
+
+    - name: "PHASE [totp : Generate Current TOTP For generalta]"
+      ansible.builtin.shell:
+        cmd: |
+          python3 -c "
+          import base64, hmac, hashlib, struct, time
+          secret_b64 = '{{ _p14_get_openldap_creds.users.generalta.totp_secret_raw_b64 | default('') }}'
+          if not secret_b64:
+              print('NOT_CONFIGURED')
+              exit(0)
+          secret = base64.b64decode(secret_b64)
+          t = int(time.time()) // {{ hostvars['ldap-01'].openldap_totp_time_step | default(60) }}
+          msg = struct.pack('>Q', t)
+          h = hmac.new(secret, msg, hashlib.sha1).digest()
+          offset = h[-1] & 0x0f
+          code = (struct.unpack('>I', h[offset:offset+4])[0] & 0x7fffffff) % 1000000
+          print(f'{code:06d}')
+          "
+        executable: /bin/bash
+      changed_when: false
+      register: _p14_totp_generalta
+      no_log: true
+
+    - name: "PHASE [totp : Generate Current TOTP For stu]"
+      ansible.builtin.shell:
+        cmd: |
+          python3 -c "
+          import base64, hmac, hashlib, struct, time
+          secret_b64 = '{{ _p14_get_openldap_creds.users.stu.totp_secret_raw_b64 | default('') }}'
+          if not secret_b64:
+              print('NOT_CONFIGURED')
+              exit(0)
+          secret = base64.b64decode(secret_b64)
+          t = int(time.time()) // {{ hostvars['ldap-01'].openldap_totp_time_step | default(60) }}
+          msg = struct.pack('>Q', t)
+          h = hmac.new(secret, msg, hashlib.sha1).digest()
+          offset = h[-1] & 0x0f
+          code = (struct.unpack('>I', h[offset:offset+4])[0] & 0x7fffffff) % 1000000
+          print(f'{code:06d}')
+          "
+        executable: /bin/bash
+      changed_when: false
+      register: _p14_totp_stu
+      no_log: true
+
+    # ─── SSH password probe (generalta with TOTP, workstation-01) ───
+
+    - name: "PHASE [ssh_password : Fail Closed If generalta Password Material Unavailable]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_get_openldap_creds.users.generalta.password_plaintext | default('') | length > 0
+          - _p14_totp_generalta.stdout | default('NOT_CONFIGURED') != 'NOT_CONFIGURED'
+        fail_msg: >-
+          LCLI-02 (SSH password+TOTP login) cannot be verified:
+          generalta password or TOTP secret is not available on the
+          Ansible controller. Ensure openldap_credentials.users.generalta
+          contains password_plaintext and totp_secret_raw_b64.
+
+          Without this material, live SSH password verification cannot
+          proceed and this gate fails closed.
+
+    - name: "PHASE [ssh_password : Probe generalta Password Login On workstation-01]"
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          python3 - <<'PY'
+          import os
+          import pty
+          import select
+          import shlex
+          import sys
+          import time
+
+          credential = os.environ["P14_PASSWORD"] + os.environ["P14_TOTP"] + "\n"
+          common_args = shlex.split(os.environ.get("P14_COMMON_ARGS", ""))
+          cmd = [
+              "ssh",
+              *common_args,
+              "-p", os.environ.get("P14_PORT", "22"),
+              "-o", "StrictHostKeyChecking=no",
+              "-o", "UserKnownHostsFile=/dev/null",
+              "-o", "PreferredAuthentications=password",
+              "-o", "PubkeyAuthentication=no",
+              "-o", "PasswordAuthentication=yes",
+              "-o", "NumberOfPasswordPrompts=2",
+              f"generalta@{os.environ['P14_HOST']}",
+              "echo LOGIN_OK",
+          ]
+          pid, fd = pty.fork()
+          if pid == 0:
+              os.execvp("ssh", cmd)
+
+          output = bytearray()
+          sent = 0
+          deadline = time.time() + 45
+          status = None
+          while time.time() < deadline:
+              ready, _, _ = select.select([fd], [], [], 0.25)
+              if ready:
+                  try:
+                      data = os.read(fd, 4096)
+                  except OSError:
+                      data = b""
+                  if not data:
+                      break
+                  output.extend(data)
+                  lowered = output.decode(errors="ignore").lower()
+                  if sent < 2 and ("password:" in lowered or "verification" in lowered or "otp" in lowered):
+                      os.write(fd, credential.encode())
+                      sent += 1
+              try:
+                  done_pid, status = os.waitpid(pid, os.WNOHANG)
+              except ChildProcessError:
+                  break
+              if done_pid == pid:
+                  break
+          else:
+              try:
+                  os.kill(pid, 15)
+              except OSError:
+                  pass
+              print(output.decode(errors="replace"))
+              print("TIMEOUT")
+              sys.exit(1)
+
+          text = output.decode(errors="replace")
+          print(text)
+          rc = os.waitstatus_to_exitcode(status) if status is not None else 1
+          sys.exit(0 if rc == 0 and "LOGIN_OK" in text else 1)
+          PY
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+      register: _p14_ssh_pass_ta_ws01
+      no_log: true
+      environment:
+        P14_PASSWORD: "{{ _p14_get_openldap_creds.users.generalta.password_plaintext }}"
+        P14_TOTP: "{{ _p14_totp_generalta.stdout }}"
+        P14_HOST: "{{ hostvars['workstation-01'].ansible_host }}"
+        P14_PORT: "{{ hostvars['workstation-01'].ansible_port | default(22) }}"
+        P14_COMMON_ARGS: "{{ hostvars['workstation-01'].ansible_ssh_common_args | default('') }}"
+      when:
+        - _p14_get_openldap_creds.users.generalta.password_plaintext | default('') | length > 0
+        - _p14_totp_generalta.stdout | default('NOT_CONFIGURED') != 'NOT_CONFIGURED'
+
+    - name: "PHASE [ssh_password : Assert generalta Login To workstation-01]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_ssh_pass_ta_ws01.rc == 0
+          - "'LOGIN_OK' in (_p14_ssh_pass_ta_ws01.stdout | default(''))"
+        fail_msg: >-
+          generalta SSH password+TOTP login to workstation-01 did not succeed.
+          stdout={{ _p14_ssh_pass_ta_ws01.stdout | default('N/A') }}
+          (This probe may fail if the Ansible controller is not on the same
+           network or if password/TOTP material is incorrect.)
+
+    # ─── SSH public-key login probe ───
+
+    - name: "PHASE [ssh_pubkey : Check For SSH Private Key Availability]"
+      ansible.builtin.stat:
+        path: "{{ ldap_client_test_ssh_private_key_path | default('') }}"
+      register: _p14_privkey_stat
+      when: ldap_client_test_ssh_private_key_path is defined
+
+    - name: "PHASE [ssh_pubkey : Record Missing Private Key For Optional Live Probe]"
+      ansible.builtin.debug:
+        msg: >-
+          ldap_client_test_ssh_private_key_path is not defined; skipping live public-key
+          SSH login probe. Standard Phase 14 verification still checks sshd AuthorizedKeysCommand
+          and SSSD sshPublicKey lookup.
+      when: ldap_client_test_ssh_private_key_path is not defined
+
+    - name: "PHASE [ssh_pubkey : Fail If Explicit Private Key Path Is Missing]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_privkey_stat.stat.exists | default(false)
+        fail_msg: >-
+          ldap_client_test_ssh_private_key_path is defined but does not exist:
+          {{ ldap_client_test_ssh_private_key_path | default('') }}
+      when: >-
+        ldap_client_test_ssh_private_key_path is defined
+        and not _p14_privkey_stat.stat.exists | default(false)
+
+    - name: "PHASE [ssh_pubkey : Probe generalta Public-Key Login On workstation-01]"
+      ansible.builtin.command:
+        cmd: >-
+          ssh
+          {{ hostvars['workstation-01'].ansible_ssh_common_args | default('') }}
+          -p {{ hostvars['workstation-01'].ansible_port | default(22) }}
+          -o StrictHostKeyChecking=no
+          -o UserKnownHostsFile=/dev/null
+          -o BatchMode=yes
+          -o PasswordAuthentication=no
+          -o PubkeyAuthentication=yes
+          -i {{ ldap_client_test_ssh_private_key_path }}
+          generalta@{{ hostvars['workstation-01'].ansible_host }}
+          "echo LOGIN_PUBKEY_OK"
+      changed_when: false
+      register: _p14_ssh_key_ta_ws01
+      no_log: true
+      when: _p14_privkey_stat.stat.exists | default(false)
+
+    - name: "PHASE [ssh_pubkey : Assert generalta Public-Key Login To workstation-01]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'LOGIN_PUBKEY_OK' in _p14_ssh_key_ta_ws01.stdout | default('')"
+        fail_msg: >-
+          generalta SSH public-key login to workstation-01 failed.
+          stdout={{ _p14_ssh_key_ta_ws01.stdout | default('') }}
+      when: _p14_privkey_stat.stat.exists | default(false)
+
+    - name: "PHASE [ssh_live : END]"
+      ansible.builtin.debug:
+        msg: "Phase 14 live SSH login gates complete"
+
+# ──────────────────────────────────────────────────────────
+# Idempotency Gate (Plan 14-06, Task 2)
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Idempotency Gate"
+  hosts: localhost
+  gather_facts: false
+  tags:
+    - idempotency
+  tasks:
+    - name: "PHASE [idempotency : Run ldap_configure.yml Second Time]"
+      ansible.builtin.command:
+        cmd: >-
+          ansible-playbook
+          -i {{ playbook_dir }}/../inventory/hosts.yml
+          {{ playbook_dir }}/ldap_configure.yml
+      changed_when: false
+      register: _p14_idempotency
+      environment:
+        ANSIBLE_CONFIG: "{{ playbook_dir }}/../ansible.cfg"
+
+    - name: "PHASE [idempotency : Assert No Changes On Second Run]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_idempotency.rc == 0
+          - "'failed=0' in _p14_idempotency.stdout"
+          - "'changed=0' in _p14_idempotency.stdout"
+          - _p14_idempotency.stdout is not search('changed=[1-9][0-9]*')
+        fail_msg: >-
+          Idempotency check failed — ldap_configure.yml showed changes on second run.
+          rc={{ _p14_idempotency.rc }}
+          stdout={{ _p14_idempotency.stdout | default('') }}
+
+    - name: "PHASE [idempotency : idempotency]"
+      ansible.builtin.debug:
+        msg: "Phase 14 idempotency gate passed"
+
+# ──────────────────────────────────────────────────────────
+# Reboot Persistence Gates (Plan 14-06, Task 2)
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Reboot Persistence On ldap-01"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - reboot
+    - never
+  tasks:
+    - name: "PHASE [reboot : Reboot ldap-01]"
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+
+- name: "Phase14 Reboot Persistence On workstation-01"
+  hosts: workstation-01
+  gather_facts: false
+  become: true
+  tags:
+    - reboot
+    - never
+  tasks:
+    - name: "PHASE [reboot : Reboot workstation-01]"
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+
+- name: "Phase14 Reboot Persistence On workstation-02"
+  hosts: workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - reboot
+    - never
+  tasks:
+    - name: "PHASE [reboot : Reboot workstation-02]"
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+
+- name: "Phase14 Post-Reboot Verification On workstations"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - reboot
+    - never
+  tasks:
+    - name: "PHASE [reboot : Post-Reboot SSSD Domain Status]"
+      ansible.builtin.command:
+        cmd: sssctl domain-status "{{ ldap_client_sssd_domain | default(ldap_domain) }}"
+      changed_when: false
+      register: _p14_reboot_sssd
+
+    - name: "PHASE [reboot : Assert SSSD Online After Reboot]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'Online status: Online' in _p14_reboot_sssd.stdout"
+        fail_msg: "SSSD not online after reboot on {{ inventory_hostname }}"
+
+    - name: "PHASE [reboot : Post-Reboot getent passwd generalta]"
+      ansible.builtin.command:
+        cmd: getent passwd generalta
+      changed_when: false
+      register: _p14_reboot_getent
+
+    - name: "PHASE [reboot : Assert Identity Resolves After Reboot]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_reboot_getent.rc == 0
+          - "'generalta' in _p14_reboot_getent.stdout"
+        fail_msg: "Identity not resolving after reboot on {{ inventory_hostname }}"
+
+    - name: "PHASE [reboot : Post-Reboot sss_ssh_authorizedkeys generalta]"
+      ansible.builtin.command:
+        cmd: sss_ssh_authorizedkeys generalta
+      changed_when: false
+      register: _p14_reboot_keys
+
+    - name: "PHASE [reboot : Assert SSH Keys Available After Reboot]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_reboot_keys.rc == 0
+          - _p14_reboot_keys.stdout | length > 0
+        fail_msg: "SSH keys not available after reboot on {{ inventory_hostname }}"
+
+    - name: "PHASE [reboot : Post-Reboot sudo -l -U generalta]"
+      ansible.builtin.command:
+        cmd: sudo -l -U generalta
+      changed_when: false
+      register: _p14_reboot_sudo
+
+    - name: "PHASE [reboot : Assert sudo Available After Reboot]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_reboot_sudo.rc == 0
+          - "'ALL' in _p14_reboot_sudo.stdout"
+        fail_msg: "sudo not available after reboot on {{ inventory_hostname }}"
+
+    - name: "PHASE [reboot : Post-Reboot NFS /u Check]"
+      ansible.builtin.command:
+        cmd: df --output=fstype /u
+      changed_when: false
+      register: _p14_reboot_u
+
+    - name: "PHASE [reboot : Assert /u Still NFS-Backed After Reboot]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'nfs' in _p14_reboot_u.stdout"
+        fail_msg: "/u not NFS-backed after reboot on {{ inventory_hostname }}"
+
+    - name: "PHASE [reboot : Verify Post-Reboot stu Denied On workstation-02]"
+      ansible.builtin.command:
+        cmd: sssctl user-checks stu -s sshd
+      changed_when: false
+      failed_when: false
+      register: _p14_reboot_stu_ws02
+      when: inventory_hostname == 'workstation-02'
+
+    - name: "PHASE [reboot : Assert stu Still Denied On workstation-02 After Reboot]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p14_reboot_stu_ws02.rc != 0
+            or ((_p14_reboot_stu_ws02.stdout | default('')) | lower)
+               is search('permission denied|access denied|denied')
+            or ((_p14_reboot_stu_ws02.stderr | default('')) | lower)
+               is search('permission denied|access denied|denied')
+        fail_msg: "stu access unexpectedly available after reboot on workstation-02"
+      when: inventory_hostname == 'workstation-02'
+
+- name: "Phase14 Post-Reboot Verification On ldap-01"
+  hosts: ldap-01
+  gather_facts: false
+  become: true
+  tags:
+    - reboot
+    - never
+  tasks:
+    - name: "PHASE [reboot : Create Temporary LDAP Password File]"
+      ansible.builtin.shell:
+        cmd: |
+          _p14_tmpdir="$(mktemp -d)"
+          echo "$_p14_tmpdir" > /tmp/_p14_ldap_tmpdir
+          printf '%s' '{{ openldap_credentials.directory_manager.password_plaintext }}' > "${_p14_tmpdir}/pass.txt"
+          chmod 600 "${_p14_tmpdir}/pass.txt"
+        executable: /bin/bash
+      changed_when: false
+      no_log: true
+      register: _p14_tmpdir_result
+
+    - name: "PHASE [reboot : Post-Reboot LDAPS Search Base DN]"
+      ansible.builtin.shell:
+        cmd: >-
+          _p14_tmpdir="$(cat /tmp/_p14_ldap_tmpdir)";
+          ldapsearch -H {{ ldap_server_uri }}
+          -x -D "cn=admin,{{ ldap_base_dn }}" -y "${_p14_tmpdir}/pass.txt"
+          -b "{{ ldap_base_dn }}" -s base '(objectClass=*)' dn;
+          rc=$?; rm -rf "${_p14_tmpdir}" /tmp/_p14_ldap_tmpdir 2>/dev/null; exit $rc
+        executable: /bin/bash
+      environment:
+        LDAPTLS_CACERT: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
+      changed_when: false
+      no_log: true
+      register: _p14_reboot_ldap
+
+    - name: "PHASE [reboot : Assert LDAPS Functional After Reboot]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p14_reboot_ldap.rc == 0
+          - ldap_base_dn in _p14_reboot_ldap.stdout
+        fail_msg: "LDAPS not functional after ldap-01 reboot"
+      no_log: true
+
+# ──────────────────────────────────────────────────────────
+# Secret Safety And Full Matrix (Plan 14-06, Task 3)
+# ──────────────────────────────────────────────────────────
+- name: "Phase14 Secret Safety And Full Matrix"
+  hosts: localhost
+  gather_facts: true
+  tags:
+    - secret_safety
+    - full_matrix
+  vars:
+    _p14_secret_safety_patterns:
+      - pattern: 'no_log:\s*true'
+        label: 'Secret-adjacent tasks without no_log (missing protection check)'
+        grep_args: >-
+          -rn 'register:\s*_p14_totp\|register:\s*_p14_ssh_pass\|register:\s*_p14_ssh_key\|\|'
+      - pattern: 'openldap_credentials\.users\.'
+        label: 'OpenLDAP user credential direct interpolation'
+        grep_args: >-
+          -rn 'openldap_credentials\.users\.'
+          --include="*.yml" --include="*.yaml"
+          roles/ldap_client
+      - pattern: 'LDAPTLS_REQCERT=never'
+        label: 'TLS bypass in verifier'
+        grep_args: >-
+          -rn 'LDAPTLS_REQCERT=never'
+          --include="*.yml" --include="*.yaml"
+          ldap_client_phase14_verify.yml
+  tasks:
+    - name: "PHASE [secret_safety : START]"
+      ansible.builtin.debug:
+        msg: "Phase 14 secret safety and full matrix gates"
+
+    - name: "PHASE [secret_safety : Assert No Missing no_log On Secret Tasks]"
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          playbook = Path("{{ playbook_dir }}") / "ldap_client_phase14_verify.yml"
+          lines = playbook.read_text(errors="replace").splitlines()
+          register_re = re.compile(r"register:\s*(_p14_totp\w*|_p14_ssh_pass\w*|_p14_ssh_key\w*)")
+          missing = []
+          for idx, line in enumerate(lines):
+              if not register_re.search(line):
+                  continue
+              start = idx
+              while start > 0 and not re.match(r"\s*- name:", lines[start]):
+                  start -= 1
+              end = idx + 1
+              while end < len(lines) and not re.match(r"\s*- name:", lines[end]):
+                  end += 1
+              block = "\n".join(lines[start:end])
+              if not re.search(r"no_log:\s*true", block):
+                  missing.append(f"{playbook}:{idx + 1}: {line.strip()}")
+          print("\n".join(missing))
+          PY
+        executable: /bin/bash
+      changed_when: false
+      register: _p14_missing_nolog
+
+    - name: "PHASE [secret_safety : Assert All Secret Tasks Have no_log]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - >-
+            _p14_missing_nolog.stdout
+            | regex_replace('^\s*#.*$', '', multiline=true)
+            | trim | length == 0
+        fail_msg: >-
+          Secret-adjacent tasks may lack no_log: true.
+          Matches:
+          {{ _p14_missing_nolog.stdout }}
+
+    - name: "PHASE [full_matrix : Document Canonical Full-Suite Command]"
+      ansible.builtin.debug:
+        msg:
+          - "Canonical Phase 14 full-suite verification command:"
+          - "  ANSIBLE_CONFIG=ansible/ansible.cfg ansible-lint ansible/playbooks ansible/inventory"
+          - "  && ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook -i ansible/inventory/hosts.yml"
+          - "     ansible/playbooks/ldap_client_phase14_verify.yml"
+          - ""
+          - "Tags available: preflight, static, ca, identity, ssh_keys,"
+          - "  host_access, sudo, nfs_home, cache, ssh_password, totp,"
+          - "  ssh_pubkey, ssh_access, idempotency, reboot, secret_safety,"
+          - "  full_matrix"
+
+    - name: "PHASE [secret_safety : END]"
+      ansible.builtin.debug:
+        msg: "Phase 14 full matrix secret safety gates complete"

@@ -35,7 +35,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [ppolicy : Create Temporary Render Directory]"
   ansible.builtin.file:
-    path: /tmp/openldap-phase12-ppolicy
+    path: /tmp/openldap-ppolicy
     state: directory
     owner: root
     group: root
@@ -45,7 +45,7 @@
 - name: "PHASE [ppolicy : Render PPolicy Templates]"
   ansible.builtin.template:
     src: "openldap/{{ item.src }}"
-    dest: "/tmp/openldap-phase12-ppolicy/{{ item.dest }}"
+    dest: "/tmp/openldap-ppolicy/{{ item.dest }}"
     owner: root
     group: root
     mode: "0600"
@@ -63,7 +63,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [ppolicy : Deploy Check Password Config]"
   ansible.builtin.copy:
-    src: /tmp/openldap-phase12-ppolicy/check_password.conf
+    src: /tmp/openldap-ppolicy/check_password.conf
     dest: /etc/openldap/check_password.conf
     owner: root
     group: ldap
@@ -101,7 +101,7 @@
   ansible.builtin.command:
     cmd: >-
       ldapadd -Y EXTERNAL -H ldapi:///
-      -f /tmp/openldap-phase12-ppolicy/olc-overlay-ppolicy.ldif
+      -f /tmp/openldap-ppolicy/olc-overlay-ppolicy.ldif
   changed_when: true
 
 - name: "PHASE [ppolicy : Reconcile PPolicy Overlay Attributes]"
@@ -202,7 +202,7 @@
   ansible.builtin.command:
     cmd: >-
       ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
-      -H {{ ldap_server_uri }} -f /tmp/openldap-phase12-ppolicy/ppolicy-default.ldif
+      -H {{ ldap_server_uri }} -f /tmp/openldap-ppolicy/ppolicy-default.ldif
   changed_when: true
   no_log: true
   environment:
@@ -326,7 +326,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [ppolicy : Remove Temporary PPolicy LDIF Render Directory]"
   ansible.builtin.file:
-    path: /tmp/openldap-phase12-ppolicy
+    path: /tmp/openldap-ppolicy
     state: absent
   changed_when: false
 

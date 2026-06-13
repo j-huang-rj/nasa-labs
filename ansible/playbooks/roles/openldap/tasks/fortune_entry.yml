@@ -5,7 +5,7 @@
 - name: "PHASE [fortune_entry : Render Fortune LDIF] | id={{ _fortune_item.ID }}"
   ansible.builtin.template:
     src: openldap/fortune-entry.ldif.j2
-    dest: "/tmp/openldap-phase12-fortunes/fortune-{{ _fortune_item.ID }}.ldif"
+    dest: "/tmp/openldap-fortunes/fortune-{{ _fortune_item.ID }}.ldif"
     owner: root
     group: root
     mode: "0600"
@@ -36,7 +36,7 @@
     cmd: >-
       ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
       -H {{ ldap_server_uri }}
-      -f /tmp/openldap-phase12-fortunes/fortune-{{ _fortune_item.ID }}.ldif
+      -f /tmp/openldap-fortunes/fortune-{{ _fortune_item.ID }}.ldif
   changed_when: true
   no_log: true
   environment:

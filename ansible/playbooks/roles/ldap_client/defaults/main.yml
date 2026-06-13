@@ -2,6 +2,49 @@
 # ───────────────────────────── Feature flag ─────────────────────────────
 ldap_client_enabled: false
 
-# ───────────────────────────── SSSD shapes ─────────────────────────────
-# Shape-only in Phase 9. Expanded in Phase 14.
-ldap_client_sssd_config: {}
+# ───────────────────────────── Workstation-auth gate ─────────────────────
+# Only workstation-01 and workstation-02 are graded workstations.
+# dmz-client-01 is in ldap_clients for Phase 15 mail LDAP only.
+ldap_client_workstation_auth_enabled: false
+ldap_client_workstation_auth_hosts:
+  - workstation-01
+  - workstation-02
+
+# ───────────────────────────── Host access policy ────────────────────────
+# Defined per-host in host_vars; nil defaults mean the role fails closed
+# if a host accidentally reaches workstation-auth tasks without policy.
+ldap_client_allowed_groups: []
+ldap_client_allowed_users: []
+
+# ───────────────────────────── Package list ─────────────────────────────
+ldap_client_packages:
+  - sssd
+  - sssd-ldap
+  - sssd-tools
+  - libsss_sudo
+  - authselect
+  - openldap-clients
+  - ca-certificates
+  - sudo
+  - openssh-server
+
+# ───────────────────────────── Filesystem paths ─────────────────────────
+ldap_client_ca_cert_path: "{{ ldap_tls_ca_cert_path }}"
+ldap_client_sssd_conf_path: /etc/sssd/sssd.conf
+ldap_client_sssd_conf_group: sssd
+ldap_client_sssd_conf_mode: "0640"
+ldap_client_sshd_dropin_dir: /etc/ssh/sshd_config.d
+ldap_client_sshd_dropin_name: 49-ldap-keys.conf
+
+# ───────────────────────────── authselect profile ────────────────────────
+ldap_client_authselect_profile: sssd
+# with-sudo is required per LCLI-05; with-mkhomedir is explicitly NOT
+# enabled because Phase 13 NFS /u is the required home path per D-04.
+ldap_client_authselect_features:
+  - with-sudo
+
+# ───────────────────────────── mkhomedir gate ───────────────────────────
+ldap_client_enable_mkhomedir: false
+
+# ───────────────────────────── SSSD domain name ─────────────────────────
+ldap_client_sssd_domain: "{{ ldap_domain }}"

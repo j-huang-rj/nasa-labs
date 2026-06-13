@@ -1,0 +1,59 @@
+---
+- name: "PHASE [sudo_roles : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Reconcile LDAP sudoRole entries under ou=SUDOers"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: extract admin bind password once for all sudo role operations
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo_roles : Extract Admin Bind Password]"
+  ansible.builtin.set_fact:
+    _openldap_admin_password: "{{ openldap_credentials.directory_manager.password_plaintext }}"
+  no_log: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary directory for rendered sudoRole LDIF files
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo_roles : Create Temporary Sudo LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-sudo-roles
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  changed_when: false
+
+- name: "PHASE [sudo_roles : Write Temporary Admin Bind Password File]"
+  ansible.builtin.copy:
+    dest: /tmp/openldap-sudo-roles/.admin-password
+    content: "{{ _openldap_admin_password }}"
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+  no_log: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile each sudoRole: search before add, modify to exact state
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo_roles : Reconcile sudoRole Entry]"
+  ansible.builtin.include_tasks: sudo_role_entry.yml
+  loop: "{{ openldap_sudo_roles | dict2items }}"
+  loop_control:
+    loop_var: _sudo_role_def
+    label: "cn={{ _sudo_role_def.key }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clean up temporary render directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo_roles : Remove Temporary Sudo LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-sudo-roles
+    state: absent
+  changed_when: false
+
+- name: "PHASE [sudo_roles : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed sudo roles phase"

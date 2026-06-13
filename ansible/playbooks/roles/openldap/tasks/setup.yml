@@ -22,6 +22,9 @@
 - name: "PHASE [setup : Populate Identities]"
   ansible.builtin.import_tasks: identities.yml
 
+- name: "PHASE [setup : Reconcile Sudo Roles]"
+  ansible.builtin.import_tasks: sudo_roles.yml
+
 - name: "PHASE [setup : Reconcile Ordered ACLs]"
   ansible.builtin.import_tasks: acls.yml
 

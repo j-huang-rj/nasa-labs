@@ -1,15 +1,21 @@
 ---
 # Shared LDAP identity
 ldap_server_host: ldap-01
-ldap_server_ip: "{{ hostvars[ldap_server_host].ansible_host }}"
-ldap_domain: "{{ bind9_forward_zone_name }}"
+ldap_server_ip: "{{ lab_ldap_ip }}"
+ldap_domain: "{{ lab_domain }}"
 
 ldap_base_dn: "dc={{ ldap_domain | regex_replace('\\.', ',dc=') }}"
 ldap_server_fqdn: "ldap.{{ ldap_domain }}"
 ldap_server_uri: "ldaps://{{ ldap_server_fqdn }}:636"
 
+# LDAP TLS / trust contract
+ldap_tls_ca_certificate: ""
+ldap_tls_ca_cert_path: /etc/pki/ca-trust/source/anchors/ldap-ca.crt
+ldap_tls_ca_source_host: "{{ ldap_server_host }}"
+ldap_tls_ca_source_path: /etc/openldap/certs/ldap.crt
+
 # SSH public key shared by all LDAP users
-ldap_default_user_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXop004xu2hOBxNY 2026 NAP"
+ldap_default_user_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXopO04xu2hOBxNY 2026 NAP"
 
 # Directory Information Tree containers
 ldap_ous:

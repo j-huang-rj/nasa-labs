@@ -1,0 +1,16 @@
+dn: cn={{ _sudo_role.cn }},ou=SUDOers,{{ ldap_base_dn }}
+objectClass: top
+objectClass: sudoRole
+cn: {{ _sudo_role.cn }}
+sudoUser: {{ _sudo_role.sudoUser }}
+{% for host in _sudo_role.sudoHost %}
+sudoHost: {{ host }}
+{% endfor %}
+{% for cmd in _sudo_role.sudoCommand %}
+sudoCommand: {{ cmd }}
+{% endfor %}
+sudoRunAsUser: {{ _sudo_role.sudoRunAsUser }}
+sudoRunAsGroup: {{ _sudo_role.sudoRunAsGroup }}
+{% for opt in _sudo_role.sudoOption %}
+sudoOption: {{ opt }}
+{% endfor %}

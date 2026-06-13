@@ -1,0 +1,553 @@
+---
+# Phase 13 validation playbook: NFS export state, mount state,
+# cross-workstation file visibility, SELinux enforcement,
+# idempotency, and reboot persistence.
+#
+# Prerequisites:
+#   - ldap_configure.yml
+
+# ──────────────────────────────────────────────────────────
+# Preflight: Reachability
+# ──────────────────────────────────────────────────────────
+- name: "Phase13 Preflight Reachability"
+  hosts: ldap-01,workstation-01,workstation-02
+  gather_facts: false
+  become: false
+  tags:
+    - preflight
+  tasks:
+    - name: "PHASE [preflight : START]"
+      ansible.builtin.debug:
+        msg: "Phase 13 preflight reachability check — ldap-01, workstation-01, workstation-02"
+
+    - name: "PHASE [preflight : Ping Phase 13 Targets]"
+      ansible.builtin.ping:
+
+    - name: "PHASE [preflight : END]"
+      ansible.builtin.debug:
+        msg: "Phase 13 preflight reachability complete"
+
+# ──────────────────────────────────────────────────────────
+# Server: NFS Export State
+# ──────────────────────────────────────────────────────────
+- name: "Phase13 NFS Export Validation"
+  hosts: ldap-01
+  gather_facts: true
+  become: true
+  tags:
+    - server
+  tasks:
+    - name: "PHASE [server : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 NFS server — service state, exportfs, home tree ownership"
+
+    # ── Service state ──
+    - name: "PHASE [server : Gather Service Facts]"
+      ansible.builtin.service_facts:
+
+    - name: "PHASE [server : Assert nfs-server Service Is Enabled]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - ansible_facts.services['nfs-server.service'] is defined
+          - ansible_facts.services['nfs-server.service'].status == "enabled"
+        fail_msg: >-
+          nfs-server service is not enabled.
+          Status: {{ ansible_facts.services['nfs-server.service'].status | default('not found') }}
+
+    - name: "PHASE [server : Assert nfs-mountd Is Running]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - ansible_facts.services['nfs-mountd.service'] is defined
+          - ansible_facts.services['nfs-mountd.service'].state == "running"
+        fail_msg: >-
+          nfs-mountd service is not running.
+          State: {{ ansible_facts.services['nfs-mountd.service'].state | default('not found') }}
+
+    # ── Export state ──
+    - name: "PHASE [server : Check exportfs Output]"
+      ansible.builtin.command: exportfs -v
+      changed_when: false
+      register: _p13_exportfs
+
+    - name: "PHASE [server : Assert /u Is Exported]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'/u' in _p13_exportfs.stdout"
+        fail_msg: >-
+          /u is not exported by the NFS server.
+          exportfs output: {{ _p13_exportfs.stdout | default('') }}
+
+    - name: "PHASE [server : Assert /u Export Uses root_squash]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'root_squash' in _p13_exportfs.stdout"
+          - "'no_root_squash' not in _p13_exportfs.stdout"
+        fail_msg: >-
+          /u export must use root_squash and must not use no_root_squash.
+          exportfs output: {{ _p13_exportfs.stdout | default('') }}
+
+    # ── Home tree ownership ──
+    - name: "PHASE [server : Stat Home Directories]"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /u/ta/generalta
+        - /u/ta/mailta
+        - /u/stu/stu
+      loop_control:
+        label: "{{ item }}"
+      register: _p13_home_stat
+
+    - name: "PHASE [server : Assert Home Directory Ownership Matches LDAP Identity]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_home_stat.results[0].stat.exists
+          - _p13_home_stat.results[0].stat.uid == 10000
+          - _p13_home_stat.results[1].stat.exists
+          - _p13_home_stat.results[1].stat.uid == 10001
+          - _p13_home_stat.results[2].stat.exists
+          - _p13_home_stat.results[2].stat.uid == 20000
+        fail_msg: >-
+          Home directory UID ownership does not match LDAP identity.
+          generalta uid={{ _p13_home_stat.results[0].stat.uid | default('N/A') }},
+          mailta uid={{ _p13_home_stat.results[1].stat.uid | default('N/A') }},
+          stu uid={{ _p13_home_stat.results[2].stat.uid | default('N/A') }}
+
+    - name: "PHASE [server : Assert Home Directory GID Ownership Matches LDAP Identity]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_home_stat.results[0].stat.gid == 10000
+          - _p13_home_stat.results[1].stat.gid == 10000
+          - _p13_home_stat.results[2].stat.gid == 20000
+        fail_msg: >-
+          Home directory GID ownership does not match LDAP identity.
+          generalta gid={{ _p13_home_stat.results[0].stat.gid | default('N/A') }},
+          mailta gid={{ _p13_home_stat.results[1].stat.gid | default('N/A') }},
+          stu gid={{ _p13_home_stat.results[2].stat.gid | default('N/A') }}
+
+    - name: "PHASE [server : Assert Home Directory Modes Correct (0711)]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_home_stat.results[0].stat.mode == "0711"
+          - _p13_home_stat.results[1].stat.mode == "0711"
+          - _p13_home_stat.results[2].stat.mode == "0711"
+        fail_msg: >-
+          Home directory modes must be 0711.
+          generalta mode={{ _p13_home_stat.results[0].stat.mode | default('N/A') }},
+          mailta mode={{ _p13_home_stat.results[1].stat.mode | default('N/A') }},
+          stu mode={{ _p13_home_stat.results[2].stat.mode | default('N/A') }}
+
+    # ── Parent directory modes ──
+    - name: "PHASE [server : Stat Parent Directories]"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /u
+        - /u/ta
+        - /u/stu
+      loop_control:
+        label: "{{ item }}"
+      register: _p13_parent_stat
+
+    - name: "PHASE [server : Assert Parent Directories Owned By root:root With Mode 0755]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_parent_stat.results[0].stat.uid == 0
+          - _p13_parent_stat.results[0].stat.gid == 0
+          - _p13_parent_stat.results[0].stat.mode == "0755"
+          - _p13_parent_stat.results[1].stat.uid == 0
+          - _p13_parent_stat.results[1].stat.gid == 0
+          - _p13_parent_stat.results[1].stat.mode == "0755"
+          - _p13_parent_stat.results[2].stat.uid == 0
+          - _p13_parent_stat.results[2].stat.gid == 0
+          - _p13_parent_stat.results[2].stat.mode == "0755"
+        fail_msg: >-
+          Parent directories must be root:root with mode 0755.
+          /u uid={{ _p13_parent_stat.results[0].stat.uid | default('N/A') }}
+          mode={{ _p13_parent_stat.results[0].stat.mode | default('N/A') }},
+          /u/ta uid={{ _p13_parent_stat.results[1].stat.uid | default('N/A') }}
+          mode={{ _p13_parent_stat.results[1].stat.mode | default('N/A') }},
+          /u/stu uid={{ _p13_parent_stat.results[2].stat.uid | default('N/A') }}
+          mode={{ _p13_parent_stat.results[2].stat.mode | default('N/A') }}
+
+    - name: "PHASE [server : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 NFS server export validation complete"
+
+# ──────────────────────────────────────────────────────────
+# Client: NFS Mount State
+# ──────────────────────────────────────────────────────────
+- name: "Phase13 NFS Mount Validation"
+  hosts: workstation-01,workstation-02
+  gather_facts: true
+  become: true
+  tags:
+    - client
+  tasks:
+    - name: "PHASE [client : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 NFS client — mount state, filesystem identity, options"
+
+    # ── Mount table check ──
+    - name: "PHASE [client : Read /proc/mounts For NFS Check]"
+      ansible.builtin.command: cat /proc/mounts
+      changed_when: false
+      register: _p13_mounts
+
+    - name: "PHASE [client : Assert /u Is NFS Mounted]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'/u ' in _p13_mounts.stdout"
+          - "'nfs' in _p13_mounts.stdout"
+        fail_msg: >-
+          /u is not mounted as NFS.
+          /proc/mounts: {{ _p13_mounts.stdout | default('') }}
+
+    # ── Mount options validation ──
+    - name: "PHASE [client : Assert NFSv4 Protocol In Mount Options]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'nfsvers=4' in _p13_mounts.stdout or 'vers=4' in _p13_mounts.stdout"
+        fail_msg: >-
+          /u is not mounted with NFSv4 protocol.
+          /proc/mounts: {{ _p13_mounts.stdout | default('') }}
+
+    # ── Filesystem identity: verify /u is remote, not local ──
+    - name: "PHASE [client : Stat /u For Filesystem Identity]"
+      ansible.builtin.stat:
+        path: /u
+      register: _p13_u_stat
+
+    - name: "PHASE [client : Assert /u Exists And Is A Directory]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_u_stat.stat.exists
+          - _p13_u_stat.stat.isdir
+        fail_msg: >-
+          /u does not exist or is not a directory on {{ inventory_hostname }}.
+
+    - name: "PHASE [client : Verify /u Backing Source References ldap-01]"
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail; df /u | tail -1 | awk '{print $1}'
+        executable: /bin/bash
+      changed_when: false
+      register: _p13_df_u
+
+    - name: "PHASE [client : Assert /u Backing Source Contains ldap-01 IP]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - hostvars['ldap-01'].ansible_host in _p13_df_u.stdout
+        fail_msg: >-
+          /u backing source does not reference ldap-01.
+          df source: {{ _p13_df_u.stdout | default('N/A') }},
+          expected IP: {{ hostvars['ldap-01'].ansible_host }}
+
+    - name: "PHASE [client : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 NFS client mount validation complete"
+
+# ──────────────────────────────────────────────────────────
+# Cross-Workstation File Visibility
+# ──────────────────────────────────────────────────────────
+# Writes a canary file on workstation-01 as LDAP user uid 10000
+# (generalta) to escape root_squash, then reads it from
+# workstation-02 to prove shared NFS visibility.
+- name: "Phase13 Cross-Workstation File Visibility"
+  hosts: workstation-01
+  gather_facts: false
+  become: true
+  tags:
+    - cross_visibility
+  vars:
+    _p13_canary_path: /u/ta/generalta/.phase13_canary
+    _p13_canary_content: "phase13-cross-visibility-ok"
+    _p13_write_script: |
+      import os
+      os.setgid(10000)
+      os.setuid(10000)
+      with open('{{ _p13_canary_path }}', 'w') as f:
+          f.write('{{ _p13_canary_content }}')
+      os.chmod('{{ _p13_canary_path }}', 0o644)
+  tasks:
+    - name: "PHASE [cross_visibility : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 cross-workstation file visibility — write on workstation-01, read on workstation-02"
+
+    - name: "PHASE [cross_visibility : Write Canary File On workstation-01 As UID 10000]"
+      ansible.builtin.command:
+        cmd: python3 -c "{{ _p13_write_script }}"
+      changed_when: true
+
+    - name: "PHASE [cross_visibility : Set Canary Content Fact For Cross-Host Use]"
+      ansible.builtin.set_fact:
+        _p13_canary_content_fact: "{{ _p13_canary_content }}"
+
+    # ── Delegate read to workstation-02 ──
+    - name: "PHASE [cross_visibility : Read Canary File From workstation-02]"
+      ansible.builtin.command:
+        cmd: cat "{{ _p13_canary_path }}"
+      changed_when: false
+      register: _p13_canary_read
+      delegate_to: workstation-02
+
+    - name: "PHASE [cross_visibility : Assert Canary Content Visible Across Workstations]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_canary_read.rc == 0
+          - _p13_canary_content_fact in _p13_canary_read.stdout
+        fail_msg: >-
+          Cross-workstation file visibility failed.
+          Expected content: {{ _p13_canary_content_fact }},
+          Read from workstation-02: {{ _p13_canary_read.stdout | default('(empty)') }},
+          stderr: {{ _p13_canary_read.stderr | default('') }}
+
+    # ── Cleanup: remove canary as UID 10000 ──
+    - name: "PHASE [cross_visibility : Cleanup Remove Canary File As UID 10000]"
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "import os; os.setgid(10000); os.setuid(10000); os.remove('{{ _p13_canary_path }}')"
+      changed_when: true
+
+    - name: "PHASE [cross_visibility : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 cross-workstation file visibility check complete"
+
+# ──────────────────────────────────────────────────────────
+# SELinux Enforcement
+# ──────────────────────────────────────────────────────────
+- name: "Phase13 SELinux Enforcement"
+  hosts: ldap-01,workstation-01,workstation-02
+  gather_facts: true
+  become: true
+  tags:
+    - selinux
+  tasks:
+    - name: "PHASE [selinux : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 SELinux — enforcing mode and NFS booleans"
+
+    - name: "PHASE [selinux : Gather SELinux Facts]"
+      ansible.builtin.setup:
+        filter: ansible_selinux
+
+    - name: "PHASE [selinux : Assert SELinux Is Enforcing]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - ansible_facts.selinux.status | default('disabled') == 'enabled'
+          - ansible_facts.selinux.mode | default('') == 'enforcing'
+        fail_msg: >-
+          SELinux is not enforcing on {{ inventory_hostname }}.
+          Status: {{ ansible_facts.selinux.status | default('disabled') }},
+          Mode: {{ ansible_facts.selinux.mode | default('unknown') }}
+
+    # ── Server-side boolean: nfs_export_all_rw ──
+    - name: "PHASE [selinux : Check nfs_export_all_rw Boolean On Server]"
+      when: inventory_hostname in groups['nfs_servers']
+      ansible.builtin.command: getsebool nfs_export_all_rw
+      changed_when: false
+      register: _p13_selinux_export_rw
+
+    - name: "PHASE [selinux : Assert nfs_export_all_rw Is On For NFS Server]"
+      when: inventory_hostname in groups['nfs_servers']
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'nfs_export_all_rw --> on' in _p13_selinux_export_rw.stdout"
+        fail_msg: >-
+          SELinux boolean nfs_export_all_rw must be on for NFS server {{ inventory_hostname }}.
+          Output: {{ _p13_selinux_export_rw.stdout | default('') }}
+
+    # ── Client-side boolean: use_nfs_home_dirs ──
+    - name: "PHASE [selinux : Check use_nfs_home_dirs Boolean On Clients]"
+      when: inventory_hostname in groups['nfs_clients']
+      ansible.builtin.command: getsebool use_nfs_home_dirs
+      changed_when: false
+      register: _p13_selinux_home_dirs
+
+    - name: "PHASE [selinux : Assert use_nfs_home_dirs Is On For NFS Clients]"
+      when: inventory_hostname in groups['nfs_clients']
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'use_nfs_home_dirs --> on' in _p13_selinux_home_dirs.stdout"
+        fail_msg: >-
+          SELinux boolean use_nfs_home_dirs must be on for NFS client {{ inventory_hostname }}.
+          Output: {{ _p13_selinux_home_dirs.stdout | default('') }}
+
+    - name: "PHASE [selinux : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 SELinux enforcement check complete"
+
+# ──────────────────────────────────────────────────────────
+# Idempotency Gate: Re-run ldap_configure.yml, Assert No Changes
+# ──────────────────────────────────────────────────────────
+- name: "Phase13 Idempotency Check"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tags:
+    - idempotency
+  vars:
+    _p13_inventory_file: >-
+      {{ inventory_file
+         | default(ansible_inventory_sources | first
+                   | default((playbook_dir + '/../inventory/hosts.yml'))) }}
+  tasks:
+    - name: "PHASE [idempotency : START]"
+      ansible.builtin.debug:
+        msg: "Phase 13 idempotency: re-run ldap_configure.yml, assert no changes"
+
+    - name: "PHASE [idempotency : Run ldap_configure.yml Second Time For Idempotency Proof]"
+      ansible.builtin.command:
+        argv:
+          - ansible-playbook
+          - -i
+          - "{{ _p13_inventory_file }}"
+          - "{{ playbook_dir }}/ldap_configure.yml"
+      changed_when: false
+      failed_when: false
+      register: _p13_idempotency_rerun
+
+    - name: "PHASE [idempotency : Assert No Changes Failures Or Unreachable On Rerun]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_idempotency_rerun.rc == 0
+          - _p13_idempotency_rerun.stdout is not regex('unreachable=[1-9]')
+          - _p13_idempotency_rerun.stdout is not regex('failed=[1-9]')
+          - _p13_idempotency_rerun.stdout is not regex('changed=[1-9]')
+        fail_msg: >-
+          Second ldap_configure.yml run reported unreachable, failed, or changed tasks.
+          Recap: {{ _p13_idempotency_rerun.stdout | default('') }}
+
+    - name: "PHASE [idempotency : END]"
+      ansible.builtin.debug:
+        msg: "Phase 13 idempotency check complete"
+
+# ──────────────────────────────────────────────────────────
+# Reboot Persistence Check
+# ──────────────────────────────────────────────────────────
+- name: "Phase13 Reboot Persistence Precheck"
+  hosts: workstation-01
+  gather_facts: false
+  become: true
+  tags:
+    - reboot
+    - never
+  vars:
+    _p13_canary_reboot_path: /u/ta/generalta/.phase13_reboot_canary
+    _p13_reboot_write_script: |
+      import os
+      os.setgid(10000)
+      os.setuid(10000)
+      with open('{{ _p13_canary_reboot_path }}', 'w') as f:
+          f.write('phase13-reboot-ok')
+      os.chmod('{{ _p13_canary_reboot_path }}', 0o644)
+  tasks:
+    - name: "PHASE [reboot : START]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 reboot persistence — create canary before server/client reboot"
+
+    - name: "PHASE [reboot : Write Pre-Reboot Canary On workstation-01 As UID 10000]"
+      ansible.builtin.command:
+        cmd: python3 -c "{{ _p13_reboot_write_script }}"
+      changed_when: true
+
+- name: "Phase13 Reboot Targets"
+  hosts: ldap-01,workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  serial: 1
+  tags:
+    - reboot
+    - never
+  tasks:
+    - name: "PHASE [reboot : Reboot Target And Wait For Return]"
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+        pre_reboot_delay: 5
+        post_reboot_delay: 15
+
+- name: "Phase13 Reboot Persistence Postcheck"
+  hosts: workstation-01,workstation-02
+  gather_facts: false
+  become: true
+  tags:
+    - reboot
+    - never
+  vars:
+    _p13_canary_reboot_path: /u/ta/generalta/.phase13_reboot_canary
+  tasks:
+    - name: "PHASE [reboot : START - Post-Reboot Checks]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 reboot persistence — recheck mount and cross-visibility"
+
+    - name: "PHASE [reboot : Post-Reboot Check /u Is NFS Mounted]"
+      ansible.builtin.command: cat /proc/mounts
+      changed_when: false
+      register: _p13_reboot_mounts
+
+    - name: "PHASE [reboot : Assert Post-Reboot /u Is NFS Mounted]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'/u ' in _p13_reboot_mounts.stdout"
+          - "'nfs' in _p13_reboot_mounts.stdout"
+        fail_msg: >-
+          /u is not NFS mounted after reboot on {{ inventory_hostname }}.
+          /proc/mounts: {{ _p13_reboot_mounts.stdout | default('') }}
+
+    - name: "PHASE [reboot : Post-Reboot Read Canary File From workstation-02]"
+      when: inventory_hostname == 'workstation-02'
+      ansible.builtin.command: cat "{{ _p13_canary_reboot_path }}"
+      changed_when: false
+      register: _p13_reboot_canary_read
+
+    - name: "PHASE [reboot : Assert Post-Reboot Canary Visible On workstation-02]"
+      when: inventory_hostname == 'workstation-02'
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _p13_reboot_canary_read.rc == 0
+          - "'phase13-reboot-ok' in _p13_reboot_canary_read.stdout"
+        fail_msg: >-
+          Post-reboot cross-workstation canary visibility failed.
+          Read from workstation-02: {{ _p13_reboot_canary_read.stdout | default('(empty)') }},
+          stderr: {{ _p13_reboot_canary_read.stderr | default('') }}
+
+    - name: "PHASE [reboot : Cleanup Remove Reboot Canary As UID 10000]"
+      when: inventory_hostname == 'workstation-01'
+      ansible.builtin.command:
+        cmd: >-
+          python3 -c "import os; p='{{ _p13_canary_reboot_path }}'; os.setgid(10000); os.setuid(10000); os.path.exists(p) and os.remove(p)"
+      changed_when: true
+
+    - name: "PHASE [reboot : END]"
+      become: false
+      ansible.builtin.debug:
+        msg: "Phase 13 reboot persistence check complete"

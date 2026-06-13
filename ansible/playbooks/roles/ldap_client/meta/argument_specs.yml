@@ -9,6 +9,96 @@ argument_specs:
         required: true
         description: Whether the ldap_client role should be active on this host
 
+      ldap_client_workstation_auth_enabled:
+        type: bool
+        required: false
+        description: >-
+          Whether workstation SSH/PAM/sudo/access policy is active on this host.
+          Must be true only for workstation-01 and workstation-02.
+
+      ldap_client_workstation_auth_hosts:
+        type: list
+        elements: str
+        required: false
+        description: Explicit inventory host allowlist for workstation auth policy.
+
+      ldap_client_allowed_groups:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          LDAP groups allowed simple-access on this workstation.
+          workstation-01: [ta, stu]; workstation-02: [ta].
+
+      ldap_client_allowed_users:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          LDAP users allowed simple-access on this workstation.
+          workstation-01: [generalta, mailta, stu]; workstation-02: [generalta, mailta].
+
+      ldap_client_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for the LDAP workstation client
+
+      ldap_client_ca_cert_path:
+        type: str
+        required: false
+        description: Absolute path to the deployed LDAP CA certificate anchor
+
+      ldap_client_sssd_conf_path:
+        type: str
+        required: false
+        description: Absolute path to sssd.conf
+
+      ldap_client_sssd_conf_mode:
+        type: str
+        required: false
+        description: File mode for sssd.conf
+
+      ldap_client_sssd_conf_group:
+        type: str
+        required: false
+        description: File group for sssd.conf
+
+      ldap_client_sshd_dropin_dir:
+        type: str
+        required: false
+        description: Directory for sshd AuthorizedKeysCommand drop-in
+
+      ldap_client_sshd_dropin_name:
+        type: str
+        required: false
+        description: Filename for sshd AuthorizedKeysCommand drop-in
+
+      ldap_client_authselect_profile:
+        type: str
+        required: false
+        description: >-
+          Authselect profile name (sssd)
+
+      ldap_client_authselect_features:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Authselect profile features (with-sudo only; no with-mkhomedir)
+
+      ldap_client_enable_mkhomedir:
+        type: bool
+        required: false
+        description: >-
+          Whether to enable authselect with-mkhomedir or oddjob-mkhomedir.
+          Must remain false because Phase 13 NFS /u is the required home path.
+
+      ldap_client_sssd_domain:
+        type: str
+        required: false
+        description: SSSD domain name (equals ldap_domain)
+
       ldap_server_fqdn:
         type: str
         required: false
@@ -31,7 +121,30 @@ argument_specs:
         type: str
         required: false
         description: >-
-          LDAP CA certificate PEM content. Shape-only in Phase 9.
+          LDAP CA certificate PEM content. When non-empty, used directly as the
+          workstation TLS trust anchor without slurping from the LDAP server.
+          When empty, the certificate is slurped from ldap_tls_ca_source_host.
+
+      ldap_tls_ca_cert_path:
+        type: str
+        required: false
+        description: >-
+          Absolute path where the LDAP CA certificate anchor is deployed on the
+          target host. Derived from shared LDAP identity (ldap_identity.yml).
+
+      ldap_tls_ca_source_host:
+        type: str
+        required: false
+        description: >-
+          Inventory hostname of the LDAP server to slurp the CA certificate from
+          when ldap_tls_ca_certificate is empty. Defaults to ldap_server_host.
+
+      ldap_tls_ca_source_path:
+        type: str
+        required: false
+        description: >-
+          Absolute path on ldap_tls_ca_source_host to the OpenLDAP CA certificate
+          file. Defaults to /etc/openldap/certs/ldap.crt.
 
       ldap_client_sssd_config:
         type: dict

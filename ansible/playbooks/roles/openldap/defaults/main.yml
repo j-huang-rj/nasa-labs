@@ -52,17 +52,18 @@ openldap_custom_schema_templates:
 
 openldap_fortune_schema_oid_root: "2.25.109749598841848522681210166878566339431"
 
-# ───────────────────────────── Phase 12: ACL defaults ───────────────────
+# ACLs
 openldap_acl_secret_attrs:
   - userPassword
   - oathSecret
   - oathTOTPLastTimeStep
   - oathTOTPTimeStepDrift
+
 openldap_acl_delegate_dns:
   - "uid=generalta,ou=People,{{ ldap_base_dn }}"
   - "uid=mailta,ou=People,{{ ldap_base_dn }}"
 
-# ───────────────────────────── Phase 12: ppolicy defaults ───────────────
+# ppolicy
 openldap_ppolicy_default_dn: "cn=default,ou=Ppolicy,{{ ldap_base_dn }}"
 openldap_ppolicy_check_module: /usr/lib64/openldap/check_password.so
 openldap_ppolicy_hash_cleartext: true
@@ -77,21 +78,48 @@ openldap_check_password_min_lower: 0
 openldap_check_password_min_digit: 0
 openldap_check_password_min_punct: 0
 
-# ───────────────────────────── Phase 12: TOTP defaults ──────────────────
-openldap_totp_params_dn: "cn=totp-default,ou=Ppolicy,{{ ldap_base_dn }}"
+# TOTP
+openldap_totp_params_dn: "cn=totp,ou=Ppolicy,{{ ldap_base_dn }}"
 openldap_totp_length: 6
 openldap_totp_time_step: 60
 openldap_totp_hmac_algorithm: "1.2.840.113549.2.7"
 
-# ───────────────────────────── Phase 12: Fortune/sssvlv defaults ────────
+# Fortune / sssvlv
 openldap_fortune_base_dn: "ou=Fortune,{{ ldap_base_dn }}"
 openldap_sssvlv_max: 500
 openldap_sssvlv_max_keys: 50
 openldap_sssvlv_max_per_conn: 10
 
-# Canonical credential bundle (directory_manager, service_bind, users.*)
+# sudoRole
+openldap_sudo_roles:
+  ta:
+    cn: ta
+    sudoUser: "%ta"
+    sudoHost:
+      - ALL
+    sudoCommand:
+      - ALL
+    sudoRunAsUser: ALL
+    sudoRunAsGroup: ALL
+    sudoOption:
+      - "!authenticate"
+
+  stu:
+    cn: stu
+    sudoUser: "%stu"
+    sudoHost:
+      - workstation-01
+      - "workstation1.{{ ldap_domain }}"
+    sudoCommand:
+      - "/usr/bin/ls"
+    sudoRunAsUser: ALL
+    sudoRunAsGroup: ALL
+    sudoOption:
+      - "!authenticate"
+
+# Canonical credential bundle
 openldap_credentials: {}
 
-# Secret shapes outside openldap_credentials
+# Secrets
 openldap_tls_private_key: ""
 openldap_tls_certificate: ""

@@ -1,0 +1,18 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install NFS packages"
+
+- name: "PHASE [install : Install NFS Packages]"
+  ansible.builtin.dnf:
+    name: "{{ _nfs_packages | default(nfs_server_packages + nfs_client_packages) }}"
+    state: present
+
+- name: "PHASE [install : Gather Service Facts]"
+  ansible.builtin.service_facts:
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "NFS packages installed"

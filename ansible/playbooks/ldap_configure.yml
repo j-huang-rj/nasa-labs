@@ -23,12 +23,12 @@
   gather_facts: false
   become: true
   tasks:
-    - name: Run LDAP Client Role
-      ansible.builtin.include_role:
-        name: ldap_client
-      when: ldap_client_enabled | default(false) | bool
-
     - name: Run NFS Role
       ansible.builtin.include_role:
         name: nfs
       when: nfs_enabled | default(false) | bool
+
+    - name: Run LDAP Client Role
+      ansible.builtin.include_role:
+        name: ldap_client
+      when: ldap_client_enabled | default(false) | bool

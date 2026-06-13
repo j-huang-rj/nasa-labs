@@ -687,6 +687,110 @@
       sssvlv overlay missing or missing limit attributes on target MDB.
       stdout={{ _openldap_sssvlv_overlay_search.stdout | default('') }}
 
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 14: sudoRole data verification
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Search SUDOers Container]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "ou=SUDOers,{{ ldap_base_dn }}" -s one
+      '(objectClass=sudoRole)' cn
+  changed_when: false
+  no_log: true
+  register: _openldap_sudo_roles_search
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert Both sudoRole Entries Present In ou=SUDOers]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_sudo_roles_search.rc == 0
+      - "'cn: ta' in _openldap_sudo_roles_search.stdout"
+      - "'cn: stu' in _openldap_sudo_roles_search.stdout"
+    fail_msg: >-
+      One or both sudoRole entries missing from ou=SUDOers.
+      stdout={{ _openldap_sudo_roles_search.stdout | default('') }}
+  no_log: true
+
+- name: "PHASE [verify : Search TA sudoRole Details]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "cn=ta,ou=SUDOers,{{ ldap_base_dn }}" -s base
+      -o ldif-wrap=no
+      '(objectClass=sudoRole)' sudoUser sudoHost sudoCommand sudoRunAsUser sudoRunAsGroup sudoOption
+  changed_when: false
+  no_log: true
+  register: _openldap_sudo_ta_all
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert TA sudoRole Has Expected Values]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_sudo_ta_all.rc == 0
+      - "'sudoUser: %ta' in _openldap_sudo_ta_all.stdout"
+      - "'sudoHost: ALL' in _openldap_sudo_ta_all.stdout"
+      - "'sudoCommand: ALL' in _openldap_sudo_ta_all.stdout"
+      - "'sudoRunAsUser: ALL' in _openldap_sudo_ta_all.stdout"
+      - "'sudoRunAsGroup: ALL' in _openldap_sudo_ta_all.stdout"
+      - "'sudoOption: !authenticate' in _openldap_sudo_ta_all.stdout"
+    fail_msg: >-
+      TA sudoRole has unexpected attributes.
+      stdout={{ _openldap_sudo_ta_all.stdout | default('') }}
+  no_log: true
+
+- name: "PHASE [verify : Search Stu sudoRole Details]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "cn=stu,ou=SUDOers,{{ ldap_base_dn }}" -s base
+      -o ldif-wrap=no
+      '(objectClass=sudoRole)' sudoUser sudoHost sudoCommand sudoRunAsUser sudoRunAsGroup sudoOption
+  changed_when: false
+  no_log: true
+  register: _openldap_sudo_stu
+  environment:
+    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+
+- name: "PHASE [verify : Assert Stu sudoRole Has Expected Values]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _openldap_sudo_stu.rc == 0
+      - "'sudoUser: %stu' in _openldap_sudo_stu.stdout"
+      - "'sudoCommand: /usr/bin/ls' in _openldap_sudo_stu.stdout"
+      - "'sudoRunAsUser: ALL' in _openldap_sudo_stu.stdout"
+      - "'sudoRunAsGroup: ALL' in _openldap_sudo_stu.stdout"
+      - "'sudoOption: !authenticate' in _openldap_sudo_stu.stdout"
+    fail_msg: >-
+      Stu sudoRole has unexpected attributes.
+      stdout={{ _openldap_sudo_stu.stdout | default('') }}
+  no_log: true
+
+- name: "PHASE [verify : Assert Stu sudoRole References Workstation-01 Hosts]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'sudoHost: workstation-01' in (_openldap_sudo_stu.stdout | split('\n'))"
+      - "('sudoHost: workstation1.' ~ ldap_domain) in (_openldap_sudo_stu.stdout | split('\n'))"
+      - "'sudoHost: workstation1' not in (_openldap_sudo_stu.stdout | split('\n'))"
+      - "('sudoHost: ' ~ hostvars['workstation-01'].ansible_host) not in (_openldap_sudo_stu.stdout | split('\n'))"
+      - "'sudoHost: workstation2' not in (_openldap_sudo_stu.stdout | split('\n'))"
+      - "'sudoHost: workstation-02' not in (_openldap_sudo_stu.stdout | split('\n'))"
+    fail_msg: >-
+      Stu sudoRole does not have correct workstation-01 host identities,
+      or incorrectly references workstation-02.
+      stdout={{ _openldap_sudo_stu.stdout | default('') }}
+  no_log: true
+
 - name: "PHASE [verify : END]"
   become: false
   ansible.builtin.debug:

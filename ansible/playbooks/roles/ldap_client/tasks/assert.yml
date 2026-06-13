@@ -26,6 +26,83 @@
       - ldap_base_dn | length > 0
     fail_msg: "Required LDAP consumer variables (ldap_server_fqdn, ldap_server_uri, ldap_base_dn) must be defined and non-empty"
 
+# ─────────────────────────────────────────────────────────────────────────
+# Phase 14 workstation-auth gate assertions
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [assert : Reject Non-Workstation Hosts Without Explicit Opt-In]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (not ldap_client_workstation_auth_enabled | bool)
+        or inventory_hostname in ldap_client_workstation_auth_hosts
+    fail_msg: >-
+      ldap_client_workstation_auth_enabled is true on {{ inventory_hostname }}
+      but this host is not in ldap_client_workstation_auth_hosts.
+      Workstation auth (SSSD, SSH, PAM, sudo, access policy) is only deployed
+      on workstation-01 and workstation-02.
+
+- name: "PHASE [assert : Reject Empty Workstation Access Policy]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (not ldap_client_workstation_auth_enabled | bool)
+        or (ldap_client_allowed_groups | length > 0)
+      - >-
+        (not ldap_client_workstation_auth_enabled | bool)
+        or (ldap_client_allowed_users | length > 0)
+    fail_msg: >-
+      ldap_client_workstation_auth_enabled is true on {{ inventory_hostname }}
+      but ldap_client_allowed_groups and/or ldap_client_allowed_users are empty.
+      Define a non-empty host access policy for each workstation.
+
+- name: "PHASE [assert : Validate Workstation-Auth TLS Trust Variables]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ldap_tls_ca_cert_path is defined
+      - ldap_tls_ca_cert_path | length > 0
+      - ldap_tls_ca_certificate is defined
+      - >-
+        (ldap_tls_ca_certificate | length > 0)
+        or (ldap_tls_ca_source_host is defined and ldap_tls_ca_source_host | length > 0)
+      - >-
+        (ldap_tls_ca_certificate | length > 0)
+        or (ldap_tls_ca_source_path is defined and ldap_tls_ca_source_path | length > 0)
+    fail_msg: >-
+      ldap_tls_ca_cert_path must be defined and non-empty.
+      ldap_tls_ca_certificate must be defined.
+      When ldap_tls_ca_certificate is empty, ldap_tls_ca_source_host and
+      ldap_tls_ca_source_path must also be defined and non-empty.
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [assert : Reject Non-LDAPS Server URI]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ldap_server_uri is match('^ldaps://')
+      - ldap_server_uri is match('.*:636$')
+    fail_msg: >-
+      ldap_server_uri must be an LDAPS URI on port 636 (e.g. ldaps://ldap.example.com:636).
+      Found: {{ ldap_server_uri }}
+      StartTLS/389 and TLS bypass are not supported in Phase 14.
+
+- name: "PHASE [assert : Reject mkhomedir Enabled Final State]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - not (ldap_client_enable_mkhomedir | bool)
+    fail_msg: >-
+      ldap_client_enable_mkhomedir is true, which enables local home creation
+      and can hide the Phase 13 NFS /u mount. Set to false.
+
 - name: "PHASE [assert : END]"
   become: false
   ansible.builtin.debug:

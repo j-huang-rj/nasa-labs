@@ -35,7 +35,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [totp : Create Temporary TOTP LDIF Render Directory]"
   ansible.builtin.file:
-    path: /tmp/openldap-phase12-totp
+    path: /tmp/openldap-totp
     state: directory
     owner: root
     group: root
@@ -48,7 +48,7 @@
 - name: "PHASE [totp : Render OTP Overlay LDIF Template]"
   ansible.builtin.template:
     src: openldap/olc-overlay-otp.ldif.j2
-    dest: /tmp/openldap-phase12-totp/olc-overlay-otp.ldif
+    dest: /tmp/openldap-totp/olc-overlay-otp.ldif
     owner: root
     group: root
     mode: "0600"
@@ -80,16 +80,16 @@
   ansible.builtin.command:
     cmd: >-
       ldapadd -Y EXTERNAL -H ldapi:///
-      -f /tmp/openldap-phase12-totp/olc-overlay-otp.ldif
+      -f /tmp/openldap-totp/olc-overlay-otp.ldif
   changed_when: true
 
 # ─────────────────────────────────────────────────────────────────────────
-# Reconcile TOTP params entry (cn=totp-default,ou=Ppolicy)
+# Reconcile TOTP params entry
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [totp : Render TOTP Params LDIF Template]"
   ansible.builtin.template:
     src: openldap/totp-params.ldif.j2
-    dest: /tmp/openldap-phase12-totp/totp-params.ldif
+    dest: /tmp/openldap-totp/totp-params.ldif
     owner: root
     group: root
     mode: "0600"
@@ -113,7 +113,7 @@
   ansible.builtin.command:
     cmd: >-
       ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
-      -H {{ ldap_server_uri }} -f /tmp/openldap-phase12-totp/totp-params.ldif
+      -H {{ ldap_server_uri }} -f /tmp/openldap-totp/totp-params.ldif
   changed_when: true
   no_log: true
   environment:
@@ -202,7 +202,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [totp : Remove Temporary TOTP LDIF Render Directory]"
   ansible.builtin.file:
-    path: /tmp/openldap-phase12-totp
+    path: /tmp/openldap-totp
     state: absent
   changed_when: false
 

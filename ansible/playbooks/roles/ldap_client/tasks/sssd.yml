@@ -1,0 +1,55 @@
+---
+- name: "PHASE [sssd : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure SSSD for LDAPS NSS/PAM/SSH/sudo"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: only configure SSSD on workstation-auth hosts
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sssd : Skip SSSD For Non-Workstation Hosts]"
+  ansible.builtin.debug:
+    msg: >-
+      Skipping SSSD configuration on {{ inventory_hostname }}:
+      ldap_client_workstation_auth_enabled is false or undefined.
+  when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Assemble simple_allow_groups and simple_allow_users as comma-separated
+# strings for the SSSD template
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sssd : Render sssd.conf]"
+  ansible.builtin.template:
+    src: sssd.conf.j2
+    dest: "{{ ldap_client_sssd_conf_path }}"
+    owner: root
+    group: "{{ ldap_client_sssd_conf_group }}"
+    mode: "{{ ldap_client_sssd_conf_mode }}"
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+  notify: "PHASE [handler : Restart SSSD]"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Flush handlers to ensure SSSD is running with new config before checks
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sssd : Flush Handlers]"
+  ansible.builtin.meta: flush_handlers
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Enable SSSD service
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [sssd : Enable And Start SSSD Service]"
+  ansible.builtin.systemd_service:
+    name: sssd
+    enabled: true
+    state: started
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sssd : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed SSSD phase"

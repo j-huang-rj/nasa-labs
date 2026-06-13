@@ -348,6 +348,11 @@
       ansible.builtin.debug:
         msg: "Phase 12 ACL matrix — delegation, secrets, self-service"
 
+    - name: "PHASE [acl : Normalize TLS Cert Path]"
+      ansible.builtin.set_fact:
+        openldap_tls_cert_path: "{{ _p12_tls_cert_path }}"
+      changed_when: false
+
     # ─── MDB discovery (same pattern as preflight) ───
     - name: "PHASE [acl : Discover Target MDB By Suffix]"
       ansible.builtin.command:
@@ -683,6 +688,11 @@
       ansible.builtin.debug:
         msg: "Phase 12 ppolicy validation — ordinary mailta password-change behavior"
 
+    - name: "PHASE [ppolicy : Normalize TLS Cert Path]"
+      ansible.builtin.set_fact:
+        openldap_tls_cert_path: "{{ _p12_tls_cert_path }}"
+      changed_when: false
+
     - name: "PHASE [ppolicy : Generate Unique Temporary Password]"
       ansible.builtin.set_fact:
         _p12_ppolicy_temp_pass: "Phase12-Temp{{ 999999999999 | random }}aA!"
@@ -857,7 +867,7 @@
     - ssh_public_key
   vars:
     _p12_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
-    _p12_totp_params_dn: "{{ openldap_totp_params_dn | default('cn=totp-default,ou=Ppolicy,' ~ ldap_base_dn) }}"
+    _p12_totp_params_dn: "{{ openldap_totp_params_dn | default('cn=totp,ou=Ppolicy,' ~ ldap_base_dn) }}"
     _p12_totp_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
     _p12_totp_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
     _p12_totp_mailta_dn: "uid=mailta,ou=People,{{ ldap_base_dn }}"
@@ -888,6 +898,39 @@
       become: false
       ansible.builtin.debug:
         msg: "Phase 12 TOTP config verification — overlay, params, user OATH links"
+
+    - name: "PHASE [totp_config : Normalize TLS Cert Path]"
+      ansible.builtin.set_fact:
+        openldap_tls_cert_path: "{{ _p12_tls_cert_path }}"
+      changed_when: false
+
+    - name: "PHASE [totp_config : Normalize Credentials From openldap_credentials]"
+      ansible.builtin.set_fact:
+        _openldap_admin_password: >-
+          {{ (openldap_credentials.directory_manager | default({})).password_plaintext
+             | default('', true) }}
+        _openldap_user_plaintext_passwords: >-
+          {%- set plains = {} -%}
+          {%- set credential_users = openldap_credentials.users | default({}) -%}
+          {%- for uname in ldap_users.keys() | list -%}
+          {%-   set user_cred = credential_users[uname] | default({}) -%}
+          {%-   set _ = plains.update({uname:
+                user_cred.password_plaintext | default('', true) }) -%}
+          {%- endfor -%}
+          {{ plains }}
+        _openldap_user_totp_secrets: >-
+          {%- set secrets = {} -%}
+          {%- set credential_users = openldap_credentials.users | default({}) -%}
+          {%- for uname in ldap_users.keys() | list -%}
+          {%-   set user_cred = credential_users[uname] | default({}) -%}
+          {%-   set cred_totp = user_cred.totp_secret_raw_b64 | default('', true) -%}
+          {%-   if cred_totp | length > 0 -%}
+          {%-     set _ = secrets.update({uname: cred_totp}) -%}
+          {%-   endif -%}
+          {%- endfor -%}
+          {{ secrets }}
+      changed_when: false
+      no_log: true
 
     - name: "PHASE [totp_config : Discover Target MDB By Suffix]"
       ansible.builtin.command:
@@ -1498,6 +1541,11 @@
       ansible.builtin.debug:
         msg: "Phase 12 Fortune validation — schema, data, server-side sort and paging"
 
+    - name: "PHASE [fortune : Normalize TLS Cert Path]"
+      ansible.builtin.set_fact:
+        openldap_tls_cert_path: "{{ _p12_tls_cert_path }}"
+      changed_when: false
+
     # ─── Load fortunes.yml to compute expected row count ───
     - name: "PHASE [fortune : Read Fortune YAML Source]"
       ansible.builtin.set_fact:
@@ -1787,7 +1835,7 @@
     - reboot
   vars:
     _p12_tls_cert_path: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
-    _p12_totp_params_dn: "{{ openldap_totp_params_dn | default('cn=totp-default,ou=Ppolicy,' ~ ldap_base_dn) }}"
+    _p12_totp_params_dn: "{{ openldap_totp_params_dn | default('cn=totp,ou=Ppolicy,' ~ ldap_base_dn) }}"
     _p12_reboot_generalta_dn: "uid=generalta,ou=People,{{ ldap_base_dn }}"
     _p12_reboot_stu_dn: "uid=stu,ou=People,{{ ldap_base_dn }}"
     _p12_reboot_fortune_base: "ou=Fortune,{{ ldap_base_dn }}"
@@ -1808,6 +1856,11 @@
         msg: >-
           Phase 12 reboot persistence check — reboot, then re-assert
           LDAPS, ACL, ppolicy, TOTP, Fortune, and sssvlv state
+
+    - name: "PHASE [reboot : Normalize TLS Cert Path]"
+      ansible.builtin.set_fact:
+        openldap_tls_cert_path: "{{ _p12_tls_cert_path }}"
+      changed_when: false
 
     - name: "PHASE [reboot : Reboot ldap-01 And Wait For Return]"
       ansible.builtin.reboot:

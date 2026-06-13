@@ -7,6 +7,24 @@
 - name: "PHASE [main : Validate Variables]"
   ansible.builtin.import_tasks: assert.yml
 
+- name: "PHASE [main : Install NFS Packages]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [main : Configure NFS Server]"
+  ansible.builtin.import_tasks: server.yml
+  when:
+    - inventory_hostname in groups['nfs_servers']
+    - nfs_server_enabled | bool
+
+- name: "PHASE [main : Configure NFS Client Mounts]"
+  ansible.builtin.import_tasks: client.yml
+  when:
+    - inventory_hostname in groups['nfs_clients']
+    - nfs_client_enabled | bool
+
+- name: "PHASE [main : Verify NFS State]"
+  ansible.builtin.import_tasks: verify.yml
+
 - name: "END"
   become: false
   ansible.builtin.debug:

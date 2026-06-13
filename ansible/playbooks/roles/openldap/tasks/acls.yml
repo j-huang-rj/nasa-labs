@@ -36,7 +36,7 @@
 - name: "PHASE [acls : Render Ordered ACL LDIF Template]"
   ansible.builtin.template:
     src: openldap/olc-access.ldif.j2
-    dest: /tmp/openldap-phase12-acl.ldif
+    dest: /tmp/openldap-acl.ldif
     owner: root
     group: root
     mode: "0600"
@@ -87,7 +87,7 @@
   ansible.builtin.command:
     cmd: >-
       ldapmodify -Y EXTERNAL -H ldapi:///
-      -f /tmp/openldap-phase12-acl.ldif
+      -f /tmp/openldap-acl.ldif
   changed_when: true
   no_log: true
 
@@ -96,7 +96,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [acls : Remove Temporary ACL LDIF File]"
   ansible.builtin.file:
-    path: /tmp/openldap-phase12-acl.ldif
+    path: /tmp/openldap-acl.ldif
     state: absent
   changed_when: false
 

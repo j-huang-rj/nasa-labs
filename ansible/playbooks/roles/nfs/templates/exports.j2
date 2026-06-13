@@ -1,0 +1,6 @@
+{# {{ ansible_managed }} #}
+# NFSv4 exports for /u home directory tree
+{% for export in nfs_exports %}
+{% set export_options = export.options | default(nfs_default_export_options) | join(',') %}
+{{ export.path }}{% for client in export.clients %} {{ client }}({{ export_options }}){% endfor %}
+{% endfor %}

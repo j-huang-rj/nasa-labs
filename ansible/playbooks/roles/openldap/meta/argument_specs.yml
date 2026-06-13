@@ -380,3 +380,11 @@ argument_specs:
         type: int
         required: false
         description: Maximum SSS/VLV requests per connection
+
+      openldap_sudo_roles:
+        type: dict
+        required: false
+        description: >-
+          LDAP sudoRole entries keyed by role cn (e.g. ta, stu).
+          Each role defines sudoUser, sudoHost, sudoCommand, sudoRunAsUser,
+          sudoRunAsGroup, and sudoOption for idempotent reconciliation under ou=SUDOers.

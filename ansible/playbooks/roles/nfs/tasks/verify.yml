@@ -1,0 +1,141 @@
+---
+- name: "PHASE [verify : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Verify NFS server/client state"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Server: Service state
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Gather Service Facts]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.service_facts:
+
+- name: "PHASE [verify : Assert nfs-server Is Enabled]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.services['nfs-server.service'] is defined
+      - ansible_facts.services['nfs-server.service'].status == "enabled"
+    fail_msg: >-
+      nfs-server service is not enabled.
+      Current status: {{ ansible_facts.services['nfs-server.service'].status | default('not found') }}
+
+- name: "PHASE [verify : Assert nfs-mountd Is Running]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.services['nfs-mountd.service'] is defined
+      - ansible_facts.services['nfs-mountd.service'].state == "running"
+    fail_msg: >-
+      nfs-mountd service is not running.
+      State: {{ ansible_facts.services['nfs-mountd.service'].state | default('not found') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Server: Export state
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Check exportfs Output]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.command: exportfs -v
+  changed_when: false
+  register: _nfs_exportfs
+
+- name: "PHASE [verify : Assert /u Is Exported]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'/u' in _nfs_exportfs.stdout"
+    fail_msg: >-
+      /u is not exported by the NFS server.
+      exportfs output: {{ _nfs_exportfs.stdout | default('') }}
+
+- name: "PHASE [verify : Assert /u Export Uses root_squash]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'root_squash' in _nfs_exportfs.stdout"
+      - "'no_root_squash' not in _nfs_exportfs.stdout"
+    fail_msg: >-
+      /u export must use root_squash and must not use no_root_squash.
+      exportfs output: {{ _nfs_exportfs.stdout | default('') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Server: Home tree ownership
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Stat Home Directories]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /u/ta/generalta
+    - /u/ta/mailta
+    - /u/stu/stu
+  loop_control:
+    label: "{{ item }}"
+  register: _nfs_home_stat
+
+- name: "PHASE [verify : Assert Home Directory Ownership Matches LDAP Identity]"
+  when: inventory_hostname in groups['nfs_servers']
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _nfs_home_stat.results[0].stat.uid == 10000
+      - _nfs_home_stat.results[1].stat.uid == 10001
+      - _nfs_home_stat.results[2].stat.uid == 20000
+    fail_msg: >-
+      Home directory UID ownership does not match LDAP identity.
+      generalta uid={{ _nfs_home_stat.results[0].stat.uid | default('N/A') }},
+      mailta uid={{ _nfs_home_stat.results[1].stat.uid | default('N/A') }},
+      stu uid={{ _nfs_home_stat.results[2].stat.uid | default('N/A') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Client: Mount state
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Read /proc/mounts For NFS Check]"
+  when: inventory_hostname in groups['nfs_clients']
+  ansible.builtin.command: cat /proc/mounts
+  changed_when: false
+  register: _nfs_mounts
+
+- name: "PHASE [verify : Assert /u Is NFS Mounted]"
+  when: inventory_hostname in groups['nfs_clients']
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'/u ' in _nfs_mounts.stdout"
+      - "'nfs' in _nfs_mounts.stdout"
+    fail_msg: >-
+      /u is not mounted as NFS.
+      /proc/mounts: {{ _nfs_mounts.stdout | default('') }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# SELinux enforcement
+# ─────────────────────────────────────────────────────────────────────────
+
+- name: "PHASE [verify : Gather SELinux Facts]"
+  ansible.builtin.setup:
+    filter: ansible_selinux
+
+- name: "PHASE [verify : Assert SELinux Is Enforcing]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.selinux.status | default('disabled') == 'enabled'
+      - ansible_facts.selinux.mode | default('') == 'enforcing'
+    fail_msg: >-
+      SELinux is not enforcing.
+      Current status: {{ ansible_facts.selinux.status | default('disabled') }},
+      mode: {{ ansible_facts.selinux.mode | default('unknown') }}
+
+- name: "PHASE [verify : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed NFS verification"
