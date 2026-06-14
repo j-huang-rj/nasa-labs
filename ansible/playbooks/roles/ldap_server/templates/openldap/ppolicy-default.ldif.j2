@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+dn: cn=default,ou=Ppolicy,{{ ldap_base_dn }}
+objectClass: top
+objectClass: person
+objectClass: pwdPolicy
+objectClass: pwdPolicyChecker
+cn: default
+sn: default
+pwdAttribute: userPassword
+pwdCheckQuality: 2
+pwdMinLength: 8
+pwdInHistory: 1
+pwdUseCheckModule: TRUE

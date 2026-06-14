@@ -3,12 +3,20 @@
 network_interfaces:
   - ifname: eth0
     zone: dmz
-    ip4: 172.16.0.53/24
-    gw4: 172.16.0.254
+    ip4: "{{ lab_secondary_ns_ip }}/24"
+    gw4: "{{ lab_router_dmz_ip }}"
     dns4:
-      - 1.1.1.1
+      - "{{ lab_bootstrap_dns_ip }}"
     conn_name: dmz-static
     default_conn_name: "cloud-init eth0"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_secondary_ns_ip }}"
+    canonical: "ns.{{ lab_domain }}"
+    aliases:
+      - ns
+      - secondary-ns-01
 
 # WireGuard Config
 wireguard_enabled: true
@@ -48,7 +56,7 @@ bind9_mode: authoritative_secondary
 
 bind9_listen_ipv4:
   - 127.0.0.1
-  - "{{ ansible_host }}"
+  - "{{ bind9_secondary_ns_ip }}"
   - "{{ wireguard_address.split('/')[0] }}"
 
 # Read-only zone data: mirror every zone the primary serves

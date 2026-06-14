@@ -1,0 +1,52 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: internal
+    ip4: "{{ lab_ldap_ip }}/24"
+    gw4: "{{ lab_router_internal_ip }}"
+    dns4:
+      - "{{ lab_resolver_ip }}"
+      - "{{ lab_bootstrap_dns_ip }}"
+    conn_name: internal-static
+    default_conn_name: "cloud-init eth0"
+
+network_bootstrap_dns4:
+  - "{{ lab_bootstrap_dns_ip }}"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_ldap_ip }}"
+    canonical: "ldap.{{ lab_domain }}"
+    aliases:
+      - ldap
+      - ldap-01
+
+# Firewall Config
+firewall_zone_ports:
+  - zone: internal
+    port: 636
+    proto: tcp
+
+firewall_rich_rules:
+  - zone: internal
+    rule: 'rule family="ipv4" source address="{{ lab_workstation1_ip }}/32" port port="2049" protocol="tcp" accept'
+  - zone: internal
+    rule: 'rule family="ipv4" source address="{{ lab_workstation2_ip }}/32" port port="2049" protocol="tcp" accept'
+
+# Service enablement
+ldap_server_enabled: true
+nfs_server_enabled: true
+nfs_enabled: true
+
+# NFS Server Exports
+nfs_exports:
+  - path: "{{ lab_home_root }}"
+    clients:
+      - "{{ lab_workstation1_ip }}"
+      - "{{ lab_workstation2_ip }}"
+    options:
+      - rw
+      - sync
+      - root_squash
+      - no_subtree_check

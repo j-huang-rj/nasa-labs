@@ -4,38 +4,11 @@
   ansible.builtin.debug:
     msg: "Starting execution of mail role"
 
-- name: "PHASE [main : Validate Variables]"
+- name: "PHASE [main : Assert Role Variables]"
   ansible.builtin.import_tasks: assert.yml
 
-- name: "PHASE [main : Install Packages]"
-  ansible.builtin.import_tasks: install.yml
-
-- name: "PHASE [main : Create vmail Identity And Passwd-File]"
-  ansible.builtin.import_tasks: users.yml
-
-- name: "PHASE [main : Deploy TLS Certificates]"
-  ansible.builtin.import_tasks: tls.yml
-
-- name: "PHASE [main : Deploy LDAP CA Certificate]"
-  ansible.builtin.import_tasks: ldap_ca_cert.yml
-
-- name: "PHASE [main : Configure Dovecot]"
-  ansible.builtin.import_tasks: dovecot.yml
-
-- name: "PHASE [main : Configure OpenDKIM Signing]"
-  ansible.builtin.import_tasks: opendkim.yml
-
-- name: "PHASE [main : Configure Filter/Rewrite Milter]"
-  ansible.builtin.import_tasks: filter_milter.yml
-
-- name: "PHASE [main : Configure Postfix]"
-  ansible.builtin.import_tasks: postfix.yml
-
-- name: "PHASE [main : Configure Mailing-List Aliases]"
-  ansible.builtin.import_tasks: list_aliases.yml
-
-- name: "PHASE [main : Deploy Mailing-List API]"
-  ansible.builtin.import_tasks: list_api.yml
+- name: "PHASE [main : Configure Mail System]"
+  ansible.builtin.import_tasks: setup.yml
 
 - name: "END"
   become: false

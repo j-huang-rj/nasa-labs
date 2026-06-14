@@ -4,10 +4,10 @@
   ansible.builtin.debug:
     msg: "Starting execution of network role"
 
-- name: Validate Network Role Variables
+- name: "PHASE [main : Validate Network Role Variables]"
   ansible.builtin.import_tasks: assert.yml
 
-- name: Configure Network Interfaces
+- name: "PHASE [main : Configure Network Interfaces]"
   ansible.builtin.import_tasks: setup.yml
 
 - name: "END"

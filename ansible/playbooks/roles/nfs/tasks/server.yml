@@ -1,0 +1,49 @@
+---
+- name: "PHASE [server : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure NFS server — exports and home tree"
+
+- name: "PHASE [server : Install NFS Server Packages]"
+  ansible.builtin.import_tasks: install.yml
+  vars:
+    _nfs_packages: "{{ nfs_server_packages }}"
+
+- name: "PHASE [server : Create And Reconcile Home Directory Tree]"
+  ansible.builtin.import_tasks: home_tree.yml
+
+- name: "PHASE [server : Configure SELinux For NFS Homes]"
+  ansible.builtin.import_tasks: selinux.yml
+  vars:
+    _nfs_selinux_booleans: "{{ nfs_server_selinux_booleans }}"
+
+- name: "PHASE [server : Ensure Exports Drop-In Directory Exists]"
+  ansible.builtin.file:
+    path: "{{ nfs_export_conf_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "PHASE [server : Deploy Exports Configuration]"
+  ansible.builtin.template:
+    src: exports.j2
+    dest: "{{ nfs_export_conf_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "PHASE [handler : Reload NFS Exports]"
+
+- name: "PHASE [server : Flush Handlers Before Service Start]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [server : Start And Enable NFS Server Service]"
+  ansible.builtin.systemd_service:
+    name: "{{ nfs_server_service_name }}"
+    enabled: true
+    state: started
+
+- name: "PHASE [server : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed NFS server configuration"

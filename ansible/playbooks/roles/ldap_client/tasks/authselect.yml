@@ -1,0 +1,84 @@
+---
+- name: "PHASE [authselect : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure NSS/PAM via authselect SSSD profile"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: only configure authselect on workstation-auth hosts
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [authselect : Skip Authselect For Non-Workstation Hosts]"
+  ansible.builtin.debug:
+    msg: >-
+      Skipping authselect configuration on {{ inventory_hostname }}:
+      ldap_client_workstation_auth_enabled is false or undefined.
+  when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Check current authselect state for idempotency
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [authselect : Check Current Authselect State]"
+  ansible.builtin.command:
+    cmd: authselect current
+  changed_when: false
+  failed_when: false
+  register: _ldap_client_authselect_current
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [authselect : Normalize Current Authselect Features]"
+  ansible.builtin.set_fact:
+    _ldap_client_authselect_current_features: >-
+      {{ _ldap_client_authselect_current.stdout | default('')
+         | regex_findall('with-[A-Za-z0-9_-]+') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Select authselect SSSD profile with sudo support, without mkhomedir
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [authselect : Select SSSD Profile With Sudo]"
+  ansible.builtin.command:
+    cmd: >-
+      authselect select {{ ldap_client_authselect_profile }}
+      {{ ldap_client_authselect_features | join(' ') }}
+      --force
+  changed_when: true
+  when:
+    - ldap_client_workstation_auth_enabled | default(false) | bool
+    - >-
+      _ldap_client_authselect_current.rc != 0
+      or ldap_client_authselect_profile not in (_ldap_client_authselect_current.stdout | default(''))
+      or (ldap_client_authselect_features | difference(_ldap_client_authselect_current_features) | length > 0)
+      or 'with-mkhomedir' in (_ldap_client_authselect_current.stdout | default(''))
+  register: _ldap_client_authselect_select
+
+- name: "PHASE [authselect : Check Final Authselect State]"
+  ansible.builtin.command:
+    cmd: authselect current
+  changed_when: false
+  register: _ldap_client_authselect_final
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [authselect : Normalize Final Authselect Features]"
+  ansible.builtin.set_fact:
+    _ldap_client_authselect_final_features: >-
+      {{ _ldap_client_authselect_final.stdout | default('')
+         | regex_findall('with-[A-Za-z0-9_-]+') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [authselect : Assert SSSD Profile With Sudo And No mkhomedir]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_authselect_final.rc == 0
+      - ldap_client_authselect_profile in _ldap_client_authselect_final.stdout
+      - ldap_client_authselect_features | difference(_ldap_client_authselect_final_features) | length == 0
+      - "'with-mkhomedir' not in _ldap_client_authselect_final.stdout"
+    fail_msg: >-
+      Authselect final state is not the required SSSD profile with sudo and without mkhomedir
+      on {{ inventory_hostname }}. stdout={{ _ldap_client_authselect_final.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [authselect : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed authselect phase"

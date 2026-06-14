@@ -9,10 +9,10 @@
     - role: routing
     - role: network
     - role: wireguard
-      when: wireguard_enabled
+      when: wireguard_enabled | default(false) | bool
 
 - name: Zone Hosts Bootstrap
-  hosts: dmz, internal
+  hosts: dmz:internal
   gather_facts: true
   become: true
   pre_tasks:
@@ -49,7 +49,7 @@
     - role: firewall
     - role: network
     - role: wireguard
-      when: wireguard_enabled
+      when: wireguard_enabled | default(false) | bool
 
   tasks:
     - name: Run Docker Role

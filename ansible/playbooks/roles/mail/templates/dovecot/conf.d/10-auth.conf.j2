@@ -9,11 +9,17 @@ passdb {
 }
 
 {% if mail_ldap_enabled | default(false) %}
-# LDAP passdb
+passdb {
+  driver = ldap
+  args = {{ mail_dovecot_ldap_account_gate_path }}
+  result_failure = return-fail
+  result_internalfail = return-fail
+}
+
+# LDAP password/TOTP verification via simple bind as the authenticating user
 passdb {
   driver = ldap
   args = {{ mail_dovecot_conf_dir }}/dovecot-ldap.conf.ext
-  skip = authenticated
 }
 {% endif %}
 

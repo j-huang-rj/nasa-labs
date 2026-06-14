@@ -1,0 +1,76 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: dmz
+    ip4: "{{ lab_smtp_ip }}/24"
+    gw4: "{{ lab_router_dmz_ip }}"
+    dns4:
+      - "{{ lab_resolver_ip }}"
+      - "{{ lab_bootstrap_dns_ip }}"
+    conn_name: dmz-static
+    default_conn_name: "cloud-init eth0"
+
+network_bootstrap_dns4:
+  - "{{ lab_bootstrap_dns_ip }}"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_smtp_ip }}"
+    canonical: "smtp.{{ lab_domain }}"
+    aliases:
+      - smtp
+      - smtp-01
+
+# WireGuard Config
+wireguard_enabled: true
+
+# Mail Config
+mail_enabled: true
+mail_postfix_virtual_transport: "lmtp:inet:{{ mail_lmtp_private_ip }}:{{ mail_lmtp_port }}"
+
+# Dovecot split-host intent
+mail_dovecot_enabled: true
+mail_dovecot_auth_enabled: true
+mail_dovecot_imap_enabled: false
+mail_dovecot_lmtp_enabled: false
+mail_dovecot_auth_socket_enabled: true
+mail_dovecot_lmtp_unix_socket_enabled: false
+mail_dovecot_lmtp_inet_listener_enabled: false
+mail_dovecot_protocols: []
+
+# LDAP Client Config
+ldap_client_enabled: true
+
+# Mail LDAP Config
+mail_ldap_enabled: true
+mail_ldap_users: "{{ ldap_groups.ta.member_uids }}"
+
+# Firewall Config
+firewall_custom_zones:
+  - vpn
+
+firewall_bindings:
+  - ifname: wg0
+    zone: vpn
+
+firewall_zone_ports:
+  - zone: vpn
+    port: 25
+    proto: tcp
+  - zone: vpn
+    port: 587
+    proto: tcp
+  - zone: vpn
+    port: 8000
+    proto: tcp
+  - zone: dmz
+    port: 25
+    proto: tcp
+  - zone: dmz
+    port: 587
+    proto: tcp
+
+firewall_rich_rules:
+  - zone: vpn
+    rule: 'rule service name="ssh" reject'

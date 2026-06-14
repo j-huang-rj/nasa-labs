@@ -1,0 +1,210 @@
+---
+- name: "PHASE [tls : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure TLS material and OLC TLS attributes for LDAPS"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create TLS directories
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [tls : Create TLS Certificate Directory]"
+  ansible.builtin.file:
+    path: "{{ ldap_server_tls_cert_dir }}"
+    state: directory
+    owner: root
+    group: ldap
+    mode: "0755"
+
+- name: "PHASE [tls : Create TLS Private Key Directory]"
+  ansible.builtin.file:
+    path: "{{ ldap_server_tls_key_dir }}"
+    state: directory
+    owner: root
+    group: ldap
+    mode: "0750"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Branched TLS material provisioning
+#   Path A: secrets provided → idempotent slurp + base64 decode deploy
+#   Path B: secrets empty    → self-signed generation on target
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [tls : Slurp Existing TLS Certificate]"
+  ansible.builtin.slurp:
+    src: "{{ ldap_server_tls_cert_path }}"
+  failed_when: false
+  register: _ldap_server_existing_tls_cert
+  no_log: true
+
+- name: "PHASE [tls : Validate TLS Certificate Slurp Failures Are ENOENT-Only]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_ldap_server_existing_tls_cert.failed | default(false) == false
+         or _ldap_server_existing_tls_cert.msg | default('') | regex_search('(?i)not found|no such file|does not exist|could not stat')
+        )
+    fail_msg: >-
+      Slurp of TLS certificate file reported a non-ENOENT failure
+      (e.g. permission denied or read error). Investigate before proceeding.
+  when: _ldap_server_existing_tls_cert.failed | default(false)
+
+- name: "PHASE [tls : Deploy TLS Certificate From Secrets]"
+  when: >-
+    ldap_server_tls_certificate is defined
+    and ldap_server_tls_certificate | length > 0
+    and ldap_server_tls_private_key is defined
+    and ldap_server_tls_private_key | length > 0
+    and (_ldap_server_existing_tls_cert.content | default('') | b64decode) != ldap_server_tls_certificate
+  ansible.builtin.copy:
+    content: "{{ ldap_server_tls_certificate }}"
+    dest: "{{ ldap_server_tls_cert_path }}"
+    owner: root
+    group: ldap
+    mode: "0644"
+  notify: "PHASE [handler : Restart slapd]"
+  no_log: true
+
+- name: "PHASE [tls : Slurp Existing TLS Private Key]"
+  ansible.builtin.slurp:
+    src: "{{ ldap_server_tls_key_path }}"
+  failed_when: false
+  register: _ldap_server_existing_tls_key
+  no_log: true
+
+- name: "PHASE [tls : Validate TLS Private Key Slurp Failures Are ENOENT-Only]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        (_ldap_server_existing_tls_key.failed | default(false) == false
+         or _ldap_server_existing_tls_key.msg | default('') | regex_search('(?i)not found|no such file|does not exist|could not stat')
+        )
+    fail_msg: >-
+      Slurp of TLS private key file reported a non-ENOENT failure
+      (e.g. permission denied or read error). Investigate before proceeding.
+  when: _ldap_server_existing_tls_key.failed | default(false)
+
+- name: "PHASE [tls : Deploy TLS Private Key From Secrets]"
+  when: >-
+    ldap_server_tls_private_key is defined
+    and ldap_server_tls_private_key | length > 0
+    and ldap_server_tls_certificate is defined
+    and ldap_server_tls_certificate | length > 0
+    and (_ldap_server_existing_tls_key.content | default('') | b64decode) != ldap_server_tls_private_key
+  ansible.builtin.copy:
+    content: "{{ ldap_server_tls_private_key }}"
+    dest: "{{ ldap_server_tls_key_path }}"
+    owner: root
+    group: ldap
+    mode: "0640"
+  notify: "PHASE [handler : Restart slapd]"
+  no_log: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Self-signed certificate generation (when secrets are empty)
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [tls : Check Existing Certificate SAN For Self-Signed Path]"
+  ansible.builtin.command:
+    cmd: >-
+      openssl x509 -noout -ext subjectAltName
+      -in {{ ldap_server_tls_cert_path }}
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_existing_san
+  when: >-
+    (ldap_server_tls_certificate is not defined or ldap_server_tls_certificate | length == 0)
+    and (ldap_server_tls_private_key is not defined or ldap_server_tls_private_key | length == 0)
+
+- name: "PHASE [tls : Generate Self-Signed TLS Certificate And Key]"
+  when: >-
+    (ldap_server_tls_certificate is not defined or ldap_server_tls_certificate | length == 0)
+    and (ldap_server_tls_private_key is not defined or ldap_server_tls_private_key | length == 0)
+    and (
+      _ldap_server_existing_san is skipped
+      or _ldap_server_existing_san.rc != 0
+      or ldap_server_fqdn not in _ldap_server_existing_san.stdout
+      or ldap_server_ip not in _ldap_server_existing_san.stdout
+    )
+  ansible.builtin.command:
+    cmd: >-
+      openssl req -new -x509 -days 3650 -nodes
+      -newkey rsa:2048
+      -keyout {{ ldap_server_tls_key_path }}
+      -out {{ ldap_server_tls_cert_path }}
+      -subj "/CN={{ ldap_server_fqdn }}"
+      -addext "subjectAltName=DNS:{{ ldap_server_fqdn }},IP:{{ ldap_server_ip }}"
+  changed_when: true
+  notify: "PHASE [handler : Restart slapd]"
+
+- name: "PHASE [tls : Set TLS Certificate Ownership]"
+  ansible.builtin.file:
+    path: "{{ ldap_server_tls_cert_path }}"
+    owner: root
+    group: ldap
+    mode: "0644"
+
+- name: "PHASE [tls : Set TLS Key Permissions]"
+  ansible.builtin.file:
+    path: "{{ ldap_server_tls_key_path }}"
+    owner: root
+    group: ldap
+    mode: "0640"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Validate certificate SAN regardless of provisioning path
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [tls : Validate TLS Certificate Subject Alternative Name]"
+  ansible.builtin.command:
+    cmd: >-
+      openssl x509 -noout -ext subjectAltName
+      -in {{ ldap_server_tls_cert_path }}
+  changed_when: false
+  register: _ldap_server_san_result
+
+- name: "PHASE [tls : Assert SAN Contains Server FQDN And IP]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ldap_server_fqdn in _ldap_server_san_result.stdout
+      - ldap_server_ip in _ldap_server_san_result.stdout
+    fail_msg: >-
+      TLS certificate at {{ ldap_server_tls_cert_path }} is missing required SAN entries.
+      Expected DNS:{{ ldap_server_fqdn }} and IP Address:{{ ldap_server_ip }}.
+      SAN output: {{ _ldap_server_san_result.stdout }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Apply OLC TLS configuration via ldapmodify over ldapi
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [tls : Search Existing OLC TLS Configuration]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config -s base '(objectClass=*)'
+      olcTLSCertificateFile olcTLSCertificateKeyFile olcTLSCACertificateFile
+  changed_when: false
+  register: _ldap_server_olc_tls
+
+- name: "PHASE [tls : Apply OLC TLS Configuration]"
+  when: >-
+    ldap_server_tls_cert_path not in _ldap_server_olc_tls.stdout
+    or ldap_server_tls_key_path not in _ldap_server_olc_tls.stdout
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+    stdin: |
+      dn: cn=config
+      changetype: modify
+      replace: olcTLSCertificateFile
+      olcTLSCertificateFile: {{ ldap_server_tls_cert_path }}
+      -
+      replace: olcTLSCertificateKeyFile
+      olcTLSCertificateKeyFile: {{ ldap_server_tls_key_path }}
+      -
+      replace: olcTLSCACertificateFile
+      olcTLSCACertificateFile: {{ ldap_server_tls_cert_path }}
+  changed_when: true
+  notify: "PHASE [handler : Restart slapd]"
+
+- name: "PHASE [tls : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed TLS configuration phase"

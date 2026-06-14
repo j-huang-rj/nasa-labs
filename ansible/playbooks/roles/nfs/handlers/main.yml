@@ -1,0 +1,13 @@
+---
+- name: "PHASE [handler : Restart NFS Server]"
+  ansible.builtin.systemd_service:
+    name: "{{ nfs_server_service_name }}"
+    state: restarted
+
+- name: "PHASE [handler : Reload NFS Exports]"
+  ansible.builtin.command: exportfs -ra
+  changed_when: true
+
+- name: "PHASE [handler : Restorecon /u]"
+  ansible.builtin.command: restorecon -R /u
+  changed_when: true

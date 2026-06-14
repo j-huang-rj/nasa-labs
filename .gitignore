@@ -18,9 +18,6 @@ venv/
 .coverage
 htmlcov/
 
-# Local workspace
-.opencode/
-
 # Ansible
 .ansible/
 *.retry
@@ -33,15 +30,13 @@ ansible/inventory/host_vars/*/secrets.yml
 # Artifacts
 ansible/playbooks/roles/docker/files/nap-agent.tar
 
-# cloud-init generated artifacts
+# cloud-init
 cloud-init/**/seed.iso
 cloud-init/**/user-data
 cloud-init/**/meta-data
 cloud-init/**/network-config
 
 # Agent artifacts
+.opencode/
 .planning/
 graphify-out/
-.graphifyignore
-opencode.json
-AGENTS.md

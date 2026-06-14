@@ -4,13 +4,13 @@
   ansible.builtin.debug:
     msg: "Starting execution of base role"
 
-- name: Verify SSH Connectivity
+- name: "PHASE [main : Verify SSH Connectivity]"
   ansible.builtin.import_tasks: ping.yml
 
-- name: Assert Role Variables
+- name: "PHASE [main : Assert Role Variables]"
   ansible.builtin.import_tasks: assert.yml
 
-- name: Configure Base System
+- name: "PHASE [main : Configure Base System]"
   ansible.builtin.import_tasks: setup.yml
 
 - name: "END"

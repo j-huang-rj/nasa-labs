@@ -1,0 +1,43 @@
+---
+# Shared mail service identity and DNS publication contract.
+
+# Mail hosts
+mail_smtp_host: smtp-01
+mail_imap_host: imap-01
+
+# Split service addresses
+mail_smtp_private_ip: "{{ lab_smtp_ip }}"
+mail_imap_private_ip: "{{ lab_imap_ip }}"
+mail_smtp_public_ip: "{{ lab_vpn_smtp_ip }}"
+mail_imap_public_ip: "{{ lab_vpn_imap_ip }}"
+
+# LMTP destination identity
+mail_lmtp_private_ip: "{{ mail_imap_private_ip }}"
+mail_lmtp_port: 24
+
+# Split-view DNS endpoint addresses
+mail_smtp_endpoint_dmz_ip: "{{ mail_smtp_private_ip }}"
+mail_imap_endpoint_dmz_ip: "{{ mail_imap_private_ip }}"
+mail_smtp_endpoint_vpn_ip: "{{ mail_smtp_public_ip }}"
+mail_imap_endpoint_vpn_ip: "{{ mail_imap_public_ip }}"
+
+# Domains
+mail_zone_name: "{{ lab_domain }}"
+mail_alias_domain: "mail.{{ mail_zone_name }}"
+
+# Service FQDNs
+mail_smtp_fqdn: "smtp.{{ mail_zone_name }}"
+
+# MX record
+mail_mx_target: "smtp.{{ mail_zone_name }}."
+mail_mx_value: "{{ mail_mx_priority }} {{ mail_mx_target }}"
+mail_mx_priority: 10
+
+# DKIM public DNS identity
+mail_dkim_selector: "2026-na"
+
+# SPF
+mail_spf_value: '"v=spf1 ip4:{{ mail_smtp_endpoint_vpn_ip }} ~all"'
+
+# DMARC
+mail_dmarc_value: '"v=DMARC1; p=quarantine; rua=mailto:dmarc-report-rua@{{ mail_zone_name }}"'

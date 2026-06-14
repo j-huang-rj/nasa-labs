@@ -51,11 +51,12 @@ EXAMPLES = """
     {% set result = item | bind9_zone_serial(
         primary_mname=bind9_primary_mname,
         date_prefix=bind9_soa_serial_date,
+        ttl=bind9_zone_ttl,
         current_serial=bind9_zone_current_state.get(item.file, {}).get('serial', 0),
         current_hash=bind9_zone_current_state.get(item.file, {}).get('hash', '')
     ) %}
-    ; zone-hash: {{ result.hash }}
     {{ result.serial }} ; serial
+    # The role persists result.hash to a <zone_file>.hash sidecar file.
 """
 
 RETURN = """
@@ -171,7 +172,7 @@ def bind9_zone_serial(
                       hash comment).
         ttl: The default TTL value rendered in the zone file ($TTL directive).
              Included in the hash so that TTL changes trigger a serial bump.
-             Defaults to 86400 to match the template's hardcoded value.
+             Defaults to 86400 when not passed by the caller.
 
     Returns:
         A dict with 'serial' (int) and 'hash' (str) keys.

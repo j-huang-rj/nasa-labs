@@ -1,0 +1,44 @@
+---
+- name: "PHASE [client : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure NFS clients — persistent mounts"
+
+- name: "PHASE [client : Install NFS Client Packages]"
+  ansible.builtin.import_tasks: install.yml
+  vars:
+    _nfs_packages: "{{ nfs_client_packages }}"
+
+- name: "PHASE [client : Create Mountpoint Directories]"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: "PHASE [client : Configure SELinux For NFS Homes]"
+  ansible.builtin.import_tasks: selinux.yml
+  vars:
+    _nfs_selinux_booleans: "{{ nfs_client_selinux_booleans }}"
+
+- name: "PHASE [client : Configure Persistent NFS Mounts]"
+  ansible.posix.mount:
+    path: "{{ item.path }}"
+    src: "{{ item.src }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ item.opts | default(nfs_default_mount_options) }}"
+    state: mounted
+    dump: 0
+    passno: 0
+  loop: "{{ nfs_mounts }}"
+  loop_control:
+    label: "{{ item.path }} → {{ item.src }}"
+
+- name: "PHASE [client : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed NFS client configuration"

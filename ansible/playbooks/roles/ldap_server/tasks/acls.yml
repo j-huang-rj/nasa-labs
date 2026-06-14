@@ -1,0 +1,106 @@
+---
+- name: "PHASE [acls : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Reconcile ordered olcAccess state on target MDB"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Discover target MDB database by suffix
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [acls : Search Existing MDB Database For Suffix]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config
+      '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+      dn
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_mdb_search
+
+- name: "PHASE [acls : Extract MDB Database DN]"
+  when: _ldap_server_mdb_search.rc == 0
+  ansible.builtin.set_fact:
+    _ldap_server_mdb_dn: >-
+      {{ _ldap_server_mdb_search.stdout_lines | default([])
+         | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Render ordered ACL LDIF template
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [acls : Render Ordered ACL LDIF Template]"
+  ansible.builtin.template:
+    src: openldap/olc-access.ldif.j2
+    dest: /tmp/openldap-acl.ldif
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Search current olcAccess state for idempotent comparison
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [acls : Search Current olcAccess State]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "{{ _ldap_server_mdb_dn }}" -s base
+      -o ldif-wrap=no
+      '(objectClass=*)' olcAccess
+  changed_when: false
+  register: _ldap_server_current_acls
+
+- name: "PHASE [acls : Extract Normalized Current olcAccess Lines]"
+  ansible.builtin.set_fact:
+    _ldap_server_current_acls_normalized: >-
+      {{ _ldap_server_current_acls.stdout_lines | default([])
+         | select('match', '^olcAccess:')
+         | map('regex_replace', '\\s+', ' ')
+         | map('trim')
+         | list }}
+  changed_when: false
+
+- name: "PHASE [acls : Extract Normalized Intended olcAccess Lines]"
+  ansible.builtin.set_fact:
+    _ldap_server_intended_acls_normalized: >-
+      {{ lookup('ansible.builtin.template', 'openldap/olc-access.ldif.j2')
+         | regex_replace('\n[ ]+', ' ')
+         | regex_findall('^olcAccess:.*', multiline=True)
+         | map('regex_replace', '\\s+', ' ')
+         | map('trim')
+         | list }}
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Apply ordered olcAccess state when current differs from intended
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [acls : Replace olcAccess With Ordered Intended State]"
+  when: >-
+    _ldap_server_intended_acls_normalized | default([])
+    != _ldap_server_current_acls_normalized | default([])
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -Y EXTERNAL -H ldapi:///
+      -f /tmp/openldap-acl.ldif
+  changed_when: true
+  no_log: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Cleanup temporary LDIF file
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [acls : Remove Temporary ACL LDIF File]"
+  ansible.builtin.file:
+    path: /tmp/openldap-acl.ldif
+    state: absent
+  changed_when: false
+
+- name: "PHASE [acls : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed ACL reconciliation"

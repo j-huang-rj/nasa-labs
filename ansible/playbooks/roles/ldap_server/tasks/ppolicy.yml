@@ -1,0 +1,336 @@
+---
+- name: "PHASE [ppolicy : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure ppolicy overlay, default policy, and check_password module"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Discover target MDB database by suffix
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ppolicy : Search Existing MDB Database For Suffix]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config
+      '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+      dn
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_mdb_search
+
+- name: "PHASE [ppolicy : Extract MDB Database DN]"
+  when: _ldap_server_mdb_search.rc == 0
+  ansible.builtin.set_fact:
+    _ldap_server_mdb_dn: >-
+      {{ _ldap_server_mdb_search.stdout_lines | default([])
+         | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary render directory and render templates
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ppolicy : Create Temporary Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-ppolicy
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  changed_when: false
+
+- name: "PHASE [ppolicy : Render PPolicy Templates]"
+  ansible.builtin.template:
+    src: "openldap/{{ item.src }}"
+    dest: "/tmp/openldap-ppolicy/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - src: olc-overlay-ppolicy.ldif.j2
+      dest: olc-overlay-ppolicy.ldif
+    - src: ppolicy-default.ldif.j2
+      dest: ppolicy-default.ldif
+    - src: check_password.conf.j2
+      dest: check_password.conf
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Deploy check_password.conf to target path
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ppolicy : Deploy Check Password Config]"
+  ansible.builtin.copy:
+    src: /tmp/openldap-ppolicy/check_password.conf
+    dest: /etc/openldap/check_password.conf
+    owner: root
+    group: ldap
+    mode: "0644"
+    remote_src: true
+  notify: "PHASE [handler : Restart slapd]"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile ppolicy overlay on target MDB
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ppolicy : Search Existing PPolicy Overlay]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "{{ _ldap_server_mdb_dn }}" -s one
+      '(objectClass=olcPPolicyConfig)'
+      dn olcPPolicyDefault olcPPolicyCheckModule olcPPolicyHashCleartext
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_ppolicy_overlay_search
+
+- name: "PHASE [ppolicy : Extract PPolicy Overlay DN]"
+  ansible.builtin.set_fact:
+    _ldap_server_ppolicy_overlay_dn: >-
+      {{ _ldap_server_ppolicy_overlay_search.stdout_lines | default([])
+         | select('match', '^dn: olcOverlay=.*ppolicy,')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
+- name: "PHASE [ppolicy : Add PPolicy Overlay If Missing]"
+  when: _ldap_server_ppolicy_overlay_dn | length == 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -Y EXTERNAL -H ldapi:///
+      -f /tmp/openldap-ppolicy/olc-overlay-ppolicy.ldif
+  changed_when: true
+
+- name: "PHASE [ppolicy : Reconcile PPolicy Overlay Attributes]"
+  when:
+    - _ldap_server_ppolicy_overlay_dn | length > 0
+  block:
+    - name: "PHASE [ppolicy : Set Intended PPolicy Overlay Attributes]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_intended_default: "cn=default,ou=Ppolicy,{{ ldap_base_dn }}"
+        _ldap_server_ppolicy_intended_module: "/usr/lib64/openldap/check_password.so"
+        _ldap_server_ppolicy_intended_hash_cleartext: "TRUE"
+
+    - name: "PHASE [ppolicy : Extract Current PPolicy Overlay Default]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_default: >-
+          {{ _ldap_server_ppolicy_overlay_search.stdout_lines | default([])
+             | select('match', '^olcPPolicyDefault: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^olcPPolicyDefault: ', '') }}
+
+    - name: "PHASE [ppolicy : Extract Current PPolicy Overlay CheckModule]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_module: >-
+          {{ _ldap_server_ppolicy_overlay_search.stdout_lines | default([])
+             | select('match', '^olcPPolicyCheckModule: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^olcPPolicyCheckModule: ', '') }}
+
+    - name: "PHASE [ppolicy : Extract Current PPolicy Overlay HashCleartext]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_hash_cleartext: >-
+          {{ _ldap_server_ppolicy_overlay_search.stdout_lines | default([])
+             | select('match', '^olcPPolicyHashCleartext: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^olcPPolicyHashCleartext: ', '') }}
+
+    - name: "PHASE [ppolicy : Build PPolicy Overlay Modify LDIF]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_overlay_modify: >-
+          {%- set lines = [] -%}
+          {%- set lines = lines + ['dn: ' ~ _ldap_server_ppolicy_overlay_dn] -%}
+          {%- set lines = lines + ['changetype: modify'] -%}
+          {%- if _ldap_server_ppolicy_current_default != _ldap_server_ppolicy_intended_default -%}
+          {%-   set lines = lines + ['replace: olcPPolicyDefault'] -%}
+          {%-   set lines = lines + ['olcPPolicyDefault: ' ~ _ldap_server_ppolicy_intended_default] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_ppolicy_current_module != _ldap_server_ppolicy_intended_module -%}
+          {%-   set lines = lines + ['replace: olcPPolicyCheckModule'] -%}
+          {%-   set lines = lines + ['olcPPolicyCheckModule: ' ~ _ldap_server_ppolicy_intended_module] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_ppolicy_current_hash_cleartext != _ldap_server_ppolicy_intended_hash_cleartext -%}
+          {%-   set lines = lines + ['replace: olcPPolicyHashCleartext'] -%}
+          {%-   set lines = lines + ['olcPPolicyHashCleartext: ' ~ _ldap_server_ppolicy_intended_hash_cleartext] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if lines | last == '-' -%}
+          {%-   set lines = lines[:-1] -%}
+          {%- endif -%}
+          {{ lines | join('\n') }}
+      changed_when: false
+
+    - name: "PHASE [ppolicy : Apply PPolicy Overlay Modifications If Needed]"
+      when: >-
+        _ldap_server_ppolicy_current_default != _ldap_server_ppolicy_intended_default
+        or _ldap_server_ppolicy_current_module != _ldap_server_ppolicy_intended_module
+        or _ldap_server_ppolicy_current_hash_cleartext != _ldap_server_ppolicy_intended_hash_cleartext
+      ansible.builtin.command:
+        cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+        stdin: "{{ _ldap_server_ppolicy_overlay_modify }}"
+      changed_when: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile default ppolicy entry in DIT
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ppolicy : Search Default Policy Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -b "cn=default,ou=Ppolicy,{{ ldap_base_dn }}" -s base
+      '(objectClass=*)' objectClass pwdCheckQuality pwdMinLength pwdInHistory pwdUseCheckModule
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_ppolicy_entry_search
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [ppolicy : Add Default Policy Entry If Missing]"
+  when: _ldap_server_ppolicy_entry_search.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -f /tmp/openldap-ppolicy/ppolicy-default.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [ppolicy : Reconcile Default Policy Entry Attributes]"
+  when: _ldap_server_ppolicy_entry_search.rc == 0
+  block:
+    - name: "PHASE [ppolicy : Set Intended Default Policy Entry Attributes]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_intended_quality: "{{ ldap_server_ppolicy_check_quality }}"
+        _ldap_server_ppolicy_intended_min_length: "{{ ldap_server_ppolicy_min_length }}"
+        _ldap_server_ppolicy_intended_in_history: "{{ ldap_server_ppolicy_in_history }}"
+        _ldap_server_ppolicy_intended_use_module: >-
+          {{ ldap_server_ppolicy_use_check_module | ternary('TRUE', 'FALSE') }}
+
+    - name: "PHASE [ppolicy : Extract Current Default ObjectClasses]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_object_classes: >-
+          {{ _ldap_server_ppolicy_entry_search.stdout_lines | default([])
+             | select('match', '^objectClass: ')
+             | map('regex_replace', '^objectClass: ', '')
+             | list }}
+
+    - name: "PHASE [ppolicy : Extract Current Default pwdCheckQuality]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_quality: >-
+          {{ _ldap_server_ppolicy_entry_search.stdout_lines | default([])
+             | select('match', '^pwdCheckQuality: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^pwdCheckQuality: ', '') }}
+
+    - name: "PHASE [ppolicy : Extract Current Default pwdMinLength]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_min_length: >-
+          {{ _ldap_server_ppolicy_entry_search.stdout_lines | default([])
+             | select('match', '^pwdMinLength: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^pwdMinLength: ', '') }}
+
+    - name: "PHASE [ppolicy : Extract Current Default pwdInHistory]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_in_history: >-
+          {{ _ldap_server_ppolicy_entry_search.stdout_lines | default([])
+             | select('match', '^pwdInHistory: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^pwdInHistory: ', '') }}
+
+    - name: "PHASE [ppolicy : Extract Current Default pwdUseCheckModule]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_current_use_module: >-
+          {{ _ldap_server_ppolicy_entry_search.stdout_lines | default([])
+             | select('match', '^pwdUseCheckModule: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^pwdUseCheckModule: ', '') }}
+
+    - name: "PHASE [ppolicy : Build Default Policy Entry Modify LDIF]"
+      ansible.builtin.set_fact:
+        _ldap_server_ppolicy_entry_modify: >-
+          {%- set lines = [] -%}
+          {%- set lines = lines + ['dn: cn=default,ou=Ppolicy,' ~ ldap_base_dn] -%}
+          {%- set lines = lines + ['changetype: modify'] -%}
+          {%- if 'pwdPolicyChecker' not in _ldap_server_ppolicy_current_object_classes -%}
+          {%-   set lines = lines + ['add: objectClass'] -%}
+          {%-   set lines = lines + ['objectClass: pwdPolicyChecker'] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_ppolicy_current_quality != _ldap_server_ppolicy_intended_quality | string -%}
+          {%-   set lines = lines + ['replace: pwdCheckQuality'] -%}
+          {%-   set lines = lines + ['pwdCheckQuality: ' ~ _ldap_server_ppolicy_intended_quality] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_ppolicy_current_min_length != _ldap_server_ppolicy_intended_min_length | string -%}
+          {%-   set lines = lines + ['replace: pwdMinLength'] -%}
+          {%-   set lines = lines + ['pwdMinLength: ' ~ _ldap_server_ppolicy_intended_min_length] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_ppolicy_current_in_history != _ldap_server_ppolicy_intended_in_history | string -%}
+          {%-   set lines = lines + ['replace: pwdInHistory'] -%}
+          {%-   set lines = lines + ['pwdInHistory: ' ~ _ldap_server_ppolicy_intended_in_history] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_ppolicy_current_use_module != _ldap_server_ppolicy_intended_use_module -%}
+          {%-   set lines = lines + ['replace: pwdUseCheckModule'] -%}
+          {%-   set lines = lines + ['pwdUseCheckModule: ' ~ _ldap_server_ppolicy_intended_use_module] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if lines | last == '-' -%}
+          {%-   set lines = lines[:-1] -%}
+          {%- endif -%}
+          {{ lines | join('\n') }}
+      changed_when: false
+
+    - name: "PHASE [ppolicy : Apply Default Policy Entry Modifications If Needed]"
+      when: >-
+        _ldap_server_ppolicy_current_quality != _ldap_server_ppolicy_intended_quality | string
+        or _ldap_server_ppolicy_current_min_length != _ldap_server_ppolicy_intended_min_length | string
+        or _ldap_server_ppolicy_current_in_history != _ldap_server_ppolicy_intended_in_history | string
+        or _ldap_server_ppolicy_current_use_module != _ldap_server_ppolicy_intended_use_module
+        or 'pwdPolicyChecker' not in _ldap_server_ppolicy_current_object_classes
+      ansible.builtin.command:
+        cmd: >-
+          ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+          -H {{ ldap_server_uri }}
+        stdin: "{{ _ldap_server_ppolicy_entry_modify }}"
+      changed_when: true
+      no_log: true
+      environment:
+        LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Cleanup temporary directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ppolicy : Remove Temporary PPolicy LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-ppolicy
+    state: absent
+  changed_when: false
+
+- name: "PHASE [ppolicy : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed ppolicy overlay, default policy, and check_password module configuration"

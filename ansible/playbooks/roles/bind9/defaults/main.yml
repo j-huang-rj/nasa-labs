@@ -1,4 +1,7 @@
 ---
+# Component gate
+bind9_enabled: false
+
 # Package and service defaults
 bind9_packages:
   - bind
@@ -13,6 +16,8 @@ bind9_dynamic_zone_dir: /var/named/dynamic
 
 # SOA admin contact
 bind9_soa_admin: "admin"
+bind9_zone_ttl: 300
+bind9_soa_serial_date: ""
 
 # ACL definitions
 bind9_acl_dmz: "dmz_clients"
@@ -47,12 +52,6 @@ bind9_dynamic_hosts:
 
 # Upstream forwarders for resolver mode
 bind9_forwarders: []
-
-# VPN host IP offsets. These are also defined in global DNS identity inventory
-# vars so non-role playbooks can compute the same derived VPN addresses.
-bind9_vpn_router_offset: 1
-bind9_vpn_client_offset: 2
-bind9_vpn_ns_offset: 3
 
 # Trust anchors for DNSSEC validation in resolver mode. Each item is a dict
 # with keys: zone, flags, protocol, algorithm, key.

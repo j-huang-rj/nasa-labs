@@ -3,16 +3,24 @@
 network_interfaces:
   - ifname: eth0
     zone: internal
-    ip4: 172.16.1.123/24
-    gw4: 172.16.1.254
+    ip4: "{{ lab_internal_agent_ip }}/24"
+    gw4: "{{ lab_router_internal_ip }}"
     dns4:
-      - 172.16.1.153
-      - 1.1.1.1
+      - "{{ lab_resolver_ip }}"
+      - "{{ lab_bootstrap_dns_ip }}"
     conn_name: internal-static
     default_conn_name: "cloud-init eth0"
 
 network_bootstrap_dns4:
-  - 1.1.1.1
+  - "{{ lab_bootstrap_dns_ip }}"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_internal_agent_ip }}"
+    canonical: "internal-agent.{{ lab_domain }}"
+    aliases:
+      - internal-agent
+      - internal-agent-01
 
 # Firewall Config
 firewall_zone_ports:

@@ -4,7 +4,10 @@
   ansible.builtin.debug:
     msg: "Starting execution of wireguard role"
 
-- name: "Configure WireGuard"
+- name: "PHASE [main : Validate WireGuard Role Variables]"
+  ansible.builtin.import_tasks: assert.yml
+
+- name: "PHASE [main : Configure WireGuard]"
   ansible.builtin.import_tasks: setup.yml
 
 - name: "END"

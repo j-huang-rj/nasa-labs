@@ -1,0 +1,125 @@
+---
+# Component gate
+ldap_server_enabled: false
+
+# Package and service defaults
+ldap_server_epel_package: epel-release
+ldap_server_packages:
+  - openldap-servers
+  - openldap-clients
+  - openssl
+  - ca-certificates
+ldap_server_service_name: slapd
+
+# Module paths
+ldap_server_module_dir: /usr/lib64/openldap
+ldap_server_required_modules:
+  - load: ppolicy.la
+    path: /usr/lib64/openldap/ppolicy.la
+  - load: otp.la
+    path: /usr/lib64/openldap/otp.la
+  - load: sssvlv.la
+    path: /usr/lib64/openldap/sssvlv.la
+
+# Filesystem paths
+ldap_server_tls_cert_dir: /etc/openldap/certs
+ldap_server_tls_key_dir: /etc/openldap/private
+ldap_server_tls_cert_path: "{{ ldap_server_tls_cert_dir }}/ldap.crt"
+ldap_server_tls_key_path: "{{ ldap_server_tls_key_dir }}/ldap.key"
+ldap_server_data_dir: /var/lib/ldap
+
+# OLC / database identity
+ldap_server_database_suffix: "{{ ldap_base_dn }}"
+ldap_server_root_dn: "cn=admin,{{ ldap_base_dn }}"
+ldap_server_olc_database_dn: olcDatabase={1}mdb,cn=config
+
+# Schema defaults
+ldap_server_schema_files:
+  - name: cosine
+    path: /etc/openldap/schema/cosine.ldif
+  - name: inetorgperson
+    path: /etc/openldap/schema/inetorgperson.ldif
+  - name: nis
+    path: /etc/openldap/schema/nis.ldif
+
+ldap_server_custom_schema_templates:
+  - name: sudo
+    description: Sudo LDAP schema
+  - name: openssh-lpk
+    description: OpenSSH LDAP public key schema
+  - name: fortune
+    description: Fortune custom objectClass schema
+
+ldap_server_fortune_schema_oid_root: "2.25.109749598841848522681210166878566339431"
+
+# ACLs
+ldap_server_acl_secret_attrs:
+  - userPassword
+  - oathSecret
+  - oathTOTPLastTimeStep
+  - oathTOTPTimeStepDrift
+
+ldap_server_acl_delegate_dns:
+  - "uid=generalta,ou=People,{{ ldap_base_dn }}"
+  - "uid=mailta,ou=People,{{ ldap_base_dn }}"
+
+# ppolicy
+ldap_server_ppolicy_default_dn: "cn=default,ou=Ppolicy,{{ ldap_base_dn }}"
+ldap_server_ppolicy_check_module: /usr/lib64/openldap/check_password.so
+ldap_server_ppolicy_hash_cleartext: true
+ldap_server_ppolicy_check_quality: 2
+ldap_server_ppolicy_min_length: 8
+ldap_server_ppolicy_in_history: 1
+ldap_server_ppolicy_use_check_module: true
+
+ldap_server_check_password_min_points: 3
+ldap_server_check_password_min_upper: 0
+ldap_server_check_password_min_lower: 0
+ldap_server_check_password_min_digit: 0
+ldap_server_check_password_min_punct: 0
+
+# TOTP
+ldap_server_totp_params_dn: "cn=totp,ou=Ppolicy,{{ ldap_base_dn }}"
+ldap_server_totp_length: 6
+ldap_server_totp_time_step: 60
+ldap_server_totp_hmac_algorithm: "1.2.840.113549.2.7"
+
+# Fortune / sssvlv
+ldap_server_fortune_base_dn: "ou=Fortune,{{ ldap_base_dn }}"
+ldap_server_sssvlv_max: 500
+ldap_server_sssvlv_max_keys: 50
+ldap_server_sssvlv_max_per_conn: 10
+
+# sudoRole
+ldap_server_sudo_roles:
+  ta:
+    cn: ta
+    sudoUser: "%ta"
+    sudoHost:
+      - ALL
+    sudoCommand:
+      - ALL
+    sudoRunAsUser: ALL
+    sudoRunAsGroup: ALL
+    sudoOption:
+      - "!authenticate"
+
+  stu:
+    cn: stu
+    sudoUser: "%stu"
+    sudoHost:
+      - workstation-01
+      - "workstation1.{{ ldap_domain }}"
+    sudoCommand:
+      - "/usr/bin/ls"
+    sudoRunAsUser: ALL
+    sudoRunAsGroup: ALL
+    sudoOption:
+      - "!authenticate"
+
+# Canonical credential bundle
+ldap_server_credentials: {}
+
+# Secrets
+ldap_server_tls_private_key: ""
+ldap_server_tls_certificate: ""

@@ -1,0 +1,35 @@
+---
+- name: "PHASE [dit : Render OU Entry LDIF] | {{ _dit_ou_name }}"
+  ansible.builtin.template:
+    src: openldap/dit-entry.ldif.j2
+    dest: "/tmp/openldap-dit/ou-{{ _dit_ou_name }}.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+  vars:
+    entry_type: ou
+    ou_name: "{{ _dit_ou_name }}"
+
+- name: "PHASE [dit : Search OU] | {{ _dit_ou_name }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -b "ou={{ _dit_ou_name }},{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_dit_ou_check
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [dit : Create OU If Missing] | {{ _dit_ou_name }}"
+  when: _ldap_server_dit_ou_check.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -f /tmp/openldap-dit/ou-{{ _dit_ou_name }}.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"

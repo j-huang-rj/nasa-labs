@@ -1,0 +1,102 @@
+---
+argument_specs:
+  main:
+    short_description: Validate nfs role variables
+
+    options:
+      nfs_enabled:
+        type: bool
+        required: true
+        description: Whether the nfs role should be active on this host
+
+      nfs_server_enabled:
+        type: bool
+        required: false
+        default: false
+        description: Whether this host is configured as an NFS server
+
+      nfs_client_enabled:
+        type: bool
+        required: false
+        default: false
+        description: Whether this host is configured as an NFS client
+
+      nfs_server_packages:
+        type: list
+        elements: str
+        required: false
+        description: Packages required for NFS server operation
+
+      nfs_client_packages:
+        type: list
+        elements: str
+        required: false
+        description: Packages required for NFS client operation
+
+      nfs_server_service_name:
+        type: str
+        required: false
+        description: Name of the NFS server systemd service unit
+
+      nfs_export_root:
+        type: str
+        required: false
+        default: "{{ lab_home_root }}"
+        description: Root directory for NFS exports, normally lab_home_root
+
+      nfs_export_conf_path:
+        type: str
+        required: false
+        description: Path to the NFS exports configuration file
+
+      nfs_export_conf_dir:
+        type: str
+        required: false
+        description: Directory for NFS exports drop-in configuration files
+
+      nfs_exports:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          NFS export definitions. Each item must include path, clients, and options.
+
+      nfs_default_export_options:
+        type: list
+        elements: str
+        required: false
+        description: Default export options applied when nfs_exports items omit them
+
+      nfs_mounts:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          NFS mount definitions for client hosts. Each item must include path, src, fstype, and opts.
+
+      nfs_default_mount_options:
+        type: str
+        required: false
+        description: Default mount options string for NFS client mounts
+
+      nfs_home_tree_entries:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Home directory tree entries with owner, group, mode, and state.
+          Derived from ldap_users/ldap_groups at runtime.
+
+      nfs_server_selinux_booleans:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          SELinux booleans required for NFS server exports.
+
+      nfs_client_selinux_booleans:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          SELinux booleans required for NFS-backed client home directories.

@@ -373,6 +373,7 @@
         item.file: item | bind9_zone_serial(
           primary_mname=bind9_primary_mname,
           date_prefix=bind9_soa_serial_date,
+          ttl=bind9_zone_ttl,
           current_serial=bind9_zone_current_state[item.file].serial,
           current_hash=bind9_zone_current_state[item.file].hash
         )
@@ -418,10 +419,9 @@
   notify: "PHASE [handler : Restart named]"
 
 # Persist the content hash in a sidecar file alongside each zone. BIND
-# never touches `<zone_file>.hash`, so it survives the canonical rewrite
-# that would otherwise strip an in-zone `; zone-hash:` comment. This is
-# the durable change-detection marker that the next run reads back via
-# the bind9_zone_state module.
+# never touches `<zone_file>.hash`, so it survives dynamic-zone canonical
+# rewrites. This is the durable change-detection marker that the next run
+# reads back via the bind9_zone_state module.
 - name: "PHASE [config : Write Zone Hash Sidecar Files]"
   when:
     - bind9_mode == 'authoritative_primary'

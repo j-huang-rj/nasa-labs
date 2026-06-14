@@ -1,0 +1,80 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: dmz
+    ip4: "{{ lab_imap_ip }}/24"
+    gw4: "{{ lab_router_dmz_ip }}"
+    dns4:
+      - "{{ lab_resolver_ip }}"
+      - "{{ lab_bootstrap_dns_ip }}"
+    conn_name: dmz-static
+    default_conn_name: "cloud-init eth0"
+
+network_bootstrap_dns4:
+  - "{{ lab_bootstrap_dns_ip }}"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_imap_ip }}"
+    canonical: "imap.{{ lab_domain }}"
+    aliases:
+      - imap
+      - imap-01
+
+# WireGuard Config
+wireguard_enabled: true
+
+# Mail Config: IMAP/LMTP storage host only
+mail_enabled: true
+mail_postfix_enabled: false
+mail_opendkim_enabled: false
+mail_filter_milter_enabled: false
+mail_list_aliases_enabled: false
+mail_list_api_enabled: false
+
+mail_dovecot_enabled: true
+mail_dovecot_auth_enabled: true
+mail_dovecot_imap_enabled: true
+mail_dovecot_lmtp_enabled: true
+mail_dovecot_auth_socket_enabled: false
+mail_dovecot_lmtp_unix_socket_enabled: false
+mail_dovecot_lmtp_inet_listener_enabled: true
+mail_dovecot_lmtp_listen_address: "{{ mail_lmtp_private_ip }}"
+mail_dovecot_lmtp_listen_port: "{{ mail_lmtp_port }}"
+
+mail_vmail_identity_enabled: true
+mail_vmail_home_enabled: true
+mail_dovecot_passwd_file_enabled: true
+mail_tls_enabled: true
+mail_ldap_verify_enabled: true
+
+# Shared mail credentials
+mail_tls_certificate: "{{ hostvars[mail_smtp_host].mail_tls_certificate }}"
+mail_tls_private_key: "{{ hostvars[mail_smtp_host].mail_tls_private_key }}"
+mail_local_user_password_hashes: "{{ hostvars[mail_smtp_host].mail_local_user_password_hashes }}"
+
+# Mail LDAP Config
+mail_ldap_enabled: true
+mail_ldap_users: "{{ ldap_groups.ta.member_uids }}"
+
+# Firewall Config
+firewall_custom_zones:
+  - vpn
+
+firewall_bindings:
+  - ifname: wg0
+    zone: vpn
+
+firewall_zone_ports:
+  - zone: vpn
+    port: 143
+    proto: tcp
+
+firewall_rich_rules:
+  - zone: dmz
+    rule: >-
+      rule family="ipv4" source address="{{ mail_smtp_private_ip }}"
+      port port="{{ mail_lmtp_port }}" protocol="tcp" accept
+  - zone: vpn
+    rule: 'rule service name="ssh" reject'

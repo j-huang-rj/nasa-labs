@@ -1,0 +1,212 @@
+---
+- name: "PHASE [totp : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Reconcile OTP overlay, TOTP params, token entries, and user links"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Discover target MDB database by suffix
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Search Existing MDB Database For Suffix]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config
+      '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+      dn
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_mdb_search
+
+- name: "PHASE [totp : Extract MDB Database DN]"
+  when: _ldap_server_mdb_search.rc == 0
+  ansible.builtin.set_fact:
+    _ldap_server_mdb_dn: >-
+      {{ _ldap_server_mdb_search.stdout_lines | default([])
+         | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary render directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Create Temporary TOTP LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-totp
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile OTP overlay on target MDB
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Render OTP Overlay LDIF Template]"
+  ansible.builtin.template:
+    src: openldap/olc-overlay-otp.ldif.j2
+    dest: /tmp/openldap-totp/olc-overlay-otp.ldif
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+
+- name: "PHASE [totp : Search Existing OTP Overlay]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "{{ _ldap_server_mdb_dn }}" -s one
+      '(objectClass=olcOverlayConfig)' dn olcOverlay
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_otp_overlay_search
+
+- name: "PHASE [totp : Extract OTP Overlay DN]"
+  ansible.builtin.set_fact:
+    _ldap_server_otp_overlay_dn: >-
+      {{ _ldap_server_otp_overlay_search.stdout_lines | default([])
+         | select('match', '^dn: olcOverlay=.*otp,')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
+- name: "PHASE [totp : Add OTP Overlay If Missing]"
+  when: _ldap_server_otp_overlay_dn | length == 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -Y EXTERNAL -H ldapi:///
+      -f /tmp/openldap-totp/olc-overlay-otp.ldif
+  changed_when: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile TOTP params entry
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Render TOTP Params LDIF Template]"
+  ansible.builtin.template:
+    src: openldap/totp-params.ldif.j2
+    dest: /tmp/openldap-totp/totp-params.ldif
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+
+- name: "PHASE [totp : Search Existing TOTP Params Entry]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "{{ ldap_server_totp_params_dn }}" -s base '(objectClass=*)' dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_totp_params_search
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [totp : Add TOTP Params Entry If Missing]"
+  when: _ldap_server_totp_params_search.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -f /tmp/openldap-totp/totp-params.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# TOTP secrets are provided by the normalized _ldap_server_user_totp_secrets
+# fact built in assert.yml. Each key tracks the username → secret mapping.
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Set TOTP Secret Variable Mapping]"
+  ansible.builtin.set_fact:
+    _ldap_server_totp_secrets: "{{ _ldap_server_user_totp_secrets }}"
+  no_log: true
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile TOTP token entries and user links for totp_required users
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Reconcile TOTP Token And User Link]"
+  ansible.builtin.include_tasks: totp_token.yml
+  loop: "{{ ldap_users | dict2items | selectattr('value.totp_required', 'equalto', true) }}"
+  loop_control:
+    loop_var: _totp_user_item
+    label: "uid={{ _totp_user_item.key }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Ensure mailta has no oathTOTPUser or oathTOTPToken (password-only)
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Search Mailta For OATH Attributes]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "uid=mailta,ou=People,{{ ldap_base_dn }}" -s base
+      '(objectClass=posixAccount)' objectClass oathTOTPToken
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_mailta_otp_search
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [totp : Remove Mailta TOTP Link And Class If Present]"
+  when: >-
+    _ldap_server_mailta_otp_search.rc == 0
+    and _ldap_server_mailta_otp_search.stdout_lines | default([])
+        | select('match', '^objectClass: oathTOTPUser$') | list | length > 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }}
+    stdin: |
+      dn: uid=mailta,ou=People,{{ ldap_base_dn }}
+      changetype: modify
+      delete: oathTOTPToken
+      -
+      delete: objectClass
+      objectClass: oathTOTPUser
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [totp : Remove oathTOTPToken From Mailta If Present]"
+  when: >-
+    _ldap_server_mailta_otp_search.rc == 0
+    and _ldap_server_mailta_otp_search.stdout_lines | default([])
+        | select('match', '^oathTOTPToken: ') | list | length > 0
+    and _ldap_server_mailta_otp_search.stdout_lines | default([])
+        | select('match', '^objectClass: oathTOTPUser$') | list | length == 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }}
+    stdin: |
+      dn: uid=mailta,ou=People,{{ ldap_base_dn }}
+      changetype: modify
+      delete: oathTOTPToken
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Cleanup temporary directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [totp : Remove Temporary TOTP LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-totp
+    state: absent
+  changed_when: false
+
+- name: "PHASE [totp : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed TOTP params, token entries, and user link reconciliation"

@@ -1,0 +1,16 @@
+---
+- name: "START"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting execution of ldap_client role"
+
+- name: "PHASE [main : Assert Role Variables]"
+  ansible.builtin.import_tasks: assert.yml
+
+- name: "PHASE [main : Configure LDAP Client]"
+  ansible.builtin.import_tasks: setup.yml
+
+- name: "END"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed execution of ldap_client role"

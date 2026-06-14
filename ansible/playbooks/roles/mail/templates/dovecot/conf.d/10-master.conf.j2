@@ -1,6 +1,7 @@
 # Dovecot master service configuration - managed by Ansible
 
 # Auth sockets
+{% if mail_dovecot_auth_socket_enabled | bool %}
 service auth {
   unix_listener {{ mail_dovecot_auth_socket_path }} {
     mode = 0660
@@ -8,12 +9,23 @@ service auth {
     group = postfix
   }
 }
+{% endif %}
 
 # LMTP sockets
+{% if (mail_dovecot_lmtp_unix_socket_enabled | bool) or (mail_dovecot_lmtp_inet_listener_enabled | bool) %}
 service lmtp {
+{% if mail_dovecot_lmtp_unix_socket_enabled | bool %}
   unix_listener {{ mail_dovecot_lmtp_socket_path }} {
     mode = 0660
     user = postfix
     group = postfix
   }
+{% endif %}
+{% if mail_dovecot_lmtp_inet_listener_enabled | bool %}
+  inet_listener lmtp {
+    address = {{ mail_dovecot_lmtp_listen_address }}
+    port = {{ mail_dovecot_lmtp_listen_port }}
+  }
+{% endif %}
 }
+{% endif %}

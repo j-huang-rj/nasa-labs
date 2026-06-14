@@ -1,0 +1,27 @@
+---
+- name: "PHASE [derive : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Starting derive phase"
+
+- name: "PHASE [derive : Gather Date/Time Facts]"
+  ansible.builtin.setup:
+    filter: ansible_date_time
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_soa_serial_date | length == 0
+    - ansible_facts.date_time is not defined
+    - ansible_facts.ansible_date_time is not defined
+
+- name: "PHASE [derive : Derive SOA Serial Date]"
+  ansible.builtin.set_fact:
+    bind9_soa_serial_date: >-
+      {{ (ansible_facts.date_time | default(ansible_facts.ansible_date_time)).date | replace('-', '') }}
+  when:
+    - bind9_mode == 'authoritative_primary'
+    - bind9_soa_serial_date | length == 0
+
+- name: "PHASE [derive : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed derive phase"

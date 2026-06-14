@@ -1,0 +1,136 @@
+---
+- name: "PHASE [schemas : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Load required schemas into cn=schema,cn=config"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary directory for rendered custom schema templates
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Create Temporary Schema Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-schemas
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Search currently loaded schemas
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Search Currently Loaded Schemas In cn=config]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=schema,cn=config '(objectClass=olcSchemaConfig)' cn
+  changed_when: false
+  register: _ldap_server_loaded_schemas
+
+# ─────────────────────────────────────────────────────────────────────────
+# Validate package schema file paths exist on the target filesystem
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Validate Package Schema File Paths]"
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop: "{{ ldap_server_schema_files }}"
+  register: _ldap_server_schema_paths
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "PHASE [schemas : Fail If Required Package Schema File Is Missing]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      Required package schema file {{ item.item.path }} for {{ item.item.name }}
+      does not exist. Install the package that provides this schema LDIF before
+      proceeding.
+  loop: "{{ _ldap_server_schema_paths.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Load package-provided schemas that are not yet present in cn=schema
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Load Package Schema If Missing]"
+  when: "item.item.name not in _ldap_server_loaded_schemas.stdout"
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -Y EXTERNAL -H ldapi:///
+      -f {{ item.item.path }}
+  changed_when: true
+  loop: "{{ _ldap_server_schema_paths.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Render custom schema templates into the temporary directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Render Custom Schema Templates]"
+  ansible.builtin.template:
+    src: "openldap/schema-{{ item.name }}.ldif.j2"
+    dest: "/tmp/openldap-schemas/schema-{{ item.name }}.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ ldap_server_custom_schema_templates }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Load rendered custom schemas that are not yet present in cn=schema
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Load Custom Schema If Missing]"
+  when: "item.name not in _ldap_server_loaded_schemas.stdout"
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -Y EXTERNAL -H ldapi:///
+      -f /tmp/openldap-schemas/schema-{{ item.name }}.ldif
+  changed_when: true
+  loop: "{{ ldap_server_custom_schema_templates }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Verification: re-search cn=schema,cn=config and assert all required CNs
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Re-Search Loaded Schemas For Verification]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=schema,cn=config '(objectClass=olcSchemaConfig)' cn
+  changed_when: false
+  register: _ldap_server_schemas_verify
+
+- name: "PHASE [schemas : Assert Required Schema CNs Are Present]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'cosine' in _ldap_server_schemas_verify.stdout"
+      - "'inetorgperson' in _ldap_server_schemas_verify.stdout"
+      - "'nis' in _ldap_server_schemas_verify.stdout"
+      - "'sudo' in _ldap_server_schemas_verify.stdout"
+      - "'openssh-lpk' in _ldap_server_schemas_verify.stdout"
+      - "'fortune' in _ldap_server_schemas_verify.stdout"
+    fail_msg: >-
+      Required LDAP schemas are missing from cn=schema,cn=config.
+      Expected: cosine, inetorgperson, nis, sudo, openssh-lpk, and fortune.
+      Present output:
+      {{ _ldap_server_schemas_verify.stdout }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clean up temporary render directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [schemas : Remove Temporary Schema Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-schemas
+    state: absent
+  changed_when: false
+
+- name: "PHASE [schemas : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed schema loading phase"

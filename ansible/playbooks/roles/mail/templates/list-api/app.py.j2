@@ -83,6 +83,83 @@ def _load_valid_users() -> set[str]:
     return users
 
 
+def _ldap_filter_escape(value: str) -> str:
+    """Escape a value for use in an RFC 4515 LDAP search filter."""
+    return (
+        value.replace("\\", r"\5c")
+        .replace("*", r"\2a")
+        .replace("(", r"\28")
+        .replace(")", r"\29")
+        .replace("\x00", r"\00")
+    )
+
+
+def _is_ldap_mail_user(member: str) -> bool:
+    """Return True when member is a dynamic LDAP mail account."""
+    if not settings.get("ldap_enabled"):
+        return False
+    if member in set(settings.get("ldap_forbidden_users", [])):
+        return False
+
+    ldap_uri = settings.get("ldap_uri", "")
+    base_dn = settings.get("ldap_base_dn", "")
+    if not ldap_uri or not base_dn:
+        logger.error("LDAP dynamic validation enabled without URI/base DN")
+        return False
+
+    ldap_filter = f"(uid={_ldap_filter_escape(member)})"
+    cmd = [
+        "ldapsearch",
+        "-LLL",
+        "-H",
+        ldap_uri,
+        "-x",
+        "-b",
+        f"ou=People,{base_dn}",
+        "-s",
+        "sub",
+        ldap_filter,
+        "dn",
+    ]
+    env = os.environ.copy()
+    ca_path = settings.get("ldap_ca_cert_path", "")
+    if ca_path:
+        env["LDAPTLS_CACERT"] = ca_path
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            shell=False,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("LDAP mail-user validation timed out for member %s", member)
+        return False
+    except (FileNotFoundError, OSError) as exc:
+        logger.error("LDAP mail-user validation unavailable for member %s: %s", member, exc)
+        return False
+
+    if proc.returncode != 0:
+        logger.info(
+            "LDAP mail-user validation rejected member %s: rc=%s stderr=%s",
+            member,
+            proc.returncode,
+            (proc.stderr or "").strip()[:200],
+        )
+        return False
+
+    return any(line.lower().startswith("dn:") for line in proc.stdout.splitlines())
+
+
+def _is_deliverable_member(member: str, valid_users: set[str]) -> bool:
+    """Return True when member is deliverable locally or as an LDAP mail user."""
+    return member in valid_users or _is_ldap_mail_user(member)
+
+
 # ---------------------------------------------------------------------------
 # Helpers: name / member normalization
 # ---------------------------------------------------------------------------
@@ -689,7 +766,7 @@ def create_list(payload: ListCreate):
     members = payload.members
 
     valid_users = _load_valid_users()
-    deliverable = [m for m in members if m in valid_users]
+    deliverable = [m for m in members if _is_deliverable_member(m, valid_users)]
     if not deliverable:
         raise HTTPException(
             status_code=422,

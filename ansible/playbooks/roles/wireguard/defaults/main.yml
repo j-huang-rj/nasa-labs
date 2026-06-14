@@ -1,0 +1,11 @@
+---
+# Component gate
+wireguard_enabled: false
+
+wireguard_healthcheck_targets:
+  - "{{ lab_nasa_root_ip }}"
+
+wireguard_persistent_keepalive: 5
+wireguard_healthcheck_retries: 3
+wireguard_healthcheck_delay: 2
+wireguard_healthcheck_timeout: 2

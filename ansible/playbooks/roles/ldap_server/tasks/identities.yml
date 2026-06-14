@@ -1,0 +1,51 @@
+---
+- name: "PHASE [identities : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Populate LDAP groups and users"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary directory for rendered identity LDIF files
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [identities : Create Temporary Identity LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-identities
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# posixGroup entries: search before add, modify to exact state
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [identities : Reconcile posixGroup Entry]"
+  ansible.builtin.include_tasks: identity_group.yml
+  loop: "{{ ldap_groups | dict2items }}"
+  loop_control:
+    loop_var: _ident_group
+    label: "cn={{ _ident_group.key }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# posixAccount user entries: search before add, modify managed attributes
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [identities : Reconcile posixAccount Entry]"
+  ansible.builtin.include_tasks: identity_user.yml
+  loop: "{{ ldap_users | dict2items }}"
+  loop_control:
+    loop_var: _ident_user
+    label: "uid={{ _ident_user.key }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clean up temporary render directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [identities : Remove Temporary Identity LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-identities
+    state: absent
+  changed_when: false
+
+- name: "PHASE [identities : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed identities phase"

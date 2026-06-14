@@ -1,0 +1,274 @@
+---
+- name: "PHASE [fortune : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Import Fortune data and enable server-side sort/paging controls"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Load Fortune YAML data and validate shape
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [fortune : Load Fortune YAML Data]"
+  ansible.builtin.set_fact:
+    _ldap_server_fortunes: "{{ lookup('ansible.builtin.file', 'files/fortunes.yml') | from_yaml }}"
+  changed_when: false
+
+- name: "PHASE [fortune : Validate Fortune Item Shape]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - item.ID is defined
+      - item.ID is number
+      - item.ID | int == item.ID
+      - item.Author is defined
+      - item.Author | string | length > 0
+      - item.Description is defined
+      - item.Description | string | length > 0
+    fail_msg: >-
+      Fortune YAML item failed shape validation: ID={{ item.ID | default('<missing>') }},
+      Author={{ item.Author | default('<missing>') }},
+      Description={{ item.Description | default('<missing>') }}.
+    success_msg: "Fortune YAML items validated"
+  loop: "{{ _ldap_server_fortunes }}"
+  loop_control:
+    label: "id={{ item.ID | default('?') }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Create temporary directory for rendered Fortune LDIF files
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [fortune : Create Temporary Fortune LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-fortunes
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  changed_when: false
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile each Fortune entry
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [fortune : Reconcile Fortune Entry]"
+  ansible.builtin.include_tasks: fortune_entry.yml
+  loop: "{{ _ldap_server_fortunes }}"
+  loop_control:
+    loop_var: _fortune_item
+    label: "id={{ _fortune_item.ID }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Remove stale Fortune entries not present in source YAML
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [fortune : Search All Existing Fortune Entries]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }}
+      -b "ou=Fortune,{{ ldap_base_dn }}" '(objectClass=fortune)' cn id
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_fortune_all
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [fortune : Extract Existing Fortune Entry DNs And IDs]"
+  ansible.builtin.set_fact:
+    _ldap_server_fortune_existing_entries: >-
+      {%- set entries = [] -%}
+      {%- set current_dn = namespace(value='') -%}
+      {%- set current_id = namespace(value='') -%}
+      {%- for line in _ldap_server_fortune_all.stdout_lines -%}
+      {%-   if line | regex_search('^dn: cn=fortune-') -%}
+      {%-     set current_dn.value = line | regex_replace('^dn: ', '') -%}
+      {%-   endif -%}
+      {%-   if line | regex_search('^id: ') and current_dn.value | length > 0 -%}
+      {%-     set current_id.value = line | regex_replace('^id: ', '') -%}
+      {%-     set _ = entries.append({'dn': current_dn.value, 'id': current_id.value | int}) -%}
+      {%-     set current_dn.value = '' -%}
+      {%-     set current_id.value = '' -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ entries }}
+
+- name: "PHASE [fortune : Build YAML Fortune ID Set]"
+  ansible.builtin.set_fact:
+    _ldap_server_fortune_yaml_ids: >-
+      {{ _ldap_server_fortunes | map(attribute='ID') | map('int') | list }}
+
+- name: "PHASE [fortune : Find Stale Fortune Entries Not In YAML Source]"
+  ansible.builtin.set_fact:
+    _ldap_server_fortune_stale_entries: >-
+      {%- set stale = [] -%}
+      {%- for entry in _ldap_server_fortune_existing_entries -%}
+      {%-   if entry.id not in _ldap_server_fortune_yaml_ids -%}
+      {%-     set _ = stale.append(entry.dn) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ stale }}
+
+- name: "PHASE [fortune : Delete Stale Fortune Entries]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapdelete -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} "{{ item }}"
+  changed_when: true
+  no_log: true
+  loop: "{{ _ldap_server_fortune_stale_entries }}"
+  loop_control:
+    label: "{{ item }}"
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Discover target MDB database by suffix for sssvlv overlay
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [fortune : Search Existing MDB Database For Suffix]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b cn=config
+      '(&(objectClass=olcMdbConfig)(olcSuffix={{ ldap_base_dn }}))'
+      dn
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_mdb_search
+
+- name: "PHASE [fortune : Extract MDB Database DN]"
+  when: _ldap_server_mdb_search.rc == 0
+  ansible.builtin.set_fact:
+    _ldap_server_mdb_dn: >-
+      {{ _ldap_server_mdb_search.stdout_lines | default([])
+         | select('match', '^dn: olcDatabase=.*mdb,cn=config')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
+# ─────────────────────────────────────────────────────────────────────────
+# Reconcile sssvlv overlay on target MDB
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [fortune : Render sssvlv Overlay LDIF Template]"
+  ansible.builtin.template:
+    src: openldap/olc-overlay-sssvlv.ldif.j2
+    dest: /tmp/openldap-fortunes/olc-overlay-sssvlv.ldif
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+
+- name: "PHASE [fortune : Search Existing sssvlv Overlay]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -Y EXTERNAL -H ldapi:///
+      -b "{{ _ldap_server_mdb_dn }}" -s one
+      '(objectClass=olcSssVlvConfig)'
+      dn olcSssVlvMax olcSssVlvMaxKeys olcSssVlvMaxPerConn
+  changed_when: false
+  failed_when: false
+  register: _ldap_server_sssvlv_overlay_search
+
+- name: "PHASE [fortune : Extract sssvlv Overlay DN]"
+  ansible.builtin.set_fact:
+    _ldap_server_sssvlv_overlay_dn: >-
+      {{ _ldap_server_sssvlv_overlay_search.stdout_lines | default([])
+         | select('match', '^dn: olcOverlay=.*sssvlv,')
+         | list
+         | first
+         | default('')
+         | regex_replace('^dn: ', '')
+         | trim }}
+
+- name: "PHASE [fortune : Add sssvlv Overlay If Missing]"
+  when: _ldap_server_sssvlv_overlay_dn | length == 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -Y EXTERNAL -H ldapi:///
+      -f /tmp/openldap-fortunes/olc-overlay-sssvlv.ldif
+  changed_when: true
+
+- name: "PHASE [fortune : Reconcile sssvlv Overlay Attributes]"
+  when: _ldap_server_sssvlv_overlay_dn | length > 0
+  block:
+    - name: "PHASE [fortune : Set Intended sssvlv Overlay Attributes]"
+      ansible.builtin.set_fact:
+        _ldap_server_sssvlv_intended_max: "{{ ldap_server_sssvlv_max | default(500) | int }}"
+        _ldap_server_sssvlv_intended_keys: "{{ ldap_server_sssvlv_max_keys | default(50) | int }}"
+        _ldap_server_sssvlv_intended_per_conn: "{{ ldap_server_sssvlv_max_per_conn | default(10) | int }}"
+
+    - name: "PHASE [fortune : Extract Current olcSssVlvMax]"
+      ansible.builtin.set_fact:
+        _ldap_server_sssvlv_current_max: >-
+          {{ _ldap_server_sssvlv_overlay_search.stdout_lines | default([])
+             | select('match', '^olcSssVlvMax: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^olcSssVlvMax: ', '') }}
+
+    - name: "PHASE [fortune : Extract Current olcSssVlvMaxKeys]"
+      ansible.builtin.set_fact:
+        _ldap_server_sssvlv_current_keys: >-
+          {{ _ldap_server_sssvlv_overlay_search.stdout_lines | default([])
+             | select('match', '^olcSssVlvMaxKeys: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^olcSssVlvMaxKeys: ', '') }}
+
+    - name: "PHASE [fortune : Extract Current olcSssVlvMaxPerConn]"
+      ansible.builtin.set_fact:
+        _ldap_server_sssvlv_current_per_conn: >-
+          {{ _ldap_server_sssvlv_overlay_search.stdout_lines | default([])
+             | select('match', '^olcSssVlvMaxPerConn: ')
+             | list
+             | first
+             | default('')
+             | regex_replace('^olcSssVlvMaxPerConn: ', '') }}
+
+    - name: "PHASE [fortune : Build sssvlv Overlay Modify LDIF]"
+      ansible.builtin.set_fact:
+        _ldap_server_sssvlv_overlay_modify: >-
+          {%- set lines = [] -%}
+          {%- set lines = lines + ['dn: ' ~ _ldap_server_sssvlv_overlay_dn] -%}
+          {%- set lines = lines + ['changetype: modify'] -%}
+          {%- if _ldap_server_sssvlv_current_max != _ldap_server_sssvlv_intended_max | string -%}
+          {%-   set lines = lines + ['replace: olcSssVlvMax'] -%}
+          {%-   set lines = lines + ['olcSssVlvMax: ' ~ _ldap_server_sssvlv_intended_max] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_sssvlv_current_keys != _ldap_server_sssvlv_intended_keys | string -%}
+          {%-   set lines = lines + ['replace: olcSssVlvMaxKeys'] -%}
+          {%-   set lines = lines + ['olcSssVlvMaxKeys: ' ~ _ldap_server_sssvlv_intended_keys] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {%- if _ldap_server_sssvlv_current_per_conn != _ldap_server_sssvlv_intended_per_conn | string -%}
+          {%-   set lines = lines + ['replace: olcSssVlvMaxPerConn'] -%}
+          {%-   set lines = lines + ['olcSssVlvMaxPerConn: ' ~ _ldap_server_sssvlv_intended_per_conn] -%}
+          {%-   set lines = lines + ['-'] -%}
+          {%- endif -%}
+          {{ lines | join('\n') }}
+      changed_when: false
+
+    - name: "PHASE [fortune : Apply sssvlv Overlay Modifications If Needed]"
+      when: >-
+        _ldap_server_sssvlv_current_max != _ldap_server_sssvlv_intended_max | string
+        or _ldap_server_sssvlv_current_keys != _ldap_server_sssvlv_intended_keys | string
+        or _ldap_server_sssvlv_current_per_conn != _ldap_server_sssvlv_intended_per_conn | string
+      ansible.builtin.command:
+        cmd: ldapmodify -Y EXTERNAL -H ldapi:///
+        stdin: "{{ _ldap_server_sssvlv_overlay_modify }}"
+      changed_when: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clean up temporary render directory
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [fortune : Remove Temporary Fortune LDIF Render Directory]"
+  ansible.builtin.file:
+    path: /tmp/openldap-fortunes
+    state: absent
+  changed_when: false
+
+- name: "PHASE [fortune : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed Fortune data import and sssvlv server-side search controls reconciliation"

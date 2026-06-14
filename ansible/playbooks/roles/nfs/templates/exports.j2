@@ -1,0 +1,5 @@
+{# {{ ansible_managed }} #}
+{% for export in nfs_exports %}
+{% set export_options = export.options | default(nfs_default_export_options) | join(',') %}
+{{ export.path }}{% for client in export.clients %} {{ client }}({{ export_options }}){% endfor %}
+{% endfor %}

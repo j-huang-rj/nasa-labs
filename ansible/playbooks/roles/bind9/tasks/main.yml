@@ -4,6 +4,9 @@
   ansible.builtin.debug:
     msg: "Starting execution of bind9 role"
 
+- name: "PHASE [main : Derive Runtime Variables]"
+  ansible.builtin.import_tasks: derive.yml
+
 - name: "PHASE [main : Validate Variables]"
   ansible.builtin.import_tasks: assert.yml
 

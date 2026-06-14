@@ -65,20 +65,10 @@ argument_specs:
         description: >-
           Local part of the SOA RNAME; composed with the zone name at render time.
 
-      bind9_vpn_router_offset:
+      bind9_zone_ttl:
         type: int
         required: false
-        description: Host offset within the VPN subnet for the router IP
-
-      bind9_vpn_client_offset:
-        type: int
-        required: false
-        description: Host offset within the VPN subnet for the VPN client IP
-
-      bind9_vpn_ns_offset:
-        type: int
-        required: false
-        description: Host offset within the VPN subnet for the nameserver IP
+        description: Default TTL in seconds rendered into generated zone files
 
       bind9_dmz_cidr:
         type: str
@@ -137,28 +127,30 @@ argument_specs:
         required: false
         description: >-
           Authoritative forward zone name (e.g. "<lab_id>.nasa"). Required for both authoritative modes.
-          Computed by the dns_configure.yml play's pre_tasks from the WireGuard subnet of bind9_identity_source_host.
+          Aliased from lab_domain in group_vars/all/lab.yml.
 
       bind9_vpn_child_reverse_zone_name:
         type: str
         required: false
         description: >-
           RFC 2317 child reverse zone name (e.g. "<lab_id>-sub28.x.y.z.in-addr.arpa").
-          Required for both authoritative modes. Computed by the dns_configure.yml play's pre_tasks.
+          Required for both authoritative modes. Defined as a DNS-scoped BIND identity value.
 
       bind9_primary_mname:
         type: str
         required: false
         description: >-
           SOA MNAME used in rendered zone files.
-          Required for authoritative_primary. Computed by the dns_configure.yml play's pre_tasks.
+          Required for authoritative_primary. Derived from lab_domain.
 
       bind9_soa_serial_date:
         type: str
         required: false
+        default: ""
         description: >-
-          YYYYMMDD floor used by the bind9_zone_serial filter for first-deploy and date-rollover bumps.
-          Required for authoritative_primary. Computed by the dns_configure.yml play's pre_tasks from the controller's date.
+          Optional YYYYMMDD floor override used by the bind9_zone_serial filter for first-deploy
+          and date-rollover bumps. When empty (default), the role derives the value from
+          ansible_date_time at runtime. Effective value required for authoritative_primary.
 
       bind9_tsig_key:
         type: dict
@@ -168,6 +160,20 @@ argument_specs:
           host_vars/*/secrets.yml on authoritative hosts. Contains name, algorithm, and secret fields.
           The default provides the name and algorithm with an empty secret; the real secret must come
           from secrets.yml.
+        options:
+          name:
+            type: str
+            required: false
+            description: TSIG key name
+          algorithm:
+            type: str
+            required: false
+            description: TSIG key algorithm
+          secret:
+            type: str
+            required: false
+            no_log: true
+            description: Base64 TSIG secret value
 
       bind9_axfr_key:
         type: dict
@@ -177,6 +183,20 @@ argument_specs:
           IP-based view selection. Referenced by the primary's public-view match-clients
           and by the secondary's public-zone slave masters. When the secret is empty the
           key block is not rendered into named.keys.conf and the key is treated as absent.
+        options:
+          name:
+            type: str
+            required: false
+            description: TSIG key name
+          algorithm:
+            type: str
+            required: false
+            description: TSIG key algorithm
+          secret:
+            type: str
+            required: false
+            no_log: true
+            description: Base64 TSIG secret value
 
       bind9_keys_conf_path:
         type: str
@@ -213,6 +233,28 @@ argument_specs:
           CSK) so dnssec-policy's keymgr accepts the pre-distributed key instead of retiring it and
           minting a fresh one on every restart. Populated from secrets.yml; empty default means no keys
           are distributed when omitted.
+        options:
+          zone:
+            type: str
+            required: true
+            description: Zone name the DNSSEC key material belongs to
+          basename:
+            type: str
+            required: true
+            description: DNSSEC key basename without extension
+          public:
+            type: str
+            required: true
+            description: Contents of the DNSSEC .key file
+          private:
+            type: str
+            required: true
+            no_log: true
+            description: Contents of the DNSSEC .private file
+          state:
+            type: str
+            required: true
+            description: Contents of the DNSSEC .state file
 
       bind9_dnssec_delegated_child_zones:
         type: list
@@ -233,3 +275,54 @@ argument_specs:
           (int, e.g. 13 for ECDSAP256SHA256), and key (str, base64 key data). Populated at runtime by the
           bind9 role after package installation from upstream DNSKEY records; empty default means no trust
           anchors are rendered when the variable is omitted.
+
+      bind9_nasa_root_ip:
+        type: str
+        required: false
+        description: >-
+          IPv4 address of the NASA root DNS server used for trust anchor retrieval.
+
+      bind9_nasa_root_zones:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Zone names forwarded to the NASA root server for trust anchor zones.
+
+      bind9_nasa_root_forward_zone:
+        type: str
+        required: false
+        description: Forward zone served by the NASA root DNS server.
+
+      bind9_nasa_root_reverse_zone:
+        type: str
+        required: false
+        description: Reverse zone served by the NASA root DNS server.
+
+      bind9_lab_primary_zones:
+        type: list
+        elements: str
+        required: false
+        description: Zone names forwarded by the resolver to the lab primary NS.
+
+      bind9_lab_forward_zone:
+        type: str
+        required: false
+        description: Lab forward zone served by the primary NS.
+
+      bind9_lab_reverse_superzone:
+        type: str
+        required: false
+        description: Lab reverse superzone forwarded by the resolver to the primary NS.
+
+      bind9_dmz_reverse_zone:
+        type: str
+        required: false
+        description: >-
+          DMZ reverse zone name computed from bind9_dmz_cidr for ACL definitions.
+
+      bind9_internal_reverse_zone:
+        type: str
+        required: false
+        description: >-
+          Internal reverse zone name computed from bind9_internal_cidr for ACL definitions.

@@ -1,0 +1,103 @@
+---
+- name: "PHASE [sudo : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Configure sudo LDAP integration through SSSD"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: only configure sudo on workstation-auth hosts
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo : Skip Sudo Config For Non-Workstation Hosts]"
+  ansible.builtin.debug:
+    msg: >-
+      Skipping sudo SSSD configuration on {{ inventory_hostname }}:
+      ldap_client_workstation_auth_enabled is false or undefined.
+  when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Verify authselect still has with-sudo
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo : Verify authselect Has with-sudo]"
+  ansible.builtin.command:
+    cmd: authselect current
+  changed_when: false
+  register: _ldap_client_sudo_authselect
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sudo : Assert authselect with-sudo Active]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'with-sudo' in _ldap_client_sudo_authselect.stdout"
+    fail_msg: >-
+      authselect does not have 'with-sudo' active on {{ inventory_hostname }}.
+      stdout={{ _ldap_client_sudo_authselect.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Ensure nsswitch.conf has sudoers: files sss
+# authselect with-sudo normally manages this, but verify idempotently
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo : Check nsswitch.conf sudoers Line]"
+  ansible.builtin.command:
+    cmd: grep -E '^sudoers:' /etc/nsswitch.conf
+  changed_when: false
+  register: _ldap_client_sudo_nsswitch
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sudo : Assert sudoers: files sss In nsswitch.conf]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'sudoers:' in _ldap_client_sudo_nsswitch.stdout"
+      - "'sss' in _ldap_client_sudo_nsswitch.stdout"
+    fail_msg: >-
+      /etc/nsswitch.conf does not contain 'sudoers: files sss' on {{ inventory_hostname }}.
+      Found: {{ _ldap_client_sudo_nsswitch.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Clear SSSD caches and refresh sudo rules
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo : Clear SSSD Caches]"
+  ansible.builtin.command:
+    cmd: sss_cache -E
+  changed_when: false
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sudo : Refresh SSSD Sudo Rules]"
+  ansible.builtin.command:
+    cmd: sss_cache -R
+  changed_when: false
+  failed_when: false
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Prove no local graded sudoers entries exist
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [sudo : Check For Local Sudoers Entries For Graded Identities]"
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      grep -Pl '(generalta|mailta|stu|%ta|%stu)'
+      /etc/sudoers /etc/sudoers.d/* 2>/dev/null || true
+  changed_when: false
+  register: _ldap_client_sudo_local_grep
+  failed_when: false
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sudo : Assert No Local Graded sudoers Entries]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sudo_local_grep.stdout | length == 0
+    fail_msg: >-
+      Local /etc/sudoers or /etc/sudoers.d files contain references to
+      graded LDAP identities on {{ inventory_hostname }}.
+      Files: {{ _ldap_client_sudo_local_grep.stdout }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [sudo : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed sudo phase"

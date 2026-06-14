@@ -1,0 +1,61 @@
+---
+# Network Config
+network_interfaces:
+  - ifname: eth0
+    zone: dmz
+    ip4: "{{ lab_workstation2_ip }}/24"
+    gw4: "{{ lab_router_dmz_ip }}"
+    dns4:
+      - "{{ lab_resolver_ip }}"
+      - "{{ lab_bootstrap_dns_ip }}"
+    conn_name: dmz-static
+    default_conn_name: "cloud-init eth0"
+
+network_bootstrap_dns4:
+  - "{{ lab_bootstrap_dns_ip }}"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_workstation2_ip }}"
+    canonical: "workstation2.{{ lab_domain }}"
+    aliases:
+      - workstation2
+      - workstation-02
+
+# WireGuard Config
+wireguard_enabled: true
+
+# Firewall Config
+firewall_custom_zones:
+  - vpn
+
+firewall_bindings:
+  - ifname: wg0
+    zone: vpn
+
+firewall_zone_ports:
+  - zone: vpn
+    port: 22
+    proto: tcp
+
+# LDAP Client Config
+ldap_client_enabled: true
+ldap_client_workstation_auth_enabled: true
+
+# Workstation access policy
+ldap_client_allowed_groups:
+  - ta
+
+ldap_client_allowed_users:
+  - generalta
+  - mailta
+
+# NFS Config
+nfs_enabled: true
+nfs_client_enabled: true
+
+nfs_mounts:
+  - path: "{{ lab_home_root }}"
+    src: "{{ lab_ldap_ip }}:{{ lab_home_root }}"
+    fstype: nfs
+    opts: "rw,hard,noatime,nfsvers=4,proto=tcp,_netdev"

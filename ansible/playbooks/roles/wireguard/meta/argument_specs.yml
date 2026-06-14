@@ -4,6 +4,12 @@ argument_specs:
     short_description: Validate wireguard role variables
 
     options:
+      wireguard_enabled:
+        type: bool
+        required: false
+        default: false
+        description: Whether the wireguard role should be active on this host
+
       wireguard_address:
         type: str
         required: true
@@ -12,6 +18,7 @@ argument_specs:
       wireguard_private_key:
         type: str
         required: true
+        no_log: true
         description: Base64-encoded private key for this peer
 
       wireguard_peer_public_key:
@@ -22,6 +29,7 @@ argument_specs:
       wireguard_preshared_key:
         type: str
         required: true
+        no_log: true
         description: Base64-encoded preshared key for extra layer of security
 
       wireguard_allowed_ips:
@@ -37,4 +45,31 @@ argument_specs:
       wireguard_persistent_keepalive:
         type: int
         required: false
-        description: Seconds between keepalive packets; defaults to 5 when omitted, and 0 disables keepalive
+        default: 5
+        description: Seconds between keepalive packets; 0 disables keepalive
+
+      wireguard_healthcheck_targets:
+        type: list
+        elements: str
+        required: false
+        default:
+          - "{{ lab_nasa_root_ip }}"
+        description: ICMP targets that must be reachable after the tunnel starts; empty disables health checks
+
+      wireguard_healthcheck_retries:
+        type: int
+        required: false
+        default: 3
+        description: Number of retries for post-restart health verification
+
+      wireguard_healthcheck_delay:
+        type: int
+        required: false
+        default: 2
+        description: Delay in seconds between post-restart health verification attempts
+
+      wireguard_healthcheck_timeout:
+        type: int
+        required: false
+        default: 2
+        description: Per-ping timeout in seconds for WireGuard health checks

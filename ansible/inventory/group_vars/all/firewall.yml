@@ -1,5 +1,4 @@
 ---
-# firewalld built-in zones
 firewall_builtin_zones:
   - block
   - dmz

@@ -1,0 +1,110 @@
+---
+- name: "PHASE [ldap_verify : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Verify LDAP connectivity and user availability"
+
+- name: "PHASE [ldap_verify : Stat LDAP CA Certificate]"
+  ansible.builtin.stat:
+    path: "{{ mail_ldap_ca_cert_path }}"
+  register: _mail_ldap_verify_ca_stat
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [ldap_verify : Assert LDAP CA Certificate Exists]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _mail_ldap_verify_ca_stat.stat.exists
+    fail_msg: >-
+      LDAP CA certificate not found at {{ mail_ldap_ca_cert_path }}.
+      The ldap_ca_cert phase should have deployed it. Verify that
+      mail_ldap_ca_cert is set in host_vars/*/secrets.yml.
+  when: mail_ldap_enabled | default(false)
+
+- name: "PHASE [ldap_verify : Execute LDAP User Verification]"
+  when: mail_ldap_enabled | default(false)
+  block:
+    - name: "PHASE [ldap_verify : Create Temporary Directory For Bind Password]"
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: ldap_verify.
+      register: _mail_ldap_verify_tmpdir
+      when: mail_ldap_bind_dn is defined and mail_ldap_bind_password is defined
+      no_log: true
+
+    - name: "PHASE [ldap_verify : Write Bind Password To Temporary File]"
+      ansible.builtin.copy:
+        content: "{{ mail_ldap_bind_password }}"
+        dest: "{{ _mail_ldap_verify_tmpdir.path }}/bindpw"
+        owner: root
+        group: root
+        mode: "0600"
+      when: mail_ldap_bind_dn is defined and mail_ldap_bind_password is defined
+      no_log: true
+
+    - name: "PHASE [ldap_verify : Build LDAP Search Filter]"
+      ansible.builtin.set_fact:
+        _mail_ldap_verify_uid_filter: "(|{% for u in mail_ldap_users %}(uid={{ u }}){% endfor %})"
+      no_log: true
+
+    - name: "PHASE [ldap_verify : Search LDAP For TA Users]"
+      ansible.builtin.shell:
+        cmd: |
+          args=(
+            -H "{{ mail_ldap_uri }}"
+            -b "{{ mail_ldap_base_dn }}"
+            -x
+          )
+          {% if mail_ldap_bind_dn is defined and mail_ldap_bind_password is defined %}
+          args+=(
+            -D "{{ mail_ldap_bind_dn }}"
+            -y "{{ _mail_ldap_verify_tmpdir.path }}/bindpw"
+          )
+          {% endif %}
+          args+=(
+            "{{ _mail_ldap_verify_uid_filter }}"
+            dn
+            uid
+          )
+          ldapsearch "${args[@]}"
+        executable: /bin/bash
+      environment:
+        LDAPTLS_CACERT: "{{ mail_ldap_ca_cert_path }}"
+      register: _mail_ldap_verify_search
+      changed_when: false
+      no_log: true
+
+    - name: "PHASE [ldap_verify : Assert LDAP Search Succeeded]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - _mail_ldap_verify_search.rc == 0
+        fail_msg: >-
+          LDAP search against {{ mail_ldap_uri }} failed (rc={{ _mail_ldap_verify_search.rc }}).
+          Verify LDAP server reachability, bind credentials, and CA certificate trust.
+      no_log: true
+
+    - name: "PHASE [ldap_verify : Assert Every TA User Exists In LDAP]"
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - "'uid: ' ~ item in _mail_ldap_verify_search.stdout"
+        fail_msg: >-
+          LDAP user '{{ item }}' not found in search results from {{ mail_ldap_uri }}.
+          Verify that the user exists under {{ mail_ldap_base_dn }}.
+      loop: "{{ mail_ldap_users }}"
+      no_log: true
+
+  always:
+    - name: "PHASE [ldap_verify : Clean Up Temporary Bind Password Directory]"
+      ansible.builtin.file:
+        state: absent
+        path: "{{ _mail_ldap_verify_tmpdir.path }}"
+      when: _mail_ldap_verify_tmpdir is defined and _mail_ldap_verify_tmpdir.path is defined
+      changed_when: false
+      no_log: true
+
+- name: "PHASE [ldap_verify : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed LDAP verification phase"

@@ -13,13 +13,62 @@
     owner: root
     group: root
     mode: "0600"
+  notify: "PHASE [handler : Restart WireGuard Tunnel]"
   no_log: true
 
+- name: "PHASE [setup : Apply WireGuard Configuration Changes]"
+  ansible.builtin.meta: flush_handlers
+
 - name: "PHASE [setup : Enable And Start WireGuard Tunnels]"
-  ansible.builtin.systemd:
+  ansible.builtin.systemd_service:
     name: wg-quick@wg0
     enabled: true
     state: started
+
+- name: "PHASE [setup : Probe WireGuard Health Targets]"
+  when: wireguard_healthcheck_targets | length > 0
+  ansible.builtin.command:
+    argv:
+      - ping
+      - -c
+      - "1"
+      - -W
+      - "{{ wireguard_healthcheck_timeout }}"
+      - "{{ item }}"
+  loop: "{{ wireguard_healthcheck_targets }}"
+  register: _wireguard_health_probe
+  changed_when: false
+  failed_when: false
+
+- name: "PHASE [setup : Restart WireGuard After Failed Health Probe]"
+  when:
+    - wireguard_healthcheck_targets | length > 0
+    - _wireguard_health_probe is defined
+    - >-
+      (_wireguard_health_probe.results
+       | selectattr('rc', 'ne', 0)
+       | list
+       | length) > 0
+  ansible.builtin.systemd_service:
+    name: wg-quick@wg0
+    state: restarted
+
+- name: "PHASE [setup : Verify WireGuard Health Targets]"
+  when: wireguard_healthcheck_targets | length > 0
+  ansible.builtin.command:
+    argv:
+      - ping
+      - -c
+      - "1"
+      - -W
+      - "{{ wireguard_healthcheck_timeout }}"
+      - "{{ item }}"
+  loop: "{{ wireguard_healthcheck_targets }}"
+  register: _wireguard_health_verify
+  changed_when: false
+  retries: "{{ wireguard_healthcheck_retries }}"
+  delay: "{{ wireguard_healthcheck_delay }}"
+  until: _wireguard_health_verify.rc == 0
 
 - name: "PHASE [setup : END]"
   become: false

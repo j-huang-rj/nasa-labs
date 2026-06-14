@@ -1,0 +1,45 @@
+---
+- name: "PHASE [home_tree : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Reconcile NFS home directory tree from LDAP identity data"
+
+- name: "PHASE [home_tree : Create Parent Directories]"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - path: /u
+      owner: root
+      group: root
+      mode: "0755"
+    - path: /u/ta
+      owner: root
+      group: root
+      mode: "0755"
+    - path: /u/stu
+      owner: root
+      group: root
+      mode: "0755"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: "PHASE [home_tree : Reconcile User Home Directories]"
+  ansible.builtin.file:
+    path: "{{ _home_user.value.home }}"
+    state: directory
+    owner: "{{ _home_user.value.uid_number }}"
+    group: "{{ _home_user.value.gid_number }}"
+    mode: "0711"
+  loop: "{{ ldap_users | dict2items }}"
+  loop_control:
+    loop_var: _home_user
+    label: "uid={{ _home_user.key }} home={{ _home_user.value.home }}"
+
+- name: "PHASE [home_tree : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed home directory tree reconciliation"

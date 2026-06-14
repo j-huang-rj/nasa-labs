@@ -1,0 +1,110 @@
+---
+- name: "PHASE [ca : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Distribute LDAP CA trust to workstations"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: only configure CA trust on workstation-auth hosts
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ca : Skip CA Trust For Non-Workstation Hosts]"
+  ansible.builtin.debug:
+    msg: >-
+      Skipping LDAP CA trust on {{ inventory_hostname }}:
+      ldap_client_workstation_auth_enabled is false or undefined.
+  when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Source selection: prefer explicit ldap_tls_ca_certificate if non-empty
+# otherwise slurp the active OpenLDAP certificate
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ca : Slurp OpenLDAP CA Certificate From LDAP Server]"
+  ansible.builtin.slurp:
+    src: "{{ ldap_tls_ca_source_path }}"
+  delegate_to: "{{ ldap_tls_ca_source_host }}"
+  register: _ldap_client_slurp_cert
+  when:
+    - ldap_client_workstation_auth_enabled | default(false) | bool
+    - ldap_tls_ca_certificate is not defined or ldap_tls_ca_certificate | length == 0
+
+- name: "PHASE [ca : Determine CA Certificate Content]"
+  ansible.builtin.set_fact:
+    _ldap_client_ca_content: >-
+      {{ ldap_tls_ca_certificate
+         if (ldap_tls_ca_certificate is defined and ldap_tls_ca_certificate | length > 0)
+         else _ldap_client_slurp_cert.content | b64decode }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+  no_log: true
+
+- name: "PHASE [ca : Deploy LDAP CA Certificate Anchor]"
+  ansible.builtin.copy:
+    content: "{{ _ldap_client_ca_content }}"
+    dest: "{{ ldap_client_ca_cert_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+  register: _ldap_client_ca_deploy
+
+- name: "PHASE [ca : Update CA Trust Bundle]"
+  ansible.builtin.command:
+    cmd: update-ca-trust extract
+  when:
+    - ldap_client_workstation_auth_enabled | default(false) | bool
+    - _ldap_client_ca_deploy is changed
+  changed_when: true
+
+# ─────────────────────────────────────────────────────────────────────────
+# CA-independent LDAPS verification with explicit trusted certificate
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [ca : LDAPS RootDSE Search With Certificate Validation]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -H {{ ldap_server_uri }}
+      -x -b "" -s base '(objectClass=*)' dn
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_client_ca_cert_path }}"
+  changed_when: false
+  register: _ldap_client_ldaps_rootdse
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [ca : Assert LDAPS RootDSE Reachable]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_ldaps_rootdse.rc == 0
+      - "'dn:' in _ldap_client_ldaps_rootdse.stdout"
+    fail_msg: >-
+      LDAPS rootDSE search from {{ inventory_hostname }} failed with CA validation.
+      ldap_server_uri={{ ldap_server_uri }}
+      rc={{ _ldap_client_ldaps_rootdse.rc }}
+      stderr={{ _ldap_client_ldaps_rootdse.stderr | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [ca : LDAPS Base DN Search With Certificate Validation]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -H {{ ldap_server_uri }}
+      -x -b "{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_client_ca_cert_path }}"
+  changed_when: false
+  register: _ldap_client_ldaps_basedn
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [ca : Assert LDAPS Base DN Reachable]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_ldaps_basedn.rc == 0
+      - ldap_base_dn in _ldap_client_ldaps_basedn.stdout
+    fail_msg: >-
+      LDAPS base DN search ({{ ldap_base_dn }}) from {{ inventory_hostname }} failed with CA validation.
+      rc={{ _ldap_client_ldaps_basedn.rc }}
+      stderr={{ _ldap_client_ldaps_basedn.stderr | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [ca : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed CA trust phase"

@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+dn: uid={{ username }},ou=People,{{ ldap_base_dn }}
+objectClass: top
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: ldapPublicKey
+uid: {{ username }}
+cn: {{ username }}
+sn: {{ username }}
+uidNumber: {{ uid_number }}
+gidNumber: {{ gid_number }}
+homeDirectory: {{ home }}
+loginShell: /bin/bash
+mail: {{ mail_address }}
+sshPublicKey: {{ ssh_public_key }}
+userPassword: {{ password_hash }}

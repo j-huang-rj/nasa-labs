@@ -220,3 +220,13 @@ argument_specs:
                   - sctp
                   - dccp
                 description: IP protocol for the port
+
+          rich_rules:
+            type: list
+            elements: str
+            required: false
+            default: []
+            description: >-
+              Firewalld rich-language rules for this policy. Each element is a
+              rich-rule string applied to the policy via
+              firewall-cmd --policy=<name> --add-rich-rule.

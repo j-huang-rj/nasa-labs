@@ -1,4 +1,7 @@
 ---
+# Component gate
+docker_enabled: false
+
 docker_image_archives: []
 docker_containers: []
 docker_container_network_mode: bridge

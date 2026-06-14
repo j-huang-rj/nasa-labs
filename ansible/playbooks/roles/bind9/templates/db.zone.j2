@@ -1,7 +1,7 @@
 ; Managed by Ansible -- do not edit manually.
 {% set _serial_result = bind9_zone_render_state[item.file] %}
 
-$TTL 86400
+$TTL {{ bind9_zone_ttl }}
 $ORIGIN {{ item.name }}.
 
 {{ "%-16s" | format("@") }} IN  {{ "%-6s" | format("SOA") }} {{ bind9_primary_mname }} {{ item.soa.admin }} (

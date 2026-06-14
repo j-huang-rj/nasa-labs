@@ -9,6 +9,92 @@ argument_specs:
         required: true
         description: Whether the mail role should be active on this host
 
+      # Feature gates
+      mail_postfix_enabled:
+        type: bool
+        required: false
+        description: Whether to configure Postfix on this host
+
+      mail_dovecot_enabled:
+        type: bool
+        required: false
+        description: Whether to configure Dovecot on this host
+
+      mail_dovecot_auth_enabled:
+        type: bool
+        required: false
+        description: Whether Dovecot authentication configuration is enabled
+
+      mail_dovecot_imap_enabled:
+        type: bool
+        required: false
+        description: Whether Dovecot should expose IMAP service behavior on this host
+
+      mail_dovecot_lmtp_enabled:
+        type: bool
+        required: false
+        description: Whether Dovecot should expose LMTP service behavior on this host
+
+      mail_dovecot_auth_socket_enabled:
+        type: bool
+        required: false
+        description: Whether to render the local Postfix-facing Dovecot auth Unix socket
+
+      mail_dovecot_lmtp_unix_socket_enabled:
+        type: bool
+        required: false
+        description: Whether to render the local Postfix-facing Dovecot LMTP Unix socket
+
+      mail_dovecot_lmtp_inet_listener_enabled:
+        type: bool
+        required: false
+        description: Whether to render a Dovecot LMTP TCP listener
+
+      mail_opendkim_enabled:
+        type: bool
+        required: false
+        description: Whether to configure OpenDKIM on this host
+
+      mail_filter_milter_enabled:
+        type: bool
+        required: false
+        description: Whether to configure the filter/rewrite milter on this host
+
+      mail_list_aliases_enabled:
+        type: bool
+        required: false
+        description: Whether to configure Postfix mailing-list aliases on this host
+
+      mail_list_api_enabled:
+        type: bool
+        required: false
+        description: Whether to deploy the mailing-list API on this host
+
+      mail_vmail_identity_enabled:
+        type: bool
+        required: false
+        description: Whether to create the vmail user and group on this host
+
+      mail_vmail_home_enabled:
+        type: bool
+        required: false
+        description: Whether to create the vmail home/Maildir storage root on this host
+
+      mail_dovecot_passwd_file_enabled:
+        type: bool
+        required: false
+        description: Whether to render the local Dovecot passwd-file on this host
+
+      mail_tls_enabled:
+        type: bool
+        required: false
+        description: Whether to deploy mail TLS material on this host
+
+      mail_ldap_verify_enabled:
+        type: bool
+        required: false
+        description: Whether to run mail-role LDAPS verification from this host
+
       # DNS zone bridge
       mail_zone_name:
         type: str
@@ -21,6 +107,11 @@ argument_specs:
         required: false
         description: >-
           Secondary virtual mailbox domain
+
+      mail_smtp_fqdn:
+        type: str
+        required: false
+        description: FQDN used as Postfix myhostname and an OpenDKIM trusted host
 
       # Postfix
       mail_postfix_packages:
@@ -38,6 +129,16 @@ argument_specs:
         type: str
         required: false
         description: Absolute path to the Postfix configuration directory
+
+      mail_postfix_ldap_sender_login_maps_path:
+        type: str
+        required: false
+        description: Absolute path to the Postfix LDAP sender-login map configuration
+
+      mail_postfix_ldap_virtual_mailbox_maps_path:
+        type: str
+        required: false
+        description: Absolute path to the Postfix LDAP virtual-mailbox map configuration
 
       # Dovecot
       mail_dovecot_packages:
@@ -61,6 +162,11 @@ argument_specs:
         required: false
         description: Absolute path for the Dovecot passwd-file on the target host
 
+      mail_dovecot_ldap_account_gate_path:
+        type: str
+        required: false
+        description: Absolute path for the Dovecot LDAP account-gate configuration
+
       mail_dovecot_auth_socket_path:
         type: str
         required: false
@@ -72,6 +178,50 @@ argument_specs:
         required: false
         description: >-
           Path for the Dovecot LMTP socket inside the Postfix chroot for mailbox delivery
+
+      mail_lmtp_private_ip:
+        type: str
+        required: false
+        description: Private IMAP-host address used as the default LMTP TCP listener address
+
+      mail_lmtp_port:
+        type: int
+        required: false
+        description: Port used as the default LMTP TCP listener port
+
+      mail_dovecot_lmtp_listen_address:
+        type: str
+        required: false
+        description: Address for the optional Dovecot LMTP TCP listener
+
+      mail_dovecot_lmtp_listen_port:
+        type: int
+        required: false
+        description: Port for the optional Dovecot LMTP TCP listener
+
+      mail_dovecot_protocols:
+        type: list
+        elements: str
+        required: false
+        description: Dovecot protocols enabled on this host
+
+      mail_postfix_virtual_transport:
+        type: str
+        required: false
+        description: Postfix virtual transport target for mailbox delivery
+
+      mail_postfix_smtpd_sasl_path:
+        type: str
+        required: false
+        description: Postfix Dovecot SASL path
+
+      mail_postfix_mynetworks:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          List of trusted network CIDR ranges for Postfix mynetworks.
+          Defaults to [127.0.0.0/8, lab_nasa_root_cidr].
 
       # Managed domains
       mail_managed_domains:
@@ -108,6 +258,7 @@ argument_specs:
       mail_local_user_password_hashes:
         type: dict
         required: false
+        no_log: true
         description: >-
           Dictionary mapping local user names to hashed passwords for Dovecot passwd-file.
           Must contain keys for all entries in mail_local_users.
@@ -119,11 +270,12 @@ argument_specs:
         required: false
         description: >-
           PEM-encoded TLS certificate content.
-          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
+          Asserted non-empty at runtime when mail_enabled is true.
 
       mail_tls_private_key:
         type: str
         required: false
+        no_log: true
         description: >-
           PEM-encoded TLS private key content.
           Asserted non-empty at runtime when mail_enabled is true (no_log: true).
@@ -147,6 +299,7 @@ argument_specs:
       mail_dkim_private_keys:
         type: dict
         required: false
+        no_log: true
         description: >-
           Dictionary mapping DKIM selector names to PEM-encoded private keys.
           Must contain a key matching mail_dkim_selector.
@@ -272,6 +425,12 @@ argument_specs:
         description: >-
           Absolute path for the API-managed dynamic list alias source map
 
+      mail_virtual_mailbox_maps_path:
+        type: str
+        required: false
+        description: >-
+          Absolute path for the Postfix virtual mailbox recipient source map
+
       mail_list_reserved_names:
         type: list
         elements: str
@@ -372,24 +531,77 @@ argument_specs:
         type: str
         required: false
         description: >-
-          FQDN of the LDAP server to connect to
+          FQDN of the LDAP server to connect to. Defaults to ldap_server_fqdn
+          from the shared LDAP identity (ldap_identity.yml).
 
       mail_ldap_base_dn:
         type: str
         required: false
         description: >-
-          Base DN for LDAP searches derived from mail_zone_name
+          Base DN for LDAP searches. Defaults to ldap_base_dn from the shared
+          LDAP identity (ldap_identity.yml).
 
       mail_ldap_uri:
         type: str
         required: false
-        description: LDAPS URI for the LDAP server
+        description: >-
+          LDAPS URI for the LDAP server. Defaults to ldap_server_uri from the
+          shared LDAP identity (ldap_identity.yml).
 
       mail_ldap_ca_cert_path:
         type: str
         required: false
         description: >-
-          Absolute path to the LDAP CA certificate on the target host
+          Absolute path to the LDAP CA certificate on the target host.
+          Defaults to ldap_tls_ca_cert_path from the shared LDAP identity.
+
+      mail_ldap_ca_cert:
+        type: str
+        required: false
+        description: >-
+          Optional PEM-encoded LDAP CA certificate content to deploy on the mail host.
+          Defaults to ldap_tls_ca_certificate from the shared LDAP identity.
+
+      ldap_tls_ca_certificate:
+        type: str
+        required: false
+        description: >-
+          Shared LDAP CA certificate PEM content from ldap_identity.yml.
+          Used as fallback when mail_ldap_ca_cert is empty.
+
+      ldap_tls_ca_cert_path:
+        type: str
+        required: false
+        description: >-
+          Shared LDAP CA certificate anchor path from ldap_identity.yml.
+          Default for mail_ldap_ca_cert_path.
+
+      ldap_tls_ca_source_host:
+        type: str
+        required: false
+        description: >-
+          Shared inventory hostname to slurp the LDAP CA certificate from.
+          Used when both mail_ldap_ca_cert and ldap_tls_ca_certificate are empty.
+
+      ldap_tls_ca_source_path:
+        type: str
+        required: false
+        description: >-
+          Shared absolute path to the LDAP CA certificate on the source host.
+          Used when both mail_ldap_ca_cert and ldap_tls_ca_certificate are empty.
+
+      mail_ldap_bind_dn:
+        type: str
+        required: false
+        description: >-
+          Optional LDAP bind DN for mail-role LDAPS verification searches
+
+      mail_ldap_bind_password:
+        type: str
+        required: false
+        no_log: true
+        description: >-
+          Optional LDAP bind password for mail-role LDAPS verification searches
 
       mail_dovecot_ldap_packages:
         type: list
@@ -409,3 +621,10 @@ argument_specs:
         required: false
         description: >-
           List of LDAP usernames for verifier and sender-login maps
+
+      mail_ldap_forbidden_users:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          LDAP usernames that must never be accepted by mail LDAP allow-lists

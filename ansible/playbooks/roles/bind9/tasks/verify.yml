@@ -344,7 +344,7 @@
             or 'Transfer failed' in _bind9_verify_axfr_reject.stdout
             or _bind9_verify_axfr_reject.rc != 0
         fail_msg: >-
-          AXFR from loopback was not refused (only 172.16.0.53 should be allowed).
+          AXFR from loopback was not refused (only {{ bind9_secondary_ns_ip }} should be allowed).
           rc={{ _bind9_verify_axfr_reject.rc }},
           stdout={{ _bind9_verify_axfr_reject.stdout | default('') }}
 
@@ -546,11 +546,11 @@
     - name: "PHASE [verify : Secondary - Private View Forward A Lookup]"
       ansible.builtin.command:
         cmd: >-
-          dig -b 172.16.0.53 @172.16.0.53
+          dig -b {{ bind9_secondary_ns_ip }} @{{ bind9_secondary_ns_ip }}
           ns.{{ bind9_forward_zone_name }} A +noall +answer
       changed_when: false
       register: _bind9_verify_secondary_private_fwd
-      until: "'172.16.0.53' in _bind9_verify_secondary_private_fwd.stdout"
+      until: "bind9_secondary_ns_ip in _bind9_verify_secondary_private_fwd.stdout"
       retries: 10
       delay: 1
 
@@ -558,7 +558,7 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'172.16.0.53' in _bind9_verify_secondary_private_fwd.stdout"
+          - bind9_secondary_ns_ip in _bind9_verify_secondary_private_fwd.stdout
         fail_msg: >-
           Secondary private view did not return expected A record for
           ns.{{ bind9_forward_zone_name }}.
@@ -567,7 +567,7 @@
     - name: "PHASE [verify : Secondary - Default-Source Forward A Lookup (DMZ Private View)]"
       ansible.builtin.command:
         cmd: >-
-          dig @172.16.0.53
+          dig @{{ bind9_secondary_ns_ip }}
           ns.{{ bind9_forward_zone_name }} A +noall +answer
       changed_when: false
       register: _bind9_verify_secondary_default_src_fwd
@@ -589,7 +589,7 @@
     - name: "PHASE [verify : Secondary - Public-Only Reverse Zone SOA Lookup]"
       ansible.builtin.command:
         cmd: >-
-          dig @172.16.0.53 -k {{ _bind9_axfr_keyfile.path }}
+          dig @{{ bind9_secondary_ns_ip }} -k {{ _bind9_axfr_keyfile.path }}
           {{ bind9_vpn_child_reverse_zone_name }} SOA +noall +answer
       changed_when: false
       register: _bind9_verify_secondary_public_only_soa
@@ -629,7 +629,7 @@
             cmd: >-
               nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
-              server 172.16.1.53
+              server {{ bind9_primary_ns_ip }}
               zone {{ bind9_forward_zone_name }}
               update add dynamic2.{{ bind9_forward_zone_name }}. 300 A {{ _bind9_prop_test_ip }}
               send
@@ -640,7 +640,7 @@
             cmd: >-
               nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
-              server 172.16.1.53
+              server {{ bind9_primary_ns_ip }}
               zone {{ bind9_internal_reverse_zone }}
               update add {{ _bind9_prop_test_ip_rev }}. 300 PTR dynamic2.{{ bind9_forward_zone_name }}.
               send
@@ -649,7 +649,7 @@
         - name: "PHASE [verify : Propagation - Poll Secondary Until dynamic2 Appears]"
           ansible.builtin.command:
             cmd: >-
-              dig -b 172.16.0.53 @172.16.0.53
+              dig -b {{ bind9_secondary_ns_ip }} @{{ bind9_secondary_ns_ip }}
               dynamic2.{{ bind9_forward_zone_name }} A +short
           changed_when: false
           register: _bind9_verify_prop_poll
@@ -660,7 +660,7 @@
         - name: "PHASE [verify : Propagation - Poll Secondary Until Reverse PTR Appears]"
           ansible.builtin.command:
             cmd: >-
-              dig -b 172.16.0.53 @172.16.0.53
+              dig -b {{ bind9_secondary_ns_ip }} @{{ bind9_secondary_ns_ip }}
               -x {{ _bind9_prop_test_ip }} +short
           changed_when: false
           register: _bind9_verify_prop_poll_ptr
@@ -673,7 +673,7 @@
             cmd: >-
               nsupdate -k {{ _bind9_tsig_keyfile.path }}
             stdin: |
-              server 172.16.1.53
+              server {{ bind9_primary_ns_ip }}
               zone {{ bind9_forward_zone_name }}
               update delete dynamic2.{{ bind9_forward_zone_name }}. A
               send
@@ -690,7 +690,7 @@
         cmd: >-
           nsupdate -k {{ _bind9_tsig_keyfile.path }}
         stdin: |
-          server 172.16.0.53
+          server {{ bind9_secondary_ns_ip }}
           zone {{ bind9_forward_zone_name }}
           update add dynamic1.{{ bind9_forward_zone_name }}. 300 A 10.0.0.1
           send
@@ -714,7 +714,7 @@
 
     - name: "PHASE [verify : Secondary - AXFR From Non-Primary Must Be Refused]"
       ansible.builtin.command:
-        cmd: "dig @172.16.0.53 {{ bind9_forward_zone_name }} AXFR"
+        cmd: "dig @{{ bind9_secondary_ns_ip }} {{ bind9_forward_zone_name }} AXFR"
       changed_when: false
       register: _bind9_verify_secondary_axfr_reject
       failed_when: false
@@ -738,7 +738,7 @@
     - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For Forward Zone]"
       ansible.builtin.command:
         cmd: >-
-          dig @172.16.0.53 -k {{ _bind9_axfr_keyfile.path }}
+          dig @{{ bind9_secondary_ns_ip }} -k {{ _bind9_axfr_keyfile.path }}
           {{ bind9_forward_zone_name }} DNSKEY +dnssec
       changed_when: false
       register: _bind9_verify_secondary_dnskey_fwd
@@ -767,7 +767,7 @@
     - name: "PHASE [verify : Secondary - Public View DNSKEY +dnssec For VPN Child Reverse Zone]"
       ansible.builtin.command:
         cmd: >-
-          dig @172.16.0.53 -k {{ _bind9_axfr_keyfile.path }}
+          dig @{{ bind9_secondary_ns_ip }} -k {{ _bind9_axfr_keyfile.path }}
           {{ bind9_vpn_child_reverse_zone_name }} DNSKEY +dnssec
       changed_when: false
       register: _bind9_verify_secondary_dnskey_vpn_rev
@@ -869,22 +869,22 @@
       changed_when: false
       register: _bind9_verify_resolver_private_ns
 
-    - name: "PHASE [verify : Assert Private-NS Resolves To 172.16.1.53]"
+    - name: "PHASE [verify : Assert Private-NS Resolves To Primary NS IP]"
       ansible.builtin.assert:
         quiet: true
         that:
-          - "'172.16.1.53' in _bind9_verify_resolver_private_ns.stdout"
+          - bind9_primary_ns_ip in _bind9_verify_resolver_private_ns.stdout
         fail_msg: >-
-          Resolver private-ns forward lookup did not return 172.16.1.53.
+          Resolver private-ns forward lookup did not return {{ bind9_primary_ns_ip }}.
           Got: {{ _bind9_verify_resolver_private_ns.stdout | default('') }}
 
     - name: "PHASE [verify : Resolver - Private-NS Reverse Lookup]"
       ansible.builtin.command:
-        cmd: "dig @127.0.0.1 -x 172.16.1.53 +short"
+        cmd: "dig @127.0.0.1 -x {{ bind9_primary_ns_ip }} +short"
       changed_when: false
       register: _bind9_verify_resolver_private_ns_rev
 
-    - name: "PHASE [verify : Assert 172.16.1.53 Reverse Lookup Returns Private-NS]"
+    - name: "PHASE [verify : Assert Primary NS Reverse Lookup Returns Private-NS]"
       ansible.builtin.assert:
         quiet: true
         that:
@@ -892,7 +892,7 @@
             ('private-ns.' ~ bind9_forward_zone_name ~ '.')
             in _bind9_verify_resolver_private_ns_rev.stdout
         fail_msg: >-
-          Resolver reverse lookup for 172.16.1.53 did not return private-ns.{{ bind9_forward_zone_name }}.
+          Resolver reverse lookup for {{ bind9_primary_ns_ip }} did not return private-ns.{{ bind9_forward_zone_name }}.
           Got: {{ _bind9_verify_resolver_private_ns_rev.stdout | default('') }}
 
     # --- DNSSEC AD-bit validation ---
@@ -920,8 +920,8 @@
         argv:
           - python3
           - "-"
-          - "{{ hostvars[groups['router'] | first].wireguard_address.split('/')[0] }}"
-          - "172.16.1.153"
+          - "{{ bind9_vpn_router_ip }}"
+          - "{{ bind9_dns_resolver_ip }}"
         stdin: |
           import random
           import socket

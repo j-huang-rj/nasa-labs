@@ -1,0 +1,13 @@
+# Postfix virtual mailbox recipient map - managed by Ansible
+# Restricts direct mailbox recipients to local users and static LDAP users.
+
+{% for domain in mail_managed_domains %}
+{% for user in mail_local_users %}
+{{ user }}@{{ domain }} {{ user }}/
+{% endfor %}
+{% if mail_ldap_enabled | default(false) %}
+{% for user in mail_ldap_users | default([]) %}
+{{ user }}@{{ domain }} {{ user }}/
+{% endfor %}
+{% endif %}
+{% endfor %}

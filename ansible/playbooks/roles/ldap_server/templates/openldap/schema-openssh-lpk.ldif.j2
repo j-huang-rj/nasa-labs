@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# OpenLDAP schema for OpenSSH LDAP public-key authentication
+dn: cn=openssh-lpk,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: openssh-lpk
+olcAttributeTypes: ( 1.3.6.1.4.1.24552.500.1.1.1.13
+  NAME 'sshPublicKey'
+  DESC 'OpenSSH public key'
+  EQUALITY caseExactIA5Match
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
+ )
+olcObjectClasses: ( 1.3.6.1.4.1.24552.500.1.1.2.0
+  NAME 'ldapPublicKey'
+  DESC 'Maps an OpenSSH public key to a user'
+  SUP top
+  AUXILIARY
+  MAY sshPublicKey
+ )

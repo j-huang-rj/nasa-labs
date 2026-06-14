@@ -4,6 +4,14 @@
   ansible.builtin.debug:
     msg: "Validate docker role variables"
 
+- name: "PHASE [assert : Check docker_enabled Is True]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - docker_enabled | default(false) | bool
+    fail_msg: "docker role must run only on hosts with docker_enabled=true"
+
 - name: "PHASE [assert : Check Docker Image Archive Definitions]"
   become: false
   ansible.builtin.assert:

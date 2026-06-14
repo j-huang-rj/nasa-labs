@@ -1,0 +1,34 @@
+---
+# Prerequisites:
+#   - bootstrap.yml
+#   - dns_configure.yml
+
+- name: LDAP And NFS Server Configuration
+  hosts: "ldap_servers:nfs_servers"
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Run LDAP Server Role
+      ansible.builtin.include_role:
+        name: ldap_server
+      when: ldap_server_enabled | default(false) | bool
+
+    - name: Run NFS Role
+      ansible.builtin.include_role:
+        name: nfs
+      when: nfs_enabled | default(false) | bool
+
+- name: LDAP Client And NFS Client Configuration
+  hosts: "ldap_clients:nfs_clients"
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Run NFS Role
+      ansible.builtin.include_role:
+        name: nfs
+      when: nfs_enabled | default(false) | bool
+
+    - name: Run LDAP Client Role
+      ansible.builtin.include_role:
+        name: ldap_client
+      when: ldap_client_enabled | default(false) | bool

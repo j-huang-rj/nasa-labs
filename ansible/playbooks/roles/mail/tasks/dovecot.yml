@@ -67,10 +67,32 @@
   when: mail_ldap_enabled | default(false)
   notify: "PHASE [handler : Restart Dovecot]"
 
+- name: "PHASE [dovecot : Render Dovecot LDAP Account Gate Configuration]"
+  ansible.builtin.template:
+    src: dovecot/dovecot-ldap-account-gate.conf.ext.j2
+    dest: "{{ mail_dovecot_ldap_account_gate_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: mail_ldap_enabled | default(false)
+  notify: "PHASE [handler : Restart Dovecot]"
+
+- name: "PHASE [dovecot : Remove Legacy Dovecot LDAP TA Group Gate Configuration]"
+  ansible.builtin.file:
+    state: absent
+    path: "{{ mail_dovecot_conf_dir }}/dovecot-ldap-ta-group.conf.ext"
+  when: mail_ldap_enabled | default(false)
+
 - name: "PHASE [dovecot : Remove Dovecot LDAP Configuration When Disabled]"
   ansible.builtin.file:
     state: absent
     path: "{{ mail_dovecot_conf_dir }}/dovecot-ldap.conf.ext"
+  when: not (mail_ldap_enabled | default(false))
+
+- name: "PHASE [dovecot : Remove Dovecot LDAP Account Gate Configuration When Disabled]"
+  ansible.builtin.file:
+    state: absent
+    path: "{{ mail_dovecot_ldap_account_gate_path }}"
   when: not (mail_ldap_enabled | default(false))
 
 - name: "PHASE [dovecot : Validate Dovecot Configuration]"

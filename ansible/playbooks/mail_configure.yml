@@ -1,6 +1,8 @@
 ---
 # Prerequisites:
+#   - bootstrap.yml
 #   - dns_configure.yml
+#   - ldap_configure.yml
 
 - name: Mail Service Configuration
   hosts: mail
@@ -8,4 +10,4 @@
   become: true
   roles:
     - role: mail
-      when: mail_enabled
+      when: mail_enabled | default(false) | bool

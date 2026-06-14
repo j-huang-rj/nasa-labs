@@ -4,7 +4,7 @@
   ansible.builtin.debug:
     msg: "Starting execution of routing role"
 
-- name: Setup Routing
+- name: "PHASE [main : Setup Routing]"
   ansible.builtin.import_tasks: setup.yml
 
 - name: "END"

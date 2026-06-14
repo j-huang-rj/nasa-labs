@@ -409,6 +409,81 @@
       changed_when: true
       notify: "PHASE [handler : Reload firewalld]"
 
+    - name: "PHASE [policy : Get Firewall Policy Rich Rules]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.name }}"
+          - --list-rich-rules
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: firewall_policy_rich_rule_state
+      changed_when: false
+
+    - name: "PHASE [policy : Initialize Rich Rule Maps]"
+      ansible.builtin.set_fact:
+        firewall_policy_rich_rule_desired_map: {}
+        firewall_policy_rich_rule_current_map: {}
+      changed_when: false
+
+    - name: "PHASE [policy : Build Desired Rich Rule Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_rich_rule_desired_map: >-
+          {{
+            firewall_policy_rich_rule_desired_map
+            | combine({ item.name: (item.rich_rules | default([])) })
+          }}
+      loop: "{{ firewall_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Build Current Rich Rule Map]"
+      ansible.builtin.set_fact:
+        firewall_policy_rich_rule_current_map: >-
+          {{
+            firewall_policy_rich_rule_current_map
+            | combine({
+              item.item.name: (
+                item.stdout_lines | default([]) | map('trim') | reject('equalto', '') | list
+              )
+            })
+          }}
+      loop: "{{ firewall_policy_rich_rule_state.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: "PHASE [policy : Ensure Firewall Policy Rich Rules]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.name }}"
+          - "--add-rich-rule={{ item.1 }}"
+      loop: "{{ firewall_policies | subelements('rich_rules', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} -> {{ item.1 | truncate(60) }}"
+      when: item.1 not in (firewall_policy_rich_rule_current_map[item.0.name] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
+    - name: "PHASE [policy : Remove Stale Firewall Policy Rich Rules]"
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--policy={{ item.0.key }}"
+          - "--remove-rich-rule={{ item.1 }}"
+      loop: "{{ firewall_policy_rich_rule_current_map | dict2items | subelements('value', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.key }} -> {{ item.1 | truncate(60) }}"
+      when: item.1 not in (firewall_policy_rich_rule_desired_map[item.0.key] | default([]))
+      changed_when: true
+      notify: "PHASE [handler : Reload firewalld]"
+
 - name: "PHASE [policy : Disable Forwarding For All Active Zones By Default]"
   ansible.posix.firewalld:
     zone: "{{ item }}"

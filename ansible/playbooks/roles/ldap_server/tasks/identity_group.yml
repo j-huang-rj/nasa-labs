@@ -1,0 +1,95 @@
+---
+- name: "PHASE [identities : Render Group LDIF] | {{ _ident_group.key }}"
+  ansible.builtin.template:
+    src: openldap/group.ldif.j2
+    dest: "/tmp/openldap-identities/group-{{ _ident_group.key }}.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+  vars:
+    group_name: "{{ _ident_group.key }}"
+    group_gid: "{{ _ident_group.value.gid }}"
+    member_uids: "{{ _ident_group.value.member_uids }}"
+
+- name: "PHASE [identities : Search Existing Group] | {{ _ident_group.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -b "cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}" -s base '(objectClass=posixGroup)' dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_group_exists
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [identities : Create Group If Missing] | {{ _ident_group.key }}"
+  when: _ldap_server_group_exists.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -f /tmp/openldap-identities/group-{{ _ident_group.key }}.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [identities : Search Existing Group Managed Attributes] | {{ _ident_group.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -b "cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}" -s base
+      '(objectClass=posixGroup)' cn gidNumber memberUid
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_group_current
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [identities : Compute Group Modify Gate] | {{ _ident_group.key }}"
+  ansible.builtin.set_fact:
+    _ldap_server_group_expected_member_count: "{{ _ident_group.value.member_uids | length }}"
+    _ldap_server_group_current_member_count: >-
+      {{ _ldap_server_group_current.stdout | default('')
+         | regex_findall('^memberUid:', multiline=true)
+         | length }}
+    _ldap_server_group_current_members_sorted: >-
+      {{ _ldap_server_group_current.stdout | default('')
+         | regex_findall('^memberUid:\s+(\S+)', multiline=true)
+         | sort }}
+    _ldap_server_group_expected_members_sorted: >-
+      {{ _ident_group.value.member_uids | sort }}
+
+- name: "PHASE [identities : Evaluate Group Modify Gate] | {{ _ident_group.key }}"
+  ansible.builtin.set_fact:
+    _ldap_server_group_needs_modify: >-
+      {{ _ldap_server_group_current.rc != 0
+         or _ldap_server_group_current.stdout | default('') | regex_search('cn:\s*' ~ _ident_group.key ~ '\b') is none
+         or _ldap_server_group_current.stdout | default('') | regex_search('gidNumber:\s*' ~ (_ident_group.value.gid | string) ~ '\s') is none
+         or (_ldap_server_group_current_members_sorted | default([])) != (_ldap_server_group_expected_members_sorted | default([])) }}
+
+- name: "PHASE [identities : Modify Group To Exact State] | {{ _ident_group.key }}"
+  when: _ldap_server_group_needs_modify | default(false) | bool
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }}
+    stdin: |
+      dn: cn={{ _ident_group.key }},ou=Group,{{ ldap_base_dn }}
+      changetype: modify
+      replace: cn
+      cn: {{ _ident_group.key }}
+      -
+      replace: gidNumber
+      gidNumber: {{ _ident_group.value.gid }}
+      -
+      replace: memberUid
+      {% for uid in _ident_group.value.member_uids %}
+      memberUid: {{ uid }}
+      {% endfor %}
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"

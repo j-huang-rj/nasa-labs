@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+{% if entry_type == 'base' %}
+dn: {{ ldap_base_dn }}
+objectClass: top
+objectClass: dcObject
+objectClass: organization
+o: {{ ldap_domain }}
+dc: {{ ldap_domain.split('.')[0] }}
+{% elif entry_type == 'ou' %}
+dn: ou={{ ou_name }},{{ ldap_base_dn }}
+objectClass: top
+objectClass: organizationalUnit
+ou: {{ ou_name }}
+{% endif %}

@@ -1,0 +1,391 @@
+---
+argument_specs:
+  main:
+    short_description: Validate ldap_server role variables
+
+    options:
+      ldap_server_enabled:
+        type: bool
+        required: true
+        description: Whether the ldap_server role should be active on this host
+
+      ldap_server_epel_package:
+        type: str
+        required: false
+        description: EPEL release package name for OpenLDAP server availability
+
+      ldap_server_packages:
+        type: list
+        elements: str
+        required: false
+        description: DNF packages to install for OpenLDAP server and client tools
+
+      ldap_server_service_name:
+        type: str
+        required: false
+        description: Systemd unit name for the OpenLDAP service (slapd)
+
+      ldap_server_module_dir:
+        type: str
+        required: false
+        description: Directory containing OpenLDAP dynamically-loadable modules
+
+      ldap_server_required_modules:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          OpenLDAP modules to load idempotently. Each entry defines load (la name)
+          and path (absolute filesystem path).
+
+      ldap_server_tls_cert_dir:
+        type: str
+        required: false
+        description: Directory for the LDAPS TLS certificate file
+
+      ldap_server_tls_key_dir:
+        type: str
+        required: false
+        description: Directory for the LDAPS TLS private key file
+
+      ldap_server_tls_cert_path:
+        type: str
+        required: false
+        description: Absolute path to the LDAPS TLS certificate file
+
+      ldap_server_tls_key_path:
+        type: str
+        required: false
+        description: Absolute path to the LDAPS TLS private key file
+
+      ldap_server_data_dir:
+        type: str
+        required: false
+        description: Directory for the OpenLDAP MDB database files
+
+      ldap_server_database_suffix:
+        type: str
+        required: false
+        description: MDB database suffix (equal to ldap_base_dn)
+
+      ldap_server_root_dn:
+        type: str
+        required: false
+        description: Root DN for the MDB database (cn=admin,<suffix>)
+
+      ldap_server_olc_database_dn:
+        type: str
+        required: false
+        description: OLC entry DN for the MDB database
+
+      ldap_server_schema_files:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          LDAP schema files to load idempotently. Each entry defines name (schema label)
+          and path (absolute path to the LDIF schema file).
+
+      ldap_server_custom_schema_templates:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          Custom OLC schema definitions to load idempotently. Each entry defines
+          a name and description for schema template rendering.
+
+      ldap_server_fortune_schema_oid_root:
+        type: str
+        required: false
+        description: >-
+          UUID-based OID root for the custom Fortune objectClass schema branch
+          (2.25.109749598841848522681210166878566339431).
+
+      ldap_domain:
+        type: str
+        required: true
+        description: LDAP domain name derived from DNS identity
+
+      ldap_base_dn:
+        type: str
+        required: true
+        description: LDAP base DN derived from ldap_domain
+
+      ldap_server_host:
+        type: str
+        required: true
+        description: Inventory hostname of the LDAP server (ldap-01)
+
+      ldap_server_fqdn:
+        type: str
+        required: true
+        description: FQDN of the LDAP service
+
+      ldap_server_uri:
+        type: str
+        required: true
+        description: LDAPS URI for the LDAP server
+
+      ldap_ous:
+        type: list
+        elements: str
+        required: true
+        description: Organizational Unit names for DIT containers
+
+      ldap_groups:
+        type: dict
+        required: true
+        description: posixGroup definitions keyed by group name (e.g. ta, stu)
+
+      ldap_users:
+        type: dict
+        required: true
+        description: posixAccount definitions keyed by username (e.g. generalta, mailta, stu)
+
+      ldap_server_credentials:
+        type: dict
+        required: false
+        description: >-
+          Canonical OpenLDAP credential bundle with directory_manager,
+          service_bind, and per-user credentials.
+          Populated from gitignored host_vars/*/secrets.yml.
+        options:
+          directory_manager:
+            type: dict
+            required: true
+            description: Directory manager bind credential material.
+            options:
+              password_plaintext:
+                type: str
+                required: true
+                no_log: true
+                description: Directory manager plaintext password for LDAP binds.
+              password_hash:
+                type: str
+                required: true
+                no_log: true
+                description: Directory manager LDAP password hash.
+
+          service_bind:
+            type: dict
+            required: true
+            description: Service bind credential material.
+            options:
+              password_plaintext:
+                type: str
+                required: true
+                no_log: true
+                description: Service bind plaintext password for LDAP binds.
+              password_hash:
+                type: str
+                required: true
+                no_log: true
+                description: Service bind LDAP password hash.
+
+          users:
+            type: dict
+            required: true
+            description: Per-user credential material keyed by LDAP username.
+            options:
+              generalta:
+                type: dict
+                required: true
+                description: Credentials and TOTP secret for the generalta user.
+                options:
+                  password_plaintext:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Plaintext password for LDAP bind verification.
+                  password_hash:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: LDAP password hash for the userPassword attribute.
+                  totp_secret_raw_b64:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Base64-encoded raw TOTP secret bytes.
+
+              mailta:
+                type: dict
+                required: true
+                description: Credentials for the password-only mailta user.
+                options:
+                  password_plaintext:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Plaintext password for LDAP bind verification.
+                  password_hash:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: LDAP password hash for the userPassword attribute.
+                  totp_secret_raw_b64:
+                    type: raw
+                    required: false
+                    no_log: true
+                    description: Null for password-only users; raw base64 string if TOTP is enabled.
+
+              stu:
+                type: dict
+                required: true
+                description: Credentials and TOTP secret for the stu user.
+                options:
+                  password_plaintext:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Plaintext password for LDAP bind verification.
+                  password_hash:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: LDAP password hash for the userPassword attribute.
+                  totp_secret_raw_b64:
+                    type: str
+                    required: true
+                    no_log: true
+                    description: Base64-encoded raw TOTP secret bytes.
+
+      ldap_server_tls_private_key:
+        type: str
+        required: false
+        no_log: true
+        description: >-
+          LDAPS TLS private key PEM content.
+          Populated from gitignored host_vars/*/secrets.yml.
+
+      ldap_server_tls_certificate:
+        type: str
+        required: false
+        description: >-
+          LDAPS TLS certificate PEM content.
+          Populated from gitignored host_vars/*/secrets.yml.
+
+      ldap_server_acl_secret_attrs:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          LDAP attributes whose read/search access must be restricted
+          (userPassword, oathSecret, oathTOTPLastTimeStep, oathTOTPTimeStepDrift).
+
+      ldap_server_acl_delegate_dns:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Full DNs of delegated administrators for data-tree write access
+          (e.g., uid=generalta,ou=People,... and uid=mailta,ou=People,...).
+
+      ldap_server_ppolicy_default_dn:
+        type: str
+        required: false
+        description: DN of the default ppolicy entry (cn=default,ou=Ppolicy,...)
+
+      ldap_server_ppolicy_check_module:
+        type: str
+        required: false
+        description: Absolute path to the password quality check module .so file
+
+      ldap_server_ppolicy_hash_cleartext:
+        type: bool
+        required: false
+        description: Whether OpenLDAP should hash cleartext passwords server-side
+
+      ldap_server_ppolicy_check_quality:
+        type: int
+        required: false
+        description: Password quality check level (0=off, 1=accept, 2=refuse unchecked)
+
+      ldap_server_ppolicy_min_length:
+        type: int
+        required: false
+        description: Minimum password length enforced by ppolicy
+
+      ldap_server_ppolicy_in_history:
+        type: int
+        required: false
+        description: Number of previous passwords to retain in pwdHistory
+
+      ldap_server_ppolicy_use_check_module:
+        type: bool
+        required: false
+        description: Whether to invoke pwdCheckModule for extended quality checks
+
+      ldap_server_check_password_min_points:
+        type: int
+        required: false
+        description: Minimum character class points required by check_password.so
+
+      ldap_server_check_password_min_upper:
+        type: int
+        required: false
+        description: Minimum uppercase characters (0 means no explicit minimum)
+
+      ldap_server_check_password_min_lower:
+        type: int
+        required: false
+        description: Minimum lowercase characters (0 means no explicit minimum)
+
+      ldap_server_check_password_min_digit:
+        type: int
+        required: false
+        description: Minimum digit characters (0 means no explicit minimum)
+
+      ldap_server_check_password_min_punct:
+        type: int
+        required: false
+        description: Minimum punctuation characters (0 means no explicit minimum)
+
+      ldap_server_totp_params_dn:
+        type: str
+        required: false
+        description: DN of the shared OATH/TOTP parameters entry
+
+      ldap_server_totp_length:
+        type: int
+        required: false
+        description: OATH TOTP code length (default 6)
+
+      ldap_server_totp_time_step:
+        type: int
+        required: false
+        description: OATH TOTP time step period in seconds (default 60)
+
+      ldap_server_totp_hmac_algorithm:
+        type: str
+        required: false
+        description: >-
+          OID for HMAC algorithm (SHA-1 OID 1.2.840.113549.2.7)
+
+      ldap_server_fortune_base_dn:
+        type: str
+        required: false
+        description: DN of the Fortune container (ou=Fortune,...)
+
+      ldap_server_sssvlv_max:
+        type: int
+        required: false
+        description: Maximum concurrent SSS/VLV requests
+
+      ldap_server_sssvlv_max_keys:
+        type: int
+        required: false
+        description: Maximum sort keys per SSS/VLV request
+
+      ldap_server_sssvlv_max_per_conn:
+        type: int
+        required: false
+        description: Maximum SSS/VLV requests per connection
+
+      ldap_server_sudo_roles:
+        type: dict
+        required: false
+        description: >-
+          LDAP sudoRole entries keyed by role cn (e.g. ta, stu).
+          Each role defines sudoUser, sudoHost, sudoCommand, sudoRunAsUser,
+          sudoRunAsGroup, and sudoOption for idempotent reconciliation under ou=SUDOers.

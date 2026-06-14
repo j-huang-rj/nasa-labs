@@ -1,0 +1,46 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up openldap configuration workflow"
+
+- name: "PHASE [setup : Install OpenLDAP Packages And Start Service]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Configure TLS And LDAPS Listener]"
+  ansible.builtin.import_tasks: tls.yml
+
+- name: "PHASE [setup : Load Required Schemas]"
+  ansible.builtin.import_tasks: schemas.yml
+
+- name: "PHASE [setup : Configure OLC Modules And Database]"
+  ansible.builtin.import_tasks: olc.yml
+
+- name: "PHASE [setup : Create Base DIT]"
+  ansible.builtin.import_tasks: dit.yml
+
+- name: "PHASE [setup : Populate Identities]"
+  ansible.builtin.import_tasks: identities.yml
+
+- name: "PHASE [setup : Reconcile Sudo Roles]"
+  ansible.builtin.import_tasks: sudo_roles.yml
+
+- name: "PHASE [setup : Reconcile Ordered ACLs]"
+  ansible.builtin.import_tasks: acls.yml
+
+- name: "PHASE [setup : Configure Password Policy]"
+  ansible.builtin.import_tasks: ppolicy.yml
+
+- name: "PHASE [setup : Configure TOTP Authentication]"
+  ansible.builtin.import_tasks: totp.yml
+
+- name: "PHASE [setup : Import Fortune Data And Search Controls]"
+  ansible.builtin.import_tasks: fortune.yml
+
+- name: "PHASE [setup : Verify OpenLDAP State]"
+  ansible.builtin.import_tasks: verify.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

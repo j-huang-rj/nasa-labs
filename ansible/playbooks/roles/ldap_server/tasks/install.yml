@@ -1,0 +1,49 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install and start OpenLDAP services"
+
+- name: "PHASE [install : Ensure EPEL Repository Is Present]"
+  ansible.builtin.dnf:
+    name: "{{ ldap_server_epel_package }}"
+    state: present
+
+- name: "PHASE [install : Install OpenLDAP Packages]"
+  ansible.builtin.dnf:
+    name: "{{ ldap_server_packages }}"
+    state: present
+
+- name: "PHASE [install : Create OpenLDAP Systemd Override Directory]"
+  ansible.builtin.file:
+    path: /etc/systemd/system/slapd.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: "PHASE [install : Configure Systemd Listener Override For ldapi And LDAPS Only]"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/slapd.service.d/listen-urls.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=/usr/sbin/slapd -u ldap -h "ldapi:/// ldaps:///"
+  notify: "PHASE [handler : Restart slapd]"
+
+- name: "PHASE [install : Apply Listener Override Immediately]"
+  ansible.builtin.meta: flush_handlers
+
+- name: "PHASE [install : Enable And Start OpenLDAP Service]"
+  ansible.builtin.systemd_service:
+    name: "{{ ldap_server_service_name }}"
+    enabled: true
+    state: started
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"

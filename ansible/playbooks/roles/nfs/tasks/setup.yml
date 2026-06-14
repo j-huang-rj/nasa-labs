@@ -1,0 +1,28 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up NFS"
+
+- name: "PHASE [setup : Install NFS Packages]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Configure NFS Server]"
+  ansible.builtin.import_tasks: server.yml
+  when:
+    - inventory_hostname in groups['nfs_servers']
+    - nfs_server_enabled | bool
+
+- name: "PHASE [setup : Configure NFS Client Mounts]"
+  ansible.builtin.import_tasks: client.yml
+  when:
+    - inventory_hostname in groups['nfs_clients']
+    - nfs_client_enabled | bool
+
+- name: "PHASE [setup : Verify NFS State]"
+  ansible.builtin.import_tasks: verify.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

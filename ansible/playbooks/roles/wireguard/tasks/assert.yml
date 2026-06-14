@@ -1,0 +1,50 @@
+---
+- name: "PHASE [assert : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Validate wireguard role variables"
+
+- name: "PHASE [assert : Check wireguard_enabled Is True]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - wireguard_enabled | default(false) | bool
+    fail_msg: "wireguard role must run only on hosts with wireguard_enabled=true"
+
+- name: "PHASE [assert : Check Required WireGuard Peer Variables]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - wireguard_address is defined
+      - wireguard_address | length > 0
+      - wireguard_private_key is defined
+      - wireguard_private_key | length > 0
+      - wireguard_peer_public_key is defined
+      - wireguard_peer_public_key | length > 0
+      - wireguard_preshared_key is defined
+      - wireguard_preshared_key | length > 0
+      - wireguard_allowed_ips is defined
+      - wireguard_allowed_ips | length > 0
+      - wireguard_peer_endpoint is defined
+      - wireguard_peer_endpoint | length > 0
+    fail_msg: "WireGuard peer variables must be defined and non-empty when wireguard_enabled=true"
+  no_log: true
+
+- name: "PHASE [assert : Check Healthcheck Settings]"
+  become: false
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - wireguard_healthcheck_targets is sequence
+      - wireguard_healthcheck_retries | int >= 1
+      - wireguard_healthcheck_delay | int >= 0
+      - wireguard_healthcheck_timeout | int >= 1
+      - wireguard_persistent_keepalive | int >= 0
+    fail_msg: "WireGuard healthcheck and keepalive settings must be valid non-negative integers"
+
+- name: "PHASE [assert : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed assert phase"

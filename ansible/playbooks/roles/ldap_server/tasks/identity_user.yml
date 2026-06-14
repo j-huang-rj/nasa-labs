@@ -1,0 +1,136 @@
+---
+- name: "PHASE [identities : Render User LDIF] | {{ _ident_user.key }}"
+  ansible.builtin.template:
+    src: openldap/user.ldif.j2
+    dest: "/tmp/openldap-identities/user-{{ _ident_user.key }}.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  changed_when: false
+  vars:
+    username: "{{ _ident_user.key }}"
+    uid_number: "{{ _ident_user.value.uid_number }}"
+    gid_number: "{{ _ident_user.value.gid_number }}"
+    home: "{{ _ident_user.value.home }}"
+    mail_address: "{{ _ident_user.value.mail }}"
+    ssh_public_key: "{{ _ident_user.value.ssh_public_key }}"
+    password_hash: "{{ _ldap_server_user_password_hashes[_ident_user.value.password_hash_key] }}"
+  no_log: true
+
+- name: "PHASE [identities : Search Existing User] | {{ _ident_user.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -b "uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}" -s base '(objectClass=posixAccount)' dn
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_user_exists
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [identities : Create User If Missing] | {{ _ident_user.key }}"
+  when: _ldap_server_user_exists.rc != 0
+  ansible.builtin.command:
+    cmd: >-
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -f /tmp/openldap-identities/user-{{ _ident_user.key }}.ldif
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [identities : Search Existing User Managed Attributes] | {{ _ident_user.key }}"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }} -b "uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}" -s base
+      -o ldif-wrap=no
+      '(objectClass=posixAccount)' uid cn sn uidNumber gidNumber homeDirectory loginShell mail sshPublicKey userPassword
+  changed_when: false
+  failed_when: false
+  no_log: true
+  register: _ldap_server_user_current
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
+
+- name: "PHASE [identities : Compute User Password Comparison Values] | {{ _ident_user.key }}"
+  ansible.builtin.set_fact:
+    _ldap_server_user_expected_pw_hash: >-
+      {{ _ldap_server_user_password_hashes[_ident_user.value.password_hash_key]
+         | regex_escape() }}
+    _ldap_server_user_expected_pw_hash_b64: >-
+      {{ _ldap_server_user_password_hashes[_ident_user.value.password_hash_key]
+         | b64encode
+         | regex_escape() }}
+  no_log: true
+
+- name: "PHASE [identities : Compute User Modify Gate] | {{ _ident_user.key }}"
+  ansible.builtin.set_fact:
+    _ldap_server_user_needs_modify: >-
+      {{ _ldap_server_user_current.rc != 0
+         or _ldap_server_user_current.stdout | default('') | regex_search('uid:\s*' ~ _ident_user.key ~ '\b') is none
+         or _ldap_server_user_current.stdout | default('') | regex_search('cn:\s*' ~ _ident_user.key ~ '\b') is none
+         or _ldap_server_user_current.stdout | default('') | regex_search('sn:\s*' ~ _ident_user.key ~ '\b') is none
+         or _ldap_server_user_current.stdout | default('')
+            | regex_search('uidNumber:\s*' ~ (_ident_user.value.uid_number | string) ~ '\s') is none
+         or _ldap_server_user_current.stdout | default('')
+            | regex_search('gidNumber:\s*' ~ (_ident_user.value.gid_number | string) ~ '\s') is none
+         or _ldap_server_user_current.stdout | default('')
+            | regex_search('homeDirectory:\s*' ~ (_ident_user.value.home | regex_escape()) ~ '\s') is none
+         or _ldap_server_user_current.stdout | default('') | regex_search('loginShell:\s*/bin/bash\b') is none
+         or _ldap_server_user_current.stdout | default('')
+            | regex_search('mail:\s*' ~ (_ident_user.value.mail | regex_escape()) ~ '\s') is none
+         or _ldap_server_user_current.stdout | default('')
+            | regex_search('sshPublicKey:\s*'
+                           ~ (_ident_user.value.ssh_public_key | regex_escape()) ~ '\s') is none
+         or (
+              _ldap_server_user_current.stdout | default('')
+              | regex_search('userPassword:\s*' ~ _ldap_server_user_expected_pw_hash) is none
+              and _ldap_server_user_current.stdout | default('')
+              | regex_search('userPassword::\s*' ~ _ldap_server_user_expected_pw_hash_b64) is none
+            ) }}
+  no_log: true
+
+- name: "PHASE [identities : Modify User To Exact Managed Attributes] | {{ _ident_user.key }}"
+  when: _ldap_server_user_needs_modify | default(false) | bool
+  ansible.builtin.command:
+    cmd: >-
+      ldapmodify -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
+      -H {{ ldap_server_uri }}
+    stdin: |
+      dn: uid={{ _ident_user.key }},ou=People,{{ ldap_base_dn }}
+      changetype: modify
+      replace: uid
+      uid: {{ _ident_user.key }}
+      -
+      replace: cn
+      cn: {{ _ident_user.key }}
+      -
+      replace: sn
+      sn: {{ _ident_user.key }}
+      -
+      replace: uidNumber
+      uidNumber: {{ _ident_user.value.uid_number }}
+      -
+      replace: gidNumber
+      gidNumber: {{ _ident_user.value.gid_number }}
+      -
+      replace: homeDirectory
+      homeDirectory: {{ _ident_user.value.home }}
+      -
+      replace: loginShell
+      loginShell: /bin/bash
+      -
+      replace: mail
+      mail: {{ _ident_user.value.mail }}
+      -
+      replace: sshPublicKey
+      sshPublicKey: {{ _ident_user.value.ssh_public_key }}
+      -
+      replace: userPassword
+      userPassword: {{ _ldap_server_user_password_hashes[_ident_user.value.password_hash_key] }}
+  changed_when: true
+  no_log: true
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"

@@ -1,0 +1,122 @@
+---
+- name: "PHASE [install : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Install LDAP client packages for workstation auth"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: only run package operations on workstation-auth hosts
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [install : Skip Package Install For Non-Workstation Hosts]"
+  ansible.builtin.debug:
+    msg: >-
+      Skipping ldap_client package installation on {{ inventory_hostname }}:
+      ldap_client_workstation_auth_enabled is false or undefined.
+  when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Target RPM availability preflight
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [install : Check Target RPM Availability]"
+  ansible.builtin.command:
+    cmd: >-
+      dnf -q repoquery --whatprovides {{ _pkg }}
+  loop: "{{ ldap_client_packages }}"
+  loop_control:
+    loop_var: _pkg
+    label: "{{ _pkg }}"
+  changed_when: false
+  register: _ldap_client_repoquery
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Assert All Required Packages Available]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_repoquery.results | selectattr('rc', 'equalto', 0) | list | length == ldap_client_packages | length
+    fail_msg: >-
+      One or more required LDAP client packages could not be resolved via dnf repoquery.
+      Failures: {{ _ldap_client_repoquery.results | selectattr('rc', 'ne', 0) | map(attribute='_pkg') | list }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Package installation
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [install : Install LDAP Client Packages]"
+  ansible.builtin.dnf:
+    name: "{{ ldap_client_packages }}"
+    state: present
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Post-install binary verification
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [install : Verify authselect Binary Exists]"
+  ansible.builtin.stat:
+    path: /usr/bin/authselect
+  register: _ldap_client_authselect_bin
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Assert authselect Installed]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_authselect_bin.stat.exists
+      - _ldap_client_authselect_bin.stat.executable
+    fail_msg: "/usr/bin/authselect is not present or not executable after package install"
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Verify authselect sssd Profile Includes with-sudo]"
+  ansible.builtin.command:
+    cmd: authselect list-features sssd
+  changed_when: false
+  register: _ldap_client_authselect_features
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Assert authselect with-sudo Available]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - "'with-sudo' in _ldap_client_authselect_features.stdout"
+    fail_msg: >-
+      authselect sssd profile does not support with-sudo.
+      Available features: {{ _ldap_client_authselect_features.stdout }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Verify sss_ssh_authorizedkeys Exists]"
+  ansible.builtin.stat:
+    path: /usr/bin/sss_ssh_authorizedkeys
+  register: _ldap_client_sss_ssh_bin
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Assert sss_ssh_authorizedkeys Installed]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sss_ssh_bin.stat.exists
+      - _ldap_client_sss_ssh_bin.stat.executable
+    fail_msg: "/usr/bin/sss_ssh_authorizedkeys is not present after package install"
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Verify sss_ssh_authorizedkeys Owning RPM]" # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: rpm -qf /usr/bin/sss_ssh_authorizedkeys
+  changed_when: false
+  register: _ldap_client_sss_rpm
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : Assert sss_ssh_authorizedkeys Owned By Package]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sss_rpm.rc == 0
+      - _ldap_client_sss_rpm.stdout | length > 0
+    fail_msg: >-
+      /usr/bin/sss_ssh_authorizedkeys is not owned by any RPM package.
+      rpm output: {{ _ldap_client_sss_rpm.stdout }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [install : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed install phase"

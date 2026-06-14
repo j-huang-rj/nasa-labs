@@ -3,12 +3,20 @@
 network_interfaces:
   - ifname: eth0
     zone: internal
-    ip4: 172.16.1.53/24
-    gw4: 172.16.1.254
+    ip4: "{{ lab_primary_ns_ip }}/24"
+    gw4: "{{ lab_router_internal_ip }}"
     dns4:
-      - 1.1.1.1
+      - "{{ lab_bootstrap_dns_ip }}"
     conn_name: internal-static
     default_conn_name: "cloud-init eth0"
+
+# Hosts File Config
+hosts_file_entries:
+  - address: "{{ lab_primary_ns_ip }}"
+    canonical: "private-ns.{{ lab_domain }}"
+    aliases:
+      - private-ns
+      - primary-ns-01
 
 # Firewall Config
 firewall_zone_ports:
@@ -26,7 +34,7 @@ bind9_mode: authoritative_primary
 
 bind9_listen_ipv4:
   - 127.0.0.1
-  - "{{ ansible_host }}"
+  - "{{ bind9_primary_ns_ip }}"
 
 # Zone data — forward zones for private and public views
 bind9_zones:
@@ -56,7 +64,7 @@ bind9_zones:
         value: "{{ bind9_secondary_ns_ip }}"
       - name: "private-ns"
         type: "A"
-        value: "{{ ansible_host }}"
+        value: "{{ bind9_primary_ns_ip }}"
       - name: "dns"
         type: "A"
         value: "{{ bind9_dns_resolver_ip }}"
@@ -75,6 +83,15 @@ bind9_zones:
       - name: "internal-agent"
         type: "A"
         value: "{{ bind9_internal_agent_ip }}"
+      - name: "ldap"
+        type: "A"
+        value: "{{ bind9_ldap_ip }}"
+      - name: "workstation1"
+        type: "A"
+        value: "{{ bind9_workstation1_ip }}"
+      - name: "workstation2"
+        type: "A"
+        value: "{{ bind9_workstation2_ip }}"
 
       # Delegation for signed mail child zone
       - name: "mail"
@@ -90,10 +107,10 @@ bind9_zones:
       # Mail service records
       - name: "smtp"
         type: "A"
-        value: "{{ mail_endpoint_dmz_ip }}"
+        value: "{{ mail_smtp_endpoint_dmz_ip }}"
       - name: "imap"
         type: "A"
-        value: "{{ mail_endpoint_dmz_ip }}"
+        value: "{{ mail_imap_endpoint_dmz_ip }}"
       - name: "@"
         type: "MX"
         value: "{{ mail_mx_value }}"
@@ -142,6 +159,12 @@ bind9_zones:
       - name: "client"
         type: "A"
         value: "{{ bind9_vpn_client_ip }}"
+      - name: "workstation1"
+        type: "A"
+        value: "{{ bind9_vpn_workstation1_ip }}"
+      - name: "workstation2"
+        type: "A"
+        value: "{{ bind9_vpn_workstation2_ip }}"
 
       # Delegation for signed mail child zone
       - name: "mail"
@@ -154,10 +177,10 @@ bind9_zones:
       # Mail service records
       - name: "smtp"
         type: "A"
-        value: "{{ mail_endpoint_vpn_ip }}"
+        value: "{{ mail_smtp_endpoint_vpn_ip }}"
       - name: "imap"
         type: "A"
-        value: "{{ mail_endpoint_vpn_ip }}"
+        value: "{{ mail_imap_endpoint_vpn_ip }}"
       - name: "@"
         type: "MX"
         value: "{{ mail_mx_value }}"
@@ -258,16 +281,28 @@ bind9_zones:
       - "private-ns.{{ bind9_forward_zone_name }}."
       - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - name: "1"
+      - name: "{{ bind9_workstation1_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "workstation1.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_workstation2_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "workstation2.{{ bind9_forward_zone_name }}."
+      - name: "{{ mail_smtp_endpoint_dmz_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "smtp.{{ bind9_forward_zone_name }}."
+      - name: "{{ mail_imap_endpoint_dmz_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "imap.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_dmz_client_ip.split('.')[-1] }}"
         type: "PTR"
         value: "client.{{ bind9_forward_zone_name }}."
-      - name: "53"
+      - name: "{{ bind9_secondary_ns_ip.split('.')[-1] }}"
         type: "PTR"
         value: "ns.{{ bind9_forward_zone_name }}."
-      - name: "254"
+      - name: "{{ bind9_router_dmz_ip.split('.')[-1] }}"
         type: "PTR"
         value: "router.{{ bind9_forward_zone_name }}."
-      - name: "123"
+      - name: "{{ bind9_dmz_agent_ip.split('.')[-1] }}"
         type: "PTR"
         value: "agent.{{ bind9_forward_zone_name }}."
 
@@ -292,16 +327,19 @@ bind9_zones:
       - "private-ns.{{ bind9_forward_zone_name }}."
       - "ns.{{ bind9_forward_zone_name }}."
     records:
-      - name: "53"
+      - name: "{{ bind9_ldap_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "ldap.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_primary_ns_ip.split('.')[-1] }}"
         type: "PTR"
         value: "private-ns.{{ bind9_forward_zone_name }}."
-      - name: "153"
+      - name: "{{ bind9_dns_resolver_ip.split('.')[-1] }}"
         type: "PTR"
         value: "dns.{{ bind9_forward_zone_name }}."
-      - name: "254"
+      - name: "{{ bind9_router_internal_ip.split('.')[-1] }}"
         type: "PTR"
         value: "router.{{ bind9_forward_zone_name }}."
-      - name: "123"
+      - name: "{{ bind9_internal_agent_ip.split('.')[-1] }}"
         type: "PTR"
         value: "internal-agent.{{ bind9_forward_zone_name }}."
 
@@ -334,6 +372,18 @@ bind9_zones:
       - name: "{{ bind9_vpn_ns_ip.split('.')[-1] }}"
         type: "PTR"
         value: "ns.{{ bind9_forward_zone_name }}."
+      - name: "{{ mail_smtp_endpoint_vpn_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "smtp.{{ bind9_forward_zone_name }}."
+      - name: "{{ mail_imap_endpoint_vpn_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "imap.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_vpn_workstation1_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "workstation1.{{ bind9_forward_zone_name }}."
+      - name: "{{ bind9_vpn_workstation2_ip.split('.')[-1] }}"
+        type: "PTR"
+        value: "workstation2.{{ bind9_forward_zone_name }}."
 
   # Private-view alias of the public master above
   - name: "{{ bind9_vpn_child_reverse_zone_name }}"

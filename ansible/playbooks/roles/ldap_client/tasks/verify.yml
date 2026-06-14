@@ -1,0 +1,353 @@
+---
+- name: "PHASE [verify : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Verify LDAP client CA, SSSD, identity, and NFS state"
+
+# ─────────────────────────────────────────────────────────────────────────
+# Gateway: only run verification on workstation-auth hosts
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : Skip Verify For Non-Workstation Hosts]"
+  ansible.builtin.debug:
+    msg: >-
+      Skipping ldap_client verification on {{ inventory_hostname }}:
+      ldap_client_workstation_auth_enabled is false or undefined.
+  when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
+
+# ─────────────────────────────────────────────────────────────────────────
+# Service and process verification
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : Gather Service Facts]"
+  ansible.builtin.service_facts:
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert SSSD Service Is Running]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - ansible_facts.services['sssd.service'] is defined
+      - ansible_facts.services['sssd.service'].state == "running"
+    fail_msg: >-
+      SSSD service is not running on {{ inventory_hostname }}.
+      State: {{ ansible_facts.services['sssd.service'].state | default('not found') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Cache invalidation
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : Clear SSSD Caches]"
+  ansible.builtin.command:
+    cmd: sss_cache -E
+  changed_when: false
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# SSSD domain status
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : Check SSSD Domain Status]"
+  ansible.builtin.command:
+    cmd: sssctl domain-status "{{ ldap_client_sssd_domain }}"
+  changed_when: false
+  register: _ldap_client_sssd_status
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert SSSD Domain Online]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sssd_status.rc == 0
+      - "'Online status: Online' in _ldap_client_sssd_status.stdout"
+    fail_msg: >-
+      SSSD domain {{ ldap_client_sssd_domain }} is not online on {{ inventory_hostname }}.
+      stdout={{ _ldap_client_sssd_status.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Identity resolution: getent passwd and id
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : getent passwd generalta]"
+  ansible.builtin.command:
+    cmd: getent passwd generalta
+  changed_when: false
+  register: _ldap_client_getent_generalta
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert generalta In getent passwd]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_getent_generalta.rc == 0
+      - "'generalta' in _ldap_client_getent_generalta.stdout"
+    fail_msg: >-
+      getent passwd generalta did not return an entry on {{ inventory_hostname }}.
+      rc={{ _ldap_client_getent_generalta.rc }}
+      stdout={{ _ldap_client_getent_generalta.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : getent passwd mailta]"
+  ansible.builtin.command:
+    cmd: getent passwd mailta
+  changed_when: false
+  register: _ldap_client_getent_mailta
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert mailta In getent passwd]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_getent_mailta.rc == 0
+      - "'mailta' in _ldap_client_getent_mailta.stdout"
+    fail_msg: >-
+      getent passwd mailta did not return an entry on {{ inventory_hostname }}.
+      rc={{ _ldap_client_getent_mailta.rc }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : id generalta]"
+  ansible.builtin.command:
+    cmd: id generalta
+  changed_when: false
+  register: _ldap_client_id_generalta
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert id generalta Resolves]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_id_generalta.rc == 0
+      - "'generalta' in _ldap_client_id_generalta.stdout"
+    fail_msg: >-
+      id generalta did not resolve on {{ inventory_hostname }}.
+      rc={{ _ldap_client_id_generalta.rc }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Host-specific identity: stu is allowed on workstation-01 only
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : getent passwd stu (host-specific)]"
+  ansible.builtin.command:
+    cmd: getent passwd stu
+  changed_when: false
+  register: _ldap_client_getent_stu
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : id stu (host-specific)]"
+  ansible.builtin.command:
+    cmd: id stu
+  changed_when: false
+  register: _ldap_client_id_stu
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# LDAPS certificate-validated search
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : LDAPS Search Base DN With Certificate Validation]"
+  ansible.builtin.command:
+    cmd: >-
+      ldapsearch -H {{ ldap_server_uri }}
+      -x -b "{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
+  environment:
+    LDAPTLS_CACERT: "{{ ldap_client_ca_cert_path }}"
+  changed_when: false
+  register: _ldap_client_ldaps_verify
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert LDAPS Search Succeeds]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_ldaps_verify.rc == 0
+      - ldap_base_dn in _ldap_client_ldaps_verify.stdout
+    fail_msg: >-
+      LDAPS search from {{ inventory_hostname }} failed.
+      rc={{ _ldap_client_ldaps_verify.rc }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# NFS home mount verification
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : Check /u Mount Point]"
+  ansible.builtin.stat:
+    path: /u
+  register: _ldap_client_u_stat
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert /u Exists]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_u_stat.stat.exists
+      - _ldap_client_u_stat.stat.isdir
+    fail_msg: "/u does not exist or is not a directory on {{ inventory_hostname }}"
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Check /u Is NFS-Backed]"
+  ansible.builtin.command:
+    cmd: df --output=fstype /u
+  changed_when: false
+  register: _ldap_client_u_fstype
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert /u Filesystem Is NFS]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_u_fstype.rc == 0
+      - "'nfs' in _ldap_client_u_fstype.stdout"
+    fail_msg: >-
+      /u is not an NFS-backed filesystem on {{ inventory_hostname }}.
+      fstype: {{ _ldap_client_u_fstype.stdout | default('') }}
+      This may indicate the NFS mount is not active or a local
+      directory is shadowing the mount.
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Check LDAP User Home Directories On /u]"
+  ansible.builtin.stat:
+    path: "{{ _home }}"
+  loop:
+    - /u/ta/generalta
+    - /u/ta/mailta
+    - /u/stu/stu
+  loop_control:
+    loop_var: _home
+    label: "{{ _home }}"
+  register: _ldap_client_u_homes
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert LDAP Home Directories Exist]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_u_homes.results | selectattr('stat.exists', 'equalto', true) | list | length == 3
+      - _ldap_client_u_homes.results | selectattr('stat.isdir', 'equalto', true) | list | length == 3
+    fail_msg: >-
+      One or more LDAP user home directories missing on {{ inventory_hostname }}.
+      Results: {{ _ldap_client_u_homes.results | map(attribute='stat.exists') | list }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# SSH key responder verification
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : Verify sss_ssh_authorizedkeys Generalta]"
+  ansible.builtin.command:
+    cmd: sss_ssh_authorizedkeys generalta
+  changed_when: false
+  register: _ldap_client_keys_ta
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert SSH Keys For generalta]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_keys_ta.rc == 0
+      - _ldap_client_keys_ta.stdout | length > 0
+    fail_msg: >-
+      sss_ssh_authorizedkeys generalta returned no key on {{ inventory_hostname }}.
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Verify sss_ssh_authorizedkeys Mailta]"
+  ansible.builtin.command:
+    cmd: sss_ssh_authorizedkeys mailta
+  changed_when: false
+  register: _ldap_client_keys_mt
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert SSH Keys For mailta]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_keys_mt.rc == 0
+      - _ldap_client_keys_mt.stdout | length > 0
+    fail_msg: >-
+      sss_ssh_authorizedkeys mailta returned no key on {{ inventory_hostname }}.
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# sudo responder verification
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : sudo -l -U generalta]"
+  ansible.builtin.command:
+    cmd: sudo -l -U generalta
+  changed_when: false
+  failed_when: false
+  register: _ldap_client_sudo_ta
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert generalta Has All-Command sudo]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sudo_ta.rc == 0
+      - "'ALL' in _ldap_client_sudo_ta.stdout"
+      - "'generalta' in _ldap_client_sudo_ta.stdout"
+    fail_msg: >-
+      sudo -l -U generalta did not show all-command LDAP sudo on {{ inventory_hostname }}.
+      stdout={{ _ldap_client_sudo_ta.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : sudo -l -U mailta]"
+  ansible.builtin.command:
+    cmd: sudo -l -U mailta
+  changed_when: false
+  failed_when: false
+  register: _ldap_client_sudo_mt
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert mailta Has All-Command sudo]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sudo_mt.rc == 0
+      - "'ALL' in _ldap_client_sudo_mt.stdout"
+      - "'mailta' in _ldap_client_sudo_mt.stdout"
+    fail_msg: >-
+      sudo -l -U mailta did not show all-command LDAP sudo on {{ inventory_hostname }}.
+      stdout={{ _ldap_client_sudo_mt.stdout | default('') }}
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+# ─────────────────────────────────────────────────────────────────────────
+# Stu sudo: workstation-01 has ls-only; workstation-02 has none
+# ─────────────────────────────────────────────────────────────────────────
+- name: "PHASE [verify : sudo -l -U stu]"
+  ansible.builtin.command:
+    cmd: sudo -l -U stu
+  changed_when: false
+  failed_when: false
+  register: _ldap_client_sudo_stu
+  when: ldap_client_workstation_auth_enabled | default(false) | bool
+
+- name: "PHASE [verify : Assert stu sudo On workstation-01 (ls only)]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - _ldap_client_sudo_stu.rc == 0
+      - "'/usr/bin/ls' in _ldap_client_sudo_stu.stdout"
+      - "'stu' in _ldap_client_sudo_stu.stdout"
+    fail_msg: >-
+      sudo -l -U stu on workstation-01 did not show /usr/bin/ls.
+      stdout={{ _ldap_client_sudo_stu.stdout | default('') }}
+  when:
+    - ldap_client_workstation_auth_enabled | default(false) | bool
+    - inventory_hostname == 'workstation-01'
+
+- name: "PHASE [verify : Assert stu Has No sudo On workstation-02]"
+  ansible.builtin.assert:
+    quiet: true
+    that:
+      - >-
+        ('ALL' not in _ldap_client_sudo_stu.stdout)
+        and ('/usr/bin/ls' not in _ldap_client_sudo_stu.stdout)
+      - >-
+        'not allowed to run sudo' in _ldap_client_sudo_stu.stdout
+        or 'may not run sudo' in _ldap_client_sudo_stu.stdout
+        or _ldap_client_sudo_stu.stdout | length == 0
+    fail_msg: >-
+      sudo -l -U stu on workstation-02 should return no LDAP sudo rules.
+      stdout={{ _ldap_client_sudo_stu.stdout | default('') }}
+  when:
+    - ldap_client_workstation_auth_enabled | default(false) | bool
+    - inventory_hostname == 'workstation-02'
+
+- name: "PHASE [verify : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed verify phase"

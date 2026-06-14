@@ -1,0 +1,69 @@
+---
+# LDAP naming root
+ldap_domain: "{{ lab_domain }}"
+ldap_base_dn: "dc={{ ldap_domain | regex_replace('\\.', ',dc=') }}"
+
+# LDAP service endpoint
+ldap_server_host: ldap-01
+ldap_server_ip: "{{ lab_ldap_ip }}"
+ldap_server_fqdn: "ldap.{{ ldap_domain }}"
+ldap_server_uri: "ldaps://{{ ldap_server_fqdn }}:636"
+
+# LDAP TLS / trust contract
+ldap_tls_ca_certificate: ""
+ldap_tls_ca_cert_path: /etc/pki/ca-trust/source/anchors/ldap-ca.crt
+ldap_tls_ca_source_host: "{{ ldap_server_host }}"
+ldap_tls_ca_source_path: /etc/openldap/certs/ldap.crt
+
+# Directory Information Tree containers
+ldap_ous:
+  - People
+  - Group
+  - Ppolicy
+  - SUDOers
+  - Fortune
+
+# LDAP groups (posixGroup)
+ldap_groups:
+  ta:
+    gid: 10000
+    member_uids: [generalta, mailta]
+
+  stu:
+    gid: 20000
+    member_uids: [stu]
+
+# Shared LDAP user defaults
+ldap_default_user_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXopO04xu2hOBxNY 2026 NAP"
+
+# LDAP users
+ldap_users:
+  generalta:
+    uid_number: 10000
+    gid_number: 10000
+    home: "{{ lab_home_root }}/ta/generalta"
+    mail: "generalta@{{ ldap_domain }}"
+    groups: [ta]
+    totp_required: true
+    ssh_public_key: "{{ ldap_default_user_ssh_public_key }}"
+    password_hash_key: generalta
+
+  mailta:
+    uid_number: 10001
+    gid_number: 10000
+    home: "{{ lab_home_root }}/ta/mailta"
+    mail: "mailta@{{ ldap_domain }}"
+    groups: [ta]
+    totp_required: false
+    ssh_public_key: "{{ ldap_default_user_ssh_public_key }}"
+    password_hash_key: mailta
+
+  stu:
+    uid_number: 20000
+    gid_number: 20000
+    home: "{{ lab_home_root }}/stu/stu"
+    mail: "stu@{{ ldap_domain }}"
+    groups: [stu]
+    totp_required: true
+    ssh_public_key: "{{ ldap_default_user_ssh_public_key }}"
+    password_hash_key: stu
