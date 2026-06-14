@@ -19,6 +19,7 @@ hosts_file_entries:
   - address: "{{ lab_smtp_ip }}"
     canonical: "smtp.{{ lab_domain }}"
     aliases:
+      - smtp
       - smtp-01
 
 # WireGuard Config

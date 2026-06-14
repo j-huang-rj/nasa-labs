@@ -42,7 +42,7 @@ firewall_zone_ports:
 ldap_client_enabled: true
 ldap_client_workstation_auth_enabled: true
 
-# Workstation access policy: TA only (stu is excluded per lab spec)
+# Workstation access policy
 ldap_client_allowed_groups:
   - ta
 

@@ -19,12 +19,13 @@ hosts_file_entries:
   - address: "{{ lab_imap_ip }}"
     canonical: "imap.{{ lab_domain }}"
     aliases:
+      - imap
       - imap-01
 
 # WireGuard Config
 wireguard_enabled: true
 
-# Mail Config: IMAP/LMTP storage host only.
+# Mail Config: IMAP/LMTP storage host only
 mail_enabled: true
 mail_postfix_enabled: false
 mail_opendkim_enabled: false
@@ -48,9 +49,7 @@ mail_dovecot_passwd_file_enabled: true
 mail_tls_enabled: true
 mail_ldap_verify_enabled: true
 
-# Shared mail credentials. Real values live in gitignored secrets for the SMTP
-# host and can be overridden by imap-01/secrets.yml if a distinct IMAP cert or
-# passwd-file is desired later.
+# Shared mail credentials
 mail_tls_certificate: "{{ hostvars[mail_smtp_host].mail_tls_certificate }}"
 mail_tls_private_key: "{{ hostvars[mail_smtp_host].mail_tls_private_key }}"
 mail_local_user_password_hashes: "{{ hostvars[mail_smtp_host].mail_local_user_password_hashes }}"

@@ -1,10 +1,11 @@
 ---
-# Shared LDAP identity
+# LDAP naming root
+ldap_domain: "{{ lab_domain }}"
+ldap_base_dn: "dc={{ ldap_domain | regex_replace('\\.', ',dc=') }}"
+
+# LDAP service endpoint
 ldap_server_host: ldap-01
 ldap_server_ip: "{{ lab_ldap_ip }}"
-ldap_domain: "{{ lab_domain }}"
-
-ldap_base_dn: "dc={{ ldap_domain | regex_replace('\\.', ',dc=') }}"
 ldap_server_fqdn: "ldap.{{ ldap_domain }}"
 ldap_server_uri: "ldaps://{{ ldap_server_fqdn }}:636"
 
@@ -13,9 +14,6 @@ ldap_tls_ca_certificate: ""
 ldap_tls_ca_cert_path: /etc/pki/ca-trust/source/anchors/ldap-ca.crt
 ldap_tls_ca_source_host: "{{ ldap_server_host }}"
 ldap_tls_ca_source_path: /etc/openldap/certs/ldap.crt
-
-# SSH public key shared by all LDAP users
-ldap_default_user_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXopO04xu2hOBxNY 2026 NAP"
 
 # Directory Information Tree containers
 ldap_ous:
@@ -34,6 +32,9 @@ ldap_groups:
   stu:
     gid: 20000
     member_uids: [stu]
+
+# Shared LDAP user defaults
+ldap_default_user_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUa1AsYerXm5/QVrTZ7QxtkcCUfuXopO04xu2hOBxNY 2026 NAP"
 
 # LDAP users
 ldap_users:
