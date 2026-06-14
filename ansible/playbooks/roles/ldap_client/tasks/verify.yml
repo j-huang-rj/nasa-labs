@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Gateway: only run verification on workstation-auth hosts
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Skip Verify For Non-Workstation Hosts]"
   ansible.builtin.debug:
     msg: >-
@@ -18,7 +17,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Service and process verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Gather Service Facts]"
   ansible.builtin.service_facts:
   when: ldap_client_workstation_auth_enabled | default(false) | bool
@@ -37,7 +35,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Cache invalidation
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Clear SSSD Caches]"
   ansible.builtin.command:
     cmd: sss_cache -E
@@ -47,7 +44,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # SSSD domain status
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Check SSSD Domain Status]"
   ansible.builtin.command:
     cmd: sssctl domain-status "{{ ldap_client_sssd_domain }}"
@@ -69,7 +65,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Identity resolution: getent passwd and id
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : getent passwd generalta]"
   ansible.builtin.command:
     cmd: getent passwd generalta
@@ -128,7 +123,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Host-specific identity: stu is allowed on workstation-01 only
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : getent passwd stu (host-specific)]"
   ansible.builtin.command:
     cmd: getent passwd stu
@@ -146,7 +140,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # LDAPS certificate-validated search
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : LDAPS Search Base DN With Certificate Validation]"
   ansible.builtin.command:
     cmd: >-
@@ -172,7 +165,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # NFS home mount verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Check /u Mount Point]"
   ansible.builtin.stat:
     path: /u
@@ -204,7 +196,7 @@
     fail_msg: >-
       /u is not an NFS-backed filesystem on {{ inventory_hostname }}.
       fstype: {{ _ldap_client_u_fstype.stdout | default('') }}
-      This may indicate the Phase 13 NFS mount is not active or a local
+      This may indicate the NFS mount is not active or a local
       directory is shadowing the mount.
   when: ldap_client_workstation_auth_enabled | default(false) | bool
 
@@ -232,11 +224,9 @@
       Results: {{ _ldap_client_u_homes.results | map(attribute='stat.exists') | list }}
   when: ldap_client_workstation_auth_enabled | default(false) | bool
 
-
 # ─────────────────────────────────────────────────────────────────────────
 # SSH key responder verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Verify sss_ssh_authorizedkeys Generalta]"
   ansible.builtin.command:
     cmd: sss_ssh_authorizedkeys generalta
@@ -274,7 +264,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # sudo responder verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : sudo -l -U generalta]"
   ansible.builtin.command:
     cmd: sudo -l -U generalta
@@ -318,7 +307,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Stu sudo: workstation-01 has ls-only; workstation-02 has none
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : sudo -l -U stu]"
   ansible.builtin.command:
     cmd: sudo -l -U stu

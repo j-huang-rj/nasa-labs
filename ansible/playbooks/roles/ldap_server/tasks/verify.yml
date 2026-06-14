@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Service state verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Gather Service Facts]"
   ansible.builtin.service_facts:
 
@@ -34,7 +33,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # LDAPS listener verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Wait For LDAPS Port 636]"
   ansible.builtin.wait_for:
     host: "{{ ldap_server_ip }}"
@@ -69,7 +67,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # OLC state verification (cn=config via ldapi)
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search OLC TLS Configuration]"
   ansible.builtin.command:
     cmd: >-
@@ -184,7 +181,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # DIT Organizational Unit verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search Base DN Organizational Units]"
   ansible.builtin.command:
     cmd: >-
@@ -215,7 +211,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # DIT Group verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search TA Group Entry]"
   ansible.builtin.command:
     cmd: >-
@@ -272,7 +267,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # DIT User verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search Generalta User Entry]"
   ansible.builtin.command:
     cmd: >-
@@ -388,9 +382,8 @@
   no_log: true
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 12: ACL verification
+# ACL verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search OLC Access Rules]"
   ansible.builtin.command:
     cmd: >-
@@ -417,9 +410,8 @@
       stdout={{ _ldap_server_acl_search.stdout | default('') }}
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 12: PPolicy verification
+# PPolicy verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search PPolicy Overlay On Target MDB]"
   ansible.builtin.command:
     cmd: >-
@@ -470,9 +462,8 @@
   no_log: true
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 12: TOTP verification
+# TOTP verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search OTP Overlay On Target MDB]"
   ansible.builtin.command:
     cmd: >-
@@ -609,9 +600,8 @@
   no_log: true
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 12: Fortune schema and data verification
+# Fortune schema and data verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search Fortune Schema In cn=config]"
   ansible.builtin.command:
     cmd: >-
@@ -688,9 +678,8 @@
       stdout={{ _ldap_server_sssvlv_overlay_search.stdout | default('') }}
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 14: sudoRole data verification
+# sudoRole data verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Search SUDOers Container]"
   ansible.builtin.command:
     cmd: >-

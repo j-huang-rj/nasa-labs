@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Gateway: only configure SSSD on workstation-auth hosts
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sssd : Skip SSSD For Non-Workstation Hosts]"
   ansible.builtin.debug:
     msg: >-
@@ -19,7 +18,6 @@
 # Assemble simple_allow_groups and simple_allow_users as comma-separated
 # strings for the SSSD template
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sssd : Render sssd.conf]"
   ansible.builtin.template:
     src: sssd.conf.j2
@@ -33,7 +31,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Flush handlers to ensure SSSD is running with new config before checks
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sssd : Flush Handlers]"
   ansible.builtin.meta: flush_handlers
   when: ldap_client_workstation_auth_enabled | default(false) | bool
@@ -41,7 +38,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Enable SSSD service
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sssd : Enable And Start SSSD Service]"
   ansible.builtin.systemd_service:
     name: sssd

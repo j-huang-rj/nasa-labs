@@ -7,8 +7,7 @@ uris = {{ mail_ldap_uri }}
 tls_ca_cert_file = {{ mail_ldap_ca_cert_path }}
 tls_require_cert = hard
 
-# Search dynamic LDAP mail accounts directly. OJ-created mail users are regular
-# entries under ou=People and may not carry static TA memberUid/gidNumber data.
+# Search dynamic LDAP mail accounts directly
 base = ou=People,{{ mail_ldap_base_dn }}
 scope = subtree
 deref = never

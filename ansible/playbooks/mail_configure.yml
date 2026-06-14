@@ -2,6 +2,7 @@
 # Prerequisites:
 #   - bootstrap.yml
 #   - dns_configure.yml
+#   - ldap_configure.yml
 
 - name: Mail Service Configuration
   hosts: mail

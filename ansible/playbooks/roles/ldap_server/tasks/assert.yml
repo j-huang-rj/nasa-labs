@@ -28,9 +28,9 @@
       - ldap_server_uri | length > 0
     fail_msg: "Required LDAP identity variables must be defined and non-empty"
 
-# ───────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────
 # Check Required LDAP Data Model
-# ───────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [assert : Check Required LDAP Data Model]"
   become: false
   ansible.builtin.assert:
@@ -87,9 +87,9 @@
       ldap_users must contain generalta (UID 10000), mailta (UID 10001), stu (UID 20000)
       with correct homes, groups, ssh_public_key, and password_hash_key.
 
-# ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 # Normalize credentials to internal facts from canonical ldap_server_credentials
-# ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 - name: "PHASE [assert : Normalize Admin Password]"
   become: false
   ansible.builtin.set_fact:
@@ -219,9 +219,9 @@
   vars:
     item: "{{ _ldap_server_user_totp_secrets[_p12_totp_user.key] | default('') }}"
 
-# ─────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 # Check Optional TLS Secret Pair Shape
-# ─────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 - name: "PHASE [assert : Check Optional TLS Secret Pair Shape]"
   become: false
   ansible.builtin.assert:
@@ -237,9 +237,9 @@
       tls.yml can generate a self-signed key/cert.
       Providing only one of the two values is not allowed.
 
-# ──────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 # Check Required Module And Schema Defaults
-# ──────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 - name: "PHASE [assert : Check Required Module And Schema Defaults]"
   become: false
   ansible.builtin.assert:
@@ -257,16 +257,15 @@
       ldap_server_required_modules must list ppolicy, otp, sssvlv entries.
       ldap_server_schema_files must list required schema LDIF paths.
 
-# ──────────────────────────────────────────
-# Check Required Phase 12 Secret Shapes
-# (validates normalized facts that derive from ldap_server_credentials)
-# ──────────────────────────────────────────
-- name: "PHASE [assert : Check Required Phase 12 Secret Shapes]"
+# ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Check Required Secret Shapes
+# ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+- name: "PHASE [assert : Check Required Secret Shapes]"
   become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      # TA plaintext password for Phase 12 non-root validation binds
+      # TA plaintext password for non-root validation binds
       - _ldap_server_user_plaintext_passwords.generalta is defined
       - _ldap_server_user_plaintext_passwords.generalta | length > 0
       - _ldap_server_user_plaintext_passwords.mailta is defined
@@ -280,16 +279,16 @@
       - _ldap_server_user_totp_secrets.stu is defined
       - _ldap_server_user_totp_secrets.stu | length > 0
     fail_msg: >-
-      Required Phase 12 secret shapes are missing or empty.
+      Required secret shapes are missing or empty.
       _ldap_server_user_plaintext_passwords must have non-empty values for generalta, mailta, stu.
       _ldap_server_user_totp_secrets must have non-empty values for generalta and stu.
       Source these from ldap_server_credentials in host_vars/ldap-01/secrets.yml.
   no_log: true
 
-# ──────────────────────────────────────────
-# Check Required Phase 12 Defaults
-# ──────────────────────────────────────────
-- name: "PHASE [assert : Check Required Phase 12 Defaults]"
+# ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Check Required Defaults
+# ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+- name: "PHASE [assert : Check Required Defaults]"
   become: false
   ansible.builtin.assert:
     quiet: true
@@ -333,7 +332,7 @@
       - ldap_server_sssvlv_max_keys | default(0) | int >= 1
       - ldap_server_sssvlv_max_per_conn | default(0) | int >= 1
     fail_msg: >-
-      Required Phase 12 defaults are missing or invalid.
+      Required defaults are missing or invalid.
       ACL default lists must be non-empty.
       PPolicy defaults must include check module path, quality level, min length >= 1,
       in history >= 0, and hash_cleartext/use_check_module booleans.

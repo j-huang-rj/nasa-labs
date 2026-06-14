@@ -9,11 +9,6 @@ passdb {
 }
 
 {% if mail_ldap_enabled | default(false) %}
-# LDAP account gate. OJ-created mail users are dynamic LDAP users under
-# ou=People, not necessarily static memberUid/gidNumber TA entries. This gate
-# only checks that the login name exists in LDAP and is not explicitly forbidden;
-# noauthenticate=y in the LDAP template means password verification still
-# happens in the following auth-bind passdb.
 passdb {
   driver = ldap
   args = {{ mail_dovecot_ldap_account_gate_path }}
@@ -21,7 +16,7 @@ passdb {
   result_internalfail = return-fail
 }
 
-# LDAP password/TOTP verification via simple bind as the authenticating user.
+# LDAP password/TOTP verification via simple bind as the authenticating user
 passdb {
   driver = ldap
   args = {{ mail_dovecot_conf_dir }}/dovecot-ldap.conf.ext

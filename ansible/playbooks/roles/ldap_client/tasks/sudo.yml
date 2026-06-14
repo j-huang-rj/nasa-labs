@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Gateway: only configure sudo on workstation-auth hosts
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sudo : Skip Sudo Config For Non-Workstation Hosts]"
   ansible.builtin.debug:
     msg: >-
@@ -18,7 +17,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Verify authselect still has with-sudo
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sudo : Verify authselect Has with-sudo]"
   ansible.builtin.command:
     cmd: authselect current
@@ -40,7 +38,6 @@
 # Ensure nsswitch.conf has sudoers: files sss
 # authselect with-sudo normally manages this, but verify idempotently
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sudo : Check nsswitch.conf sudoers Line]"
   ansible.builtin.command:
     cmd: grep -E '^sudoers:' /etc/nsswitch.conf
@@ -62,7 +59,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Clear SSSD caches and refresh sudo rules
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sudo : Clear SSSD Caches]"
   ansible.builtin.command:
     cmd: sss_cache -E
@@ -79,7 +75,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Prove no local graded sudoers entries exist
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sudo : Check For Local Sudoers Entries For Graded Identities]"
   ansible.builtin.shell:
     cmd: >-

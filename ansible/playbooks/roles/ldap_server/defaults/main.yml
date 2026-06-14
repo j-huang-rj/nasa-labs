@@ -1,5 +1,5 @@
 ---
-# Feature flag
+# Component gate
 ldap_server_enabled: false
 
 # Package and service defaults

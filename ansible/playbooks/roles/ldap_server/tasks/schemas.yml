@@ -4,9 +4,9 @@
   ansible.builtin.debug:
     msg: "Load required schemas into cn=schema,cn=config"
 
-# ────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────
 # Create temporary directory for rendered custom schema templates
-# ────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [schemas : Create Temporary Schema Render Directory]"
   ansible.builtin.file:
     path: /tmp/openldap-schemas

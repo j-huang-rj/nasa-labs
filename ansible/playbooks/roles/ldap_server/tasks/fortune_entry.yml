@@ -1,6 +1,5 @@
 ---
-# Per-fortune-item entry reconciliation (included from fortune.yml)
-# Loop var: _fortune_item (item from fortunes.yml with ID, Author, Description)
+# Per-fortune-item entry reconciliation
 
 - name: "PHASE [fortune_entry : Render Fortune LDIF] | id={{ _fortune_item.ID }}"
   ansible.builtin.template:

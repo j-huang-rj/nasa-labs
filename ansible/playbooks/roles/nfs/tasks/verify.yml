@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Server: Service state
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Gather Service Facts]"
   when: inventory_hostname in groups['nfs_servers']
   ansible.builtin.service_facts:
@@ -37,7 +36,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Server: Export state
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Check exportfs Output]"
   when: inventory_hostname in groups['nfs_servers']
   ansible.builtin.command: exportfs -v
@@ -68,7 +66,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Server: Home tree ownership
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Stat Home Directories]"
   when: inventory_hostname in groups['nfs_servers']
   ansible.builtin.stat:
@@ -98,7 +95,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Client: Mount state
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Read /proc/mounts For NFS Check]"
   when: inventory_hostname in groups['nfs_clients']
   ansible.builtin.command: cat /proc/mounts
@@ -119,7 +115,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # SELinux enforcement
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [verify : Gather SELinux Facts]"
   ansible.builtin.setup:
     filter: ansible_selinux

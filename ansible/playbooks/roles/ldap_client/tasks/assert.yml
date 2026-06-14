@@ -27,9 +27,8 @@
     fail_msg: "Required LDAP consumer variables (ldap_server_fqdn, ldap_server_uri, ldap_base_dn) must be defined and non-empty"
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 14 workstation-auth gate assertions
+# workstation-auth gate assertions
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [assert : Reject Non-Workstation Hosts Without Explicit Opt-In]"
   become: false
   ansible.builtin.assert:
@@ -91,7 +90,6 @@
     fail_msg: >-
       ldap_server_uri must be an LDAPS URI on port 636 (e.g. ldaps://ldap.example.com:636).
       Found: {{ ldap_server_uri }}
-      StartTLS/389 and TLS bypass are not supported in Phase 14.
 
 - name: "PHASE [assert : Reject mkhomedir Enabled Final State]"
   become: false
@@ -101,7 +99,7 @@
       - not (ldap_client_enable_mkhomedir | bool)
     fail_msg: >-
       ldap_client_enable_mkhomedir is true, which enables local home creation
-      and can hide the Phase 13 NFS lab_home_root mount. Set to false.
+      and can hide the NFS lab_home_root mount. Set to false.
 
 - name: "PHASE [assert : END]"
   become: false

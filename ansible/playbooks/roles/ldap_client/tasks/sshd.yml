@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Gateway: only configure sshd on workstation-auth hosts
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sshd : Skip sshd Config For Non-Workstation Hosts]"
   ansible.builtin.debug:
     msg: >-
@@ -18,7 +17,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Deploy sshd AuthorizedKeysCommand drop-in
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sshd : Create sshd Drop-In Directory]"
   ansible.builtin.file:
     path: "{{ ldap_client_sshd_dropin_dir }}"
@@ -52,7 +50,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Flush handlers so new sshd config is active
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sshd : Flush Handlers]"
   ansible.builtin.meta: flush_handlers
   when: ldap_client_workstation_auth_enabled | default(false) | bool
@@ -60,7 +57,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Post-config validation
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [sshd : Validate sshd Configuration]"
   ansible.builtin.command:
     cmd: sshd -t

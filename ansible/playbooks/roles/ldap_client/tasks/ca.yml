@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Gateway: only configure CA trust on workstation-auth hosts
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [ca : Skip CA Trust For Non-Workstation Hosts]"
   ansible.builtin.debug:
     msg: >-
@@ -17,9 +16,8 @@
 
 # ─────────────────────────────────────────────────────────────────────────
 # Source selection: prefer explicit ldap_tls_ca_certificate if non-empty
-# otherwise slurp the active OpenLDAP certificate from ldap-01
+# otherwise slurp the active OpenLDAP certificate
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [ca : Slurp OpenLDAP CA Certificate From LDAP Server]"
   ansible.builtin.slurp:
     src: "{{ ldap_tls_ca_source_path }}"
@@ -59,7 +57,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # CA-independent LDAPS verification with explicit trusted certificate
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [ca : LDAPS RootDSE Search With Certificate Validation]"
   ansible.builtin.command:
     cmd: >-

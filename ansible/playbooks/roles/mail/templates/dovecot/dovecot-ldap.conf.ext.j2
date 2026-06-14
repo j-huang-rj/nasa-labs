@@ -10,8 +10,8 @@ tls_require_cert = hard
 # Base DN for searches
 base = {{ mail_ldap_base_dn }}
 
-# Auth bind as user — DN template avoids extra LDAP lookup.
-# Mail account eligibility is enforced by the preceding noauthenticate LDAP passdb.
+# Auth bind as user — DN template avoids extra LDAP lookup
+# Mail account eligibility is enforced by the preceding noauthenticate LDAP passdb
 auth_bind = yes
 auth_bind_userdn = uid=%n,ou=People,{{ mail_ldap_base_dn }}
 

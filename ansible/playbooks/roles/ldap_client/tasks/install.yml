@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Gateway: only run package operations on workstation-auth hosts
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [install : Skip Package Install For Non-Workstation Hosts]"
   ansible.builtin.debug:
     msg: >-
@@ -16,9 +15,8 @@
   when: not (ldap_client_workstation_auth_enabled | default(false) | bool)
 
 # ─────────────────────────────────────────────────────────────────────────
-# Target RPM availability preflight (dnf repoquery)
+# Target RPM availability preflight
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [install : Check Target RPM Availability]"
   ansible.builtin.command:
     cmd: >-
@@ -44,7 +42,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Package installation
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [install : Install LDAP Client Packages]"
   ansible.builtin.dnf:
     name: "{{ ldap_client_packages }}"
@@ -54,7 +51,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Post-install binary verification
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [install : Verify authselect Binary Exists]"
   ansible.builtin.stat:
     path: /usr/bin/authselect
@@ -102,7 +98,7 @@
     fail_msg: "/usr/bin/sss_ssh_authorizedkeys is not present after package install"
   when: ldap_client_workstation_auth_enabled | default(false) | bool
 
-- name: "PHASE [install : Verify sss_ssh_authorizedkeys Owning RPM]"  # noqa: command-instead-of-module
+- name: "PHASE [install : Verify sss_ssh_authorizedkeys Owning RPM]" # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: rpm -qf /usr/bin/sss_ssh_authorizedkeys
   changed_when: false

@@ -7,7 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Gateway: only configure authselect on workstation-auth hosts
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [authselect : Skip Authselect For Non-Workstation Hosts]"
   ansible.builtin.debug:
     msg: >-
@@ -18,7 +17,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Check current authselect state for idempotency
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [authselect : Check Current Authselect State]"
   ansible.builtin.command:
     cmd: authselect current
@@ -37,7 +35,6 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Select authselect SSSD profile with sudo support, without mkhomedir
 # ─────────────────────────────────────────────────────────────────────────
-
 - name: "PHASE [authselect : Select SSSD Profile With Sudo]"
   ansible.builtin.command:
     cmd: >-
