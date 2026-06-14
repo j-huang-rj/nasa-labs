@@ -33,25 +33,25 @@
 - name: "PHASE [dit : Search Base DN]"
   ansible.builtin.command:
     cmd: >-
-      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      ldapsearch -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
       -H {{ ldap_server_uri }} -b "{{ ldap_base_dn }}" -s base '(objectClass=*)' dn
   changed_when: false
   failed_when: false
   no_log: true
-  register: _openldap_dit_base
+  register: _ldap_server_dit_base
   environment:
-    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
 
 - name: "PHASE [dit : Create Base DN If Missing]"
-  when: _openldap_dit_base.rc != 0
+  when: _ldap_server_dit_base.rc != 0
   ansible.builtin.command:
     cmd: >-
-      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _openldap_admin_password }}"
+      ldapadd -x -D "cn=admin,{{ ldap_base_dn }}" -w "{{ _ldap_server_admin_password }}"
       -H {{ ldap_server_uri }} -f /tmp/openldap-dit/base.ldif
   changed_when: true
   no_log: true
   environment:
-    LDAPTLS_CACERT: "{{ openldap_tls_cert_path }}"
+    LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path }}"
 
 # ─────────────────────────────────────────────────────────────────────────
 # Organizational Units: search before add for each required OU

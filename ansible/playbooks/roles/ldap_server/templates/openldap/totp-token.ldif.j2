@@ -4,5 +4,5 @@ objectClass: top
 objectClass: organizationalRole
 objectClass: oathTOTPToken
 cn: totp-{{ _totp_username }}
-oathTOTPParams: {{ openldap_totp_params_dn }}
+oathTOTPParams: {{ ldap_server_totp_params_dn }}
 oathSecret:: {{ _totp_secret }}

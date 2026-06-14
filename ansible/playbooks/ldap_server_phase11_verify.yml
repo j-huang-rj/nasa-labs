@@ -161,7 +161,7 @@
   tags:
     - static
   vars:
-    _p11_openldap_role_dir: "{{ playbook_dir }}/roles/openldap"
+    _p11_ldap_server_role_dir: "{{ playbook_dir }}/roles/ldap_server"
     _p11_forbidden_source_patterns:
       - pattern: '/etc/openldap/slapd\.d'
         label: 'Direct slapd.d file writes (template/copy/lineinfile/blockinfile/file modules targeting slapd.d directory)'
@@ -187,7 +187,7 @@
       - pattern: 'ldap_groups'
         label: 'Explicit ldap_groups reference (must use inventory identity model)'
         grep_args: '-rn --include="*.yml" --include="*.yaml" "ldap_groups"'
-    _p11_openldap_task_patterns:
+    _p11_ldap_server_task_patterns:
       - module: 'ansible\.builtin\.template'
         label: 'template writes to slapd.d'
         grep_args: '-rn --include="*.yml" --include="*.yaml" "ansible\.builtin\.template"'
@@ -209,13 +209,13 @@
   tasks:
     - name: "PHASE [static : START]"
       ansible.builtin.debug:
-        msg: "Phase 11 static source safety gates — scanning for forbidden patterns in openldap role"
+        msg: "Phase 11 static source safety gates — scanning for forbidden patterns in ldap_server role"
 
     - name: "PHASE [static : Scan For Forbidden Security Patterns In OpenLDAP Role]"
       ansible.builtin.shell:
         cmd: >-
           set -o pipefail;
-          cd "{{ _p11_openldap_role_dir }}" 2>/dev/null || exit 0;
+          cd "{{ _p11_ldap_server_role_dir }}" 2>/dev/null || exit 0;
           grep {{ item.grep_args }} || true
         executable: /bin/bash
       changed_when: false
@@ -305,7 +305,7 @@
             _p11_forbidden_source_scan.results[6].stdout | length > 0
         fail_msg: >-
           OpenLDAP role does not reference ldap_users — inventory identity model
-          may be unused. The openldap role must consume ldap_users from the shared
+          may be unused. The ldap_server role must consume ldap_users from the shared
           ldap_identity.yml model.
           Matches:
           {{ _p11_forbidden_source_scan.results[6].stdout }}
@@ -318,7 +318,7 @@
             _p11_forbidden_source_scan.results[7].stdout | length > 0
         fail_msg: >-
           OpenLDAP role does not reference ldap_groups — inventory identity model
-          may be unused. The openldap role must consume ldap_groups from the shared
+          may be unused. The ldap_server role must consume ldap_groups from the shared
           ldap_identity.yml model.
           Matches:
           {{ _p11_forbidden_source_scan.results[7].stdout }}
@@ -348,7 +348,7 @@
           ldapsearch -H {{ ldap_server_uri }}
           -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
       environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
+        LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
       changed_when: false
       register: _p11_ldaps_search
 
@@ -702,7 +702,7 @@
           - -e
           - >-
             {{ {
-              'openldap_enabled': true,
+              'ldap_server_enabled': true,
               'ansible_user': ansible_user | default('student'),
               'ansible_ssh_common_args': ansible_ssh_common_args | default('')
             } | to_json }}
@@ -752,7 +752,7 @@
           ldapsearch -H {{ ldap_server_uri }}
           -x -b "{{ ldap_base_dn }}" '(objectClass=*)' dn
       environment:
-        LDAPTLS_CACERT: "{{ openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
+        LDAPTLS_CACERT: "{{ ldap_server_tls_cert_path | default('/etc/openldap/certs/ldap.crt') }}"
       changed_when: false
       register: _p11_reboot_ldaps
 

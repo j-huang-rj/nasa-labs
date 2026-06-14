@@ -1,19 +1,19 @@
 ---
 # Feature flag
-openldap_enabled: false
+ldap_server_enabled: false
 
 # Package and service defaults
-openldap_epel_package: epel-release
-openldap_packages:
+ldap_server_epel_package: epel-release
+ldap_server_packages:
   - openldap-servers
   - openldap-clients
   - openssl
   - ca-certificates
-openldap_service_name: slapd
+ldap_server_service_name: slapd
 
 # Module paths
-openldap_module_dir: /usr/lib64/openldap
-openldap_required_modules:
+ldap_server_module_dir: /usr/lib64/openldap
+ldap_server_required_modules:
   - load: ppolicy.la
     path: /usr/lib64/openldap/ppolicy.la
   - load: otp.la
@@ -22,19 +22,19 @@ openldap_required_modules:
     path: /usr/lib64/openldap/sssvlv.la
 
 # Filesystem paths
-openldap_tls_cert_dir: /etc/openldap/certs
-openldap_tls_key_dir: /etc/openldap/private
-openldap_tls_cert_path: "{{ openldap_tls_cert_dir }}/ldap.crt"
-openldap_tls_key_path: "{{ openldap_tls_key_dir }}/ldap.key"
-openldap_data_dir: /var/lib/ldap
+ldap_server_tls_cert_dir: /etc/openldap/certs
+ldap_server_tls_key_dir: /etc/openldap/private
+ldap_server_tls_cert_path: "{{ ldap_server_tls_cert_dir }}/ldap.crt"
+ldap_server_tls_key_path: "{{ ldap_server_tls_key_dir }}/ldap.key"
+ldap_server_data_dir: /var/lib/ldap
 
 # OLC / database identity
-openldap_database_suffix: "{{ ldap_base_dn }}"
-openldap_root_dn: "cn=admin,{{ ldap_base_dn }}"
-openldap_olc_database_dn: olcDatabase={1}mdb,cn=config
+ldap_server_database_suffix: "{{ ldap_base_dn }}"
+ldap_server_root_dn: "cn=admin,{{ ldap_base_dn }}"
+ldap_server_olc_database_dn: olcDatabase={1}mdb,cn=config
 
 # Schema defaults
-openldap_schema_files:
+ldap_server_schema_files:
   - name: cosine
     path: /etc/openldap/schema/cosine.ldif
   - name: inetorgperson
@@ -42,7 +42,7 @@ openldap_schema_files:
   - name: nis
     path: /etc/openldap/schema/nis.ldif
 
-openldap_custom_schema_templates:
+ldap_server_custom_schema_templates:
   - name: sudo
     description: Sudo LDAP schema
   - name: openssh-lpk
@@ -50,48 +50,48 @@ openldap_custom_schema_templates:
   - name: fortune
     description: Fortune custom objectClass schema
 
-openldap_fortune_schema_oid_root: "2.25.109749598841848522681210166878566339431"
+ldap_server_fortune_schema_oid_root: "2.25.109749598841848522681210166878566339431"
 
 # ACLs
-openldap_acl_secret_attrs:
+ldap_server_acl_secret_attrs:
   - userPassword
   - oathSecret
   - oathTOTPLastTimeStep
   - oathTOTPTimeStepDrift
 
-openldap_acl_delegate_dns:
+ldap_server_acl_delegate_dns:
   - "uid=generalta,ou=People,{{ ldap_base_dn }}"
   - "uid=mailta,ou=People,{{ ldap_base_dn }}"
 
 # ppolicy
-openldap_ppolicy_default_dn: "cn=default,ou=Ppolicy,{{ ldap_base_dn }}"
-openldap_ppolicy_check_module: /usr/lib64/openldap/check_password.so
-openldap_ppolicy_hash_cleartext: true
-openldap_ppolicy_check_quality: 2
-openldap_ppolicy_min_length: 8
-openldap_ppolicy_in_history: 1
-openldap_ppolicy_use_check_module: true
+ldap_server_ppolicy_default_dn: "cn=default,ou=Ppolicy,{{ ldap_base_dn }}"
+ldap_server_ppolicy_check_module: /usr/lib64/openldap/check_password.so
+ldap_server_ppolicy_hash_cleartext: true
+ldap_server_ppolicy_check_quality: 2
+ldap_server_ppolicy_min_length: 8
+ldap_server_ppolicy_in_history: 1
+ldap_server_ppolicy_use_check_module: true
 
-openldap_check_password_min_points: 3
-openldap_check_password_min_upper: 0
-openldap_check_password_min_lower: 0
-openldap_check_password_min_digit: 0
-openldap_check_password_min_punct: 0
+ldap_server_check_password_min_points: 3
+ldap_server_check_password_min_upper: 0
+ldap_server_check_password_min_lower: 0
+ldap_server_check_password_min_digit: 0
+ldap_server_check_password_min_punct: 0
 
 # TOTP
-openldap_totp_params_dn: "cn=totp,ou=Ppolicy,{{ ldap_base_dn }}"
-openldap_totp_length: 6
-openldap_totp_time_step: 60
-openldap_totp_hmac_algorithm: "1.2.840.113549.2.7"
+ldap_server_totp_params_dn: "cn=totp,ou=Ppolicy,{{ ldap_base_dn }}"
+ldap_server_totp_length: 6
+ldap_server_totp_time_step: 60
+ldap_server_totp_hmac_algorithm: "1.2.840.113549.2.7"
 
 # Fortune / sssvlv
-openldap_fortune_base_dn: "ou=Fortune,{{ ldap_base_dn }}"
-openldap_sssvlv_max: 500
-openldap_sssvlv_max_keys: 50
-openldap_sssvlv_max_per_conn: 10
+ldap_server_fortune_base_dn: "ou=Fortune,{{ ldap_base_dn }}"
+ldap_server_sssvlv_max: 500
+ldap_server_sssvlv_max_keys: 50
+ldap_server_sssvlv_max_per_conn: 10
 
 # sudoRole
-openldap_sudo_roles:
+ldap_server_sudo_roles:
   ta:
     cn: ta
     sudoUser: "%ta"
@@ -118,8 +118,8 @@ openldap_sudo_roles:
       - "!authenticate"
 
 # Canonical credential bundle
-openldap_credentials: {}
+ldap_server_credentials: {}
 
 # Secrets
-openldap_tls_private_key: ""
-openldap_tls_certificate: ""
+ldap_server_tls_private_key: ""
+ldap_server_tls_certificate: ""

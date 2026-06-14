@@ -2,16 +2,16 @@
 - name: "PHASE [assert : START]"
   become: false
   ansible.builtin.debug:
-    msg: "Validate openldap role variables"
+    msg: "Validate ldap_server role variables"
 
-- name: "PHASE [assert : Check openldap_enabled Is True]"
+- name: "PHASE [assert : Check ldap_server_enabled Is True]"
   become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      - openldap_enabled | bool
+      - ldap_server_enabled | bool
       - inventory_hostname in groups['ldap_servers']
-    fail_msg: "openldap role must run only on hosts in ldap_servers with openldap_enabled=true"
+    fail_msg: "ldap_server role must run only on hosts in ldap_servers with ldap_server_enabled=true"
 
 - name: "PHASE [assert : Check Required LDAP Identity Variables Are Defined]"
   become: false
@@ -88,36 +88,36 @@
       with correct homes, groups, ssh_public_key, and password_hash_key.
 
 # ─────────────────────────────────────────────────────────
-# Normalize credentials to internal facts from canonical openldap_credentials
+# Normalize credentials to internal facts from canonical ldap_server_credentials
 # ─────────────────────────────────────────────────────────
 - name: "PHASE [assert : Normalize Admin Password]"
   become: false
   ansible.builtin.set_fact:
-    _openldap_admin_password: >-
-      {{ (openldap_credentials.directory_manager | default({})).password_plaintext
+    _ldap_server_admin_password: >-
+      {{ (ldap_server_credentials.directory_manager | default({})).password_plaintext
          | default('', true) }}
-    _openldap_admin_password_hash: >-
-      {{ (openldap_credentials.directory_manager | default({})).password_hash
+    _ldap_server_admin_password_hash: >-
+      {{ (ldap_server_credentials.directory_manager | default({})).password_hash
          | default('', true) }}
   no_log: true
 
 - name: "PHASE [assert : Normalize Bind Password]"
   become: false
   ansible.builtin.set_fact:
-    _openldap_bind_password: >-
-      {{ (openldap_credentials.service_bind | default({})).password_plaintext
+    _ldap_server_bind_password: >-
+      {{ (ldap_server_credentials.service_bind | default({})).password_plaintext
          | default('', true) }}
-    _openldap_bind_password_hash: >-
-      {{ (openldap_credentials.service_bind | default({})).password_hash
+    _ldap_server_bind_password_hash: >-
+      {{ (ldap_server_credentials.service_bind | default({})).password_hash
          | default('', true) }}
   no_log: true
 
 - name: "PHASE [assert : Normalize User Password Hashes]"
   become: false
   ansible.builtin.set_fact:
-    _openldap_user_password_hashes: >-
+    _ldap_server_user_password_hashes: >-
       {%- set hashes = {} -%}
-      {%- set credential_users = openldap_credentials.users | default({}) -%}
+      {%- set credential_users = ldap_server_credentials.users | default({}) -%}
       {%- for uname, udata in ldap_users.items() -%}
       {%-   set hash_key = udata.password_hash_key | default(uname) -%}
       {%-   set user_cred = credential_users[uname] | default({}) -%}
@@ -125,18 +125,18 @@
             user_cred.password_hash | default('', true) }) -%}
       {%- endfor -%}
       {{ hashes }}
-    _openldap_user_plaintext_passwords: >-
+    _ldap_server_user_plaintext_passwords: >-
       {%- set plains = {} -%}
-      {%- set credential_users = openldap_credentials.users | default({}) -%}
+      {%- set credential_users = ldap_server_credentials.users | default({}) -%}
       {%- for uname in ldap_users.keys() | list -%}
       {%-   set user_cred = credential_users[uname] | default({}) -%}
       {%-   set _ = plains.update({uname:
             user_cred.password_plaintext | default('', true) }) -%}
       {%- endfor -%}
       {{ plains }}
-    _openldap_user_totp_secrets: >-
+    _ldap_server_user_totp_secrets: >-
       {%- set secrets = {} -%}
-      {%- set credential_users = openldap_credentials.users | default({}) -%}
+      {%- set credential_users = ldap_server_credentials.users | default({}) -%}
       {%- for uname in ldap_users.keys() | list -%}
       {%-   set user_cred = credential_users[uname] | default({}) -%}
       {%-   set cred_totp = user_cred.totp_secret_raw_b64 | default('', true) -%}
@@ -152,13 +152,13 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - _openldap_admin_password is defined
-      - _openldap_admin_password | length > 0
-      - _openldap_admin_password_hash is defined
-      - _openldap_admin_password_hash | length > 0
+      - _ldap_server_admin_password is defined
+      - _ldap_server_admin_password | length > 0
+      - _ldap_server_admin_password_hash is defined
+      - _ldap_server_admin_password_hash | length > 0
     fail_msg: >-
       Required OpenLDAP admin secrets are missing.
-      _openldap_admin_password and _openldap_admin_password_hash must be defined and non-empty.
+      _ldap_server_admin_password and _ldap_server_admin_password_hash must be defined and non-empty.
   no_log: true
 
 - name: "PHASE [assert : Check Required OpenLDAP User Password Hash Shapes]"
@@ -166,8 +166,8 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - _openldap_user_password_hashes is defined
-      - _openldap_user_password_hashes is mapping
+      - _ldap_server_user_password_hashes is defined
+      - _ldap_server_user_password_hashes is mapping
       - item | length > 0
       - >-
         item is match('\{(SSHA512|SSHA256|SSHA|SHA|CRYPT|ARGON2)\}')
@@ -180,16 +180,16 @@
     label: "{{ _p12_user.key }}"
   no_log: true
   vars:
-    item: "{{ _openldap_user_password_hashes[_p12_user.value.password_hash_key] | default('') }}"
+    item: "{{ _ldap_server_user_password_hashes[_p12_user.value.password_hash_key] | default('') }}"
 
 - name: "PHASE [assert : Check Required OpenLDAP User Plaintext Password Shapes]"
   become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      - _openldap_user_plaintext_passwords is defined
-      - _openldap_user_plaintext_passwords is mapping
-      - "_openldap_user_plaintext_passwords.keys() | list | sort == ldap_users.keys() | list | sort"
+      - _ldap_server_user_plaintext_passwords is defined
+      - _ldap_server_user_plaintext_passwords is mapping
+      - "_ldap_server_user_plaintext_passwords.keys() | list | sort == ldap_users.keys() | list | sort"
       - item | length > 0
     fail_msg: >-
       Plaintext password for user {{ _p12_ptuser.key }} is missing or empty.
@@ -199,15 +199,15 @@
     label: "{{ _p12_ptuser.key }}"
   no_log: true
   vars:
-    item: "{{ _openldap_user_plaintext_passwords[_p12_ptuser.key] | default('') }}"
+    item: "{{ _ldap_server_user_plaintext_passwords[_p12_ptuser.key] | default('') }}"
 
 - name: "PHASE [assert : Check Required OpenLDAP User TOTP Secret Shapes]"
   become: false
   ansible.builtin.assert:
     quiet: true
     that:
-      - _openldap_user_totp_secrets is defined
-      - _openldap_user_totp_secrets is mapping
+      - _ldap_server_user_totp_secrets is defined
+      - _ldap_server_user_totp_secrets is mapping
       - item | length > 0
     fail_msg: >-
       TOTP secret for user {{ _p12_totp_user.key }} (totp_required) is missing or empty.
@@ -217,7 +217,7 @@
     label: "{{ _p12_totp_user.key }}"
   no_log: true
   vars:
-    item: "{{ _openldap_user_totp_secrets[_p12_totp_user.key] | default('') }}"
+    item: "{{ _ldap_server_user_totp_secrets[_p12_totp_user.key] | default('') }}"
 
 # ─────────────────────────────────────
 # Check Optional TLS Secret Pair Shape
@@ -227,12 +227,12 @@
   ansible.builtin.assert:
     quiet: true
     that:
-      - openldap_tls_private_key is defined
-      - openldap_tls_certificate is defined
-      - openldap_tls_private_key | length > 0 or openldap_tls_certificate | length == 0
-      - openldap_tls_certificate | length > 0 or openldap_tls_private_key | length == 0
+      - ldap_server_tls_private_key is defined
+      - ldap_server_tls_certificate is defined
+      - ldap_server_tls_private_key | length > 0 or ldap_server_tls_certificate | length == 0
+      - ldap_server_tls_certificate | length > 0 or ldap_server_tls_private_key | length == 0
     fail_msg: >-
-      Incomplete TLS secret shape: openldap_tls_private_key and openldap_tls_certificate
+      Incomplete TLS secret shape: ldap_server_tls_private_key and ldap_server_tls_certificate
       must both be non-empty when supplied from secrets, or both be empty so
       tls.yml can generate a self-signed key/cert.
       Providing only one of the two values is not allowed.
@@ -246,20 +246,20 @@
     quiet: true
     that:
       # Required modules list must be non-empty
-      - openldap_required_modules is defined
-      - openldap_required_modules | length > 0
+      - ldap_server_required_modules is defined
+      - ldap_server_required_modules | length > 0
 
       # Schema files list must be non-empty
-      - openldap_schema_files is defined
-      - openldap_schema_files | length > 0
+      - ldap_server_schema_files is defined
+      - ldap_server_schema_files | length > 0
     fail_msg: >-
       Required module and schema defaults must be non-empty.
-      openldap_required_modules must list ppolicy, otp, sssvlv entries.
-      openldap_schema_files must list required schema LDIF paths.
+      ldap_server_required_modules must list ppolicy, otp, sssvlv entries.
+      ldap_server_schema_files must list required schema LDIF paths.
 
 # ──────────────────────────────────────────
 # Check Required Phase 12 Secret Shapes
-# (validates normalized facts that derive from openldap_credentials)
+# (validates normalized facts that derive from ldap_server_credentials)
 # ──────────────────────────────────────────
 - name: "PHASE [assert : Check Required Phase 12 Secret Shapes]"
   become: false
@@ -267,23 +267,23 @@
     quiet: true
     that:
       # TA plaintext password for Phase 12 non-root validation binds
-      - _openldap_user_plaintext_passwords.generalta is defined
-      - _openldap_user_plaintext_passwords.generalta | length > 0
-      - _openldap_user_plaintext_passwords.mailta is defined
-      - _openldap_user_plaintext_passwords.mailta | length > 0
-      - _openldap_user_plaintext_passwords.stu is defined
-      - _openldap_user_plaintext_passwords.stu | length > 0
+      - _ldap_server_user_plaintext_passwords.generalta is defined
+      - _ldap_server_user_plaintext_passwords.generalta | length > 0
+      - _ldap_server_user_plaintext_passwords.mailta is defined
+      - _ldap_server_user_plaintext_passwords.mailta | length > 0
+      - _ldap_server_user_plaintext_passwords.stu is defined
+      - _ldap_server_user_plaintext_passwords.stu | length > 0
 
       # TOTP secrets (raw bytes, base64-encoded) for generalta and stu
-      - _openldap_user_totp_secrets.generalta is defined
-      - _openldap_user_totp_secrets.generalta | length > 0
-      - _openldap_user_totp_secrets.stu is defined
-      - _openldap_user_totp_secrets.stu | length > 0
+      - _ldap_server_user_totp_secrets.generalta is defined
+      - _ldap_server_user_totp_secrets.generalta | length > 0
+      - _ldap_server_user_totp_secrets.stu is defined
+      - _ldap_server_user_totp_secrets.stu | length > 0
     fail_msg: >-
       Required Phase 12 secret shapes are missing or empty.
-      _openldap_user_plaintext_passwords must have non-empty values for generalta, mailta, stu.
-      _openldap_user_totp_secrets must have non-empty values for generalta and stu.
-      Source these from openldap_credentials in host_vars/ldap-01/secrets.yml.
+      _ldap_server_user_plaintext_passwords must have non-empty values for generalta, mailta, stu.
+      _ldap_server_user_totp_secrets must have non-empty values for generalta and stu.
+      Source these from ldap_server_credentials in host_vars/ldap-01/secrets.yml.
   no_log: true
 
 # ──────────────────────────────────────────
@@ -295,43 +295,43 @@
     quiet: true
     that:
       # ACL defaults must be defined
-      - openldap_acl_secret_attrs is defined
-      - openldap_acl_secret_attrs | length > 0
-      - openldap_acl_delegate_dns is defined
-      - openldap_acl_delegate_dns | length > 0
+      - ldap_server_acl_secret_attrs is defined
+      - ldap_server_acl_secret_attrs | length > 0
+      - ldap_server_acl_delegate_dns is defined
+      - ldap_server_acl_delegate_dns | length > 0
 
       # PPolicy defaults must have valid values
-      - openldap_ppolicy_default_dn is defined
-      - openldap_ppolicy_default_dn | length > 0
-      - openldap_ppolicy_check_module is defined
-      - openldap_ppolicy_check_module | length > 0
-      - openldap_ppolicy_hash_cleartext is defined
-      - openldap_ppolicy_check_quality is defined
-      - openldap_ppolicy_min_length | default(0) | int >= 1
-      - openldap_ppolicy_in_history | default(-1) | int >= 0
-      - openldap_ppolicy_use_check_module is defined
+      - ldap_server_ppolicy_default_dn is defined
+      - ldap_server_ppolicy_default_dn | length > 0
+      - ldap_server_ppolicy_check_module is defined
+      - ldap_server_ppolicy_check_module | length > 0
+      - ldap_server_ppolicy_hash_cleartext is defined
+      - ldap_server_ppolicy_check_quality is defined
+      - ldap_server_ppolicy_min_length | default(0) | int >= 1
+      - ldap_server_ppolicy_in_history | default(-1) | int >= 0
+      - ldap_server_ppolicy_use_check_module is defined
 
       # Check module defaults must have valid values
-      - openldap_check_password_min_points | default(-1) | int >= 0
-      - openldap_check_password_min_upper is defined
-      - openldap_check_password_min_lower is defined
-      - openldap_check_password_min_digit is defined
-      - openldap_check_password_min_punct is defined
+      - ldap_server_check_password_min_points | default(-1) | int >= 0
+      - ldap_server_check_password_min_upper is defined
+      - ldap_server_check_password_min_lower is defined
+      - ldap_server_check_password_min_digit is defined
+      - ldap_server_check_password_min_punct is defined
 
       # TOTP defaults must have valid values
-      - openldap_totp_params_dn is defined
-      - openldap_totp_params_dn | length > 0
-      - openldap_totp_length | default(0) | int >= 1
-      - openldap_totp_time_step | default(0) | int >= 1
-      - openldap_totp_hmac_algorithm is defined
-      - openldap_totp_hmac_algorithm | length > 0
+      - ldap_server_totp_params_dn is defined
+      - ldap_server_totp_params_dn | length > 0
+      - ldap_server_totp_length | default(0) | int >= 1
+      - ldap_server_totp_time_step | default(0) | int >= 1
+      - ldap_server_totp_hmac_algorithm is defined
+      - ldap_server_totp_hmac_algorithm | length > 0
 
       # Fortune/sssvlv defaults must have valid values
-      - openldap_fortune_base_dn is defined
-      - openldap_fortune_base_dn | length > 0
-      - openldap_sssvlv_max | default(0) | int >= 1
-      - openldap_sssvlv_max_keys | default(0) | int >= 1
-      - openldap_sssvlv_max_per_conn | default(0) | int >= 1
+      - ldap_server_fortune_base_dn is defined
+      - ldap_server_fortune_base_dn | length > 0
+      - ldap_server_sssvlv_max | default(0) | int >= 1
+      - ldap_server_sssvlv_max_keys | default(0) | int >= 1
+      - ldap_server_sssvlv_max_per_conn | default(0) | int >= 1
     fail_msg: >-
       Required Phase 12 defaults are missing or invalid.
       ACL default lists must be non-empty.

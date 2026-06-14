@@ -16,13 +16,13 @@
       dn
   changed_when: false
   failed_when: false
-  register: _openldap_mdb_search
+  register: _ldap_server_mdb_search
 
 - name: "PHASE [acls : Extract MDB Database DN]"
-  when: _openldap_mdb_search.rc == 0
+  when: _ldap_server_mdb_search.rc == 0
   ansible.builtin.set_fact:
-    _openldap_mdb_dn: >-
-      {{ _openldap_mdb_search.stdout_lines | default([])
+    _ldap_server_mdb_dn: >-
+      {{ _ldap_server_mdb_search.stdout_lines | default([])
          | select('match', '^dn: olcDatabase=.*mdb,cn=config')
          | list
          | first
@@ -50,16 +50,16 @@
   ansible.builtin.command:
     cmd: >-
       ldapsearch -Y EXTERNAL -H ldapi:///
-      -b "{{ _openldap_mdb_dn }}" -s base
+      -b "{{ _ldap_server_mdb_dn }}" -s base
       -o ldif-wrap=no
       '(objectClass=*)' olcAccess
   changed_when: false
-  register: _openldap_current_acls
+  register: _ldap_server_current_acls
 
 - name: "PHASE [acls : Extract Normalized Current olcAccess Lines]"
   ansible.builtin.set_fact:
-    _openldap_current_acls_normalized: >-
-      {{ _openldap_current_acls.stdout_lines | default([])
+    _ldap_server_current_acls_normalized: >-
+      {{ _ldap_server_current_acls.stdout_lines | default([])
          | select('match', '^olcAccess:')
          | map('regex_replace', '\\s+', ' ')
          | map('trim')
@@ -68,7 +68,7 @@
 
 - name: "PHASE [acls : Extract Normalized Intended olcAccess Lines]"
   ansible.builtin.set_fact:
-    _openldap_intended_acls_normalized: >-
+    _ldap_server_intended_acls_normalized: >-
       {{ lookup('ansible.builtin.template', 'openldap/olc-access.ldif.j2')
          | regex_replace('\n[ ]+', ' ')
          | regex_findall('^olcAccess:.*', multiline=True)
@@ -82,8 +82,8 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [acls : Replace olcAccess With Ordered Intended State]"
   when: >-
-    _openldap_intended_acls_normalized | default([])
-    != _openldap_current_acls_normalized | default([])
+    _ldap_server_intended_acls_normalized | default([])
+    != _ldap_server_current_acls_normalized | default([])
   ansible.builtin.command:
     cmd: >-
       ldapmodify -Y EXTERNAL -H ldapi:///

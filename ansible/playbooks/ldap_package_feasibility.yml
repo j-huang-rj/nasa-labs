@@ -373,7 +373,7 @@
           ---
           # OpenLDAP future role default notes — Phase 8 observed values
           # DO NOT copy this file directly into a role. Use as a reference when
-          # creating ansible/playbooks/roles/openldap/defaults/main.yml in a later phase.
+          # creating ansible/playbooks/roles/ldap_server/defaults/main.yml in a later phase.
           #
           # Source: ldap-01 dnf repoquery and slaptest probe on {{ ansible_facts['date_time']['iso8601'] }}.
 

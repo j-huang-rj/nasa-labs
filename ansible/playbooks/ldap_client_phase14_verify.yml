@@ -9,7 +9,7 @@
 #     ANSIBLE_CONFIG=ansible/ansible.cfg ansible-lint
 #       ansible/playbooks/ldap_client_phase14_verify.yml
 #       ansible/playbooks/roles/ldap_client
-#       ansible/playbooks/roles/openldap
+#       ansible/playbooks/roles/ldap_server
 #
 #   standard verifier:
 #     ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook
@@ -115,7 +115,7 @@
     - static
   vars:
     _p14_ldap_client_role_dir: "{{ playbook_dir }}/roles/ldap_client"
-    _p14_openldap_role_dir: "{{ playbook_dir }}/roles/openldap"
+    _p14_ldap_server_role_dir: "{{ playbook_dir }}/roles/ldap_server"
     _p14_inventory_dir: "{{ playbook_dir }}/../inventory"
   tasks:
     - name: "PHASE [static : START]"
@@ -630,7 +630,7 @@
     - ssh_pubkey
     - ssh_access
   vars:
-    _p14_get_openldap_creds: "{{ hostvars['ldap-01'].openldap_credentials | default({}) }}"
+    _p14_get_ldap_server_creds: "{{ hostvars['ldap-01'].ldap_server_credentials | default({}) }}"
   tasks:
     - name: "PHASE [ssh_live : START]"
       ansible.builtin.debug:
@@ -643,12 +643,12 @@
         cmd: |
           python3 -c "
           import base64, hmac, hashlib, struct, time
-          secret_b64 = '{{ _p14_get_openldap_creds.users.generalta.totp_secret_raw_b64 | default('') }}'
+          secret_b64 = '{{ _p14_get_ldap_server_creds.users.generalta.totp_secret_raw_b64 | default('') }}'
           if not secret_b64:
               print('NOT_CONFIGURED')
               exit(0)
           secret = base64.b64decode(secret_b64)
-          t = int(time.time()) // {{ hostvars['ldap-01'].openldap_totp_time_step | default(60) }}
+          t = int(time.time()) // {{ hostvars['ldap-01'].ldap_server_totp_time_step | default(60) }}
           msg = struct.pack('>Q', t)
           h = hmac.new(secret, msg, hashlib.sha1).digest()
           offset = h[-1] & 0x0f
@@ -665,12 +665,12 @@
         cmd: |
           python3 -c "
           import base64, hmac, hashlib, struct, time
-          secret_b64 = '{{ _p14_get_openldap_creds.users.stu.totp_secret_raw_b64 | default('') }}'
+          secret_b64 = '{{ _p14_get_ldap_server_creds.users.stu.totp_secret_raw_b64 | default('') }}'
           if not secret_b64:
               print('NOT_CONFIGURED')
               exit(0)
           secret = base64.b64decode(secret_b64)
-          t = int(time.time()) // {{ hostvars['ldap-01'].openldap_totp_time_step | default(60) }}
+          t = int(time.time()) // {{ hostvars['ldap-01'].ldap_server_totp_time_step | default(60) }}
           msg = struct.pack('>Q', t)
           h = hmac.new(secret, msg, hashlib.sha1).digest()
           offset = h[-1] & 0x0f
@@ -688,12 +688,12 @@
       ansible.builtin.assert:
         quiet: true
         that:
-          - _p14_get_openldap_creds.users.generalta.password_plaintext | default('') | length > 0
+          - _p14_get_ldap_server_creds.users.generalta.password_plaintext | default('') | length > 0
           - _p14_totp_generalta.stdout | default('NOT_CONFIGURED') != 'NOT_CONFIGURED'
         fail_msg: >-
           LCLI-02 (SSH password+TOTP login) cannot be verified:
           generalta password or TOTP secret is not available on the
-          Ansible controller. Ensure openldap_credentials.users.generalta
+          Ansible controller. Ensure ldap_server_credentials.users.generalta
           contains password_plaintext and totp_secret_raw_b64.
 
           Without this material, live SSH password verification cannot
@@ -774,13 +774,13 @@
       register: _p14_ssh_pass_ta_ws01
       no_log: true
       environment:
-        P14_PASSWORD: "{{ _p14_get_openldap_creds.users.generalta.password_plaintext }}"
+        P14_PASSWORD: "{{ _p14_get_ldap_server_creds.users.generalta.password_plaintext }}"
         P14_TOTP: "{{ _p14_totp_generalta.stdout }}"
         P14_HOST: "{{ hostvars['workstation-01'].ansible_host }}"
         P14_PORT: "{{ hostvars['workstation-01'].ansible_port | default(22) }}"
         P14_COMMON_ARGS: "{{ hostvars['workstation-01'].ansible_ssh_common_args | default('') }}"
       when:
-        - _p14_get_openldap_creds.users.generalta.password_plaintext | default('') | length > 0
+        - _p14_get_ldap_server_creds.users.generalta.password_plaintext | default('') | length > 0
         - _p14_totp_generalta.stdout | default('NOT_CONFIGURED') != 'NOT_CONFIGURED'
 
     - name: "PHASE [ssh_password : Assert generalta Login To workstation-01]"
@@ -1042,7 +1042,7 @@
         cmd: |
           _p14_tmpdir="$(mktemp -d)"
           echo "$_p14_tmpdir" > /tmp/_p14_ldap_tmpdir
-          printf '%s' '{{ openldap_credentials.directory_manager.password_plaintext }}' > "${_p14_tmpdir}/pass.txt"
+          printf '%s' '{{ ldap_server_credentials.directory_manager.password_plaintext }}' > "${_p14_tmpdir}/pass.txt"
           chmod 600 "${_p14_tmpdir}/pass.txt"
         executable: /bin/bash
       changed_when: false
@@ -1059,7 +1059,7 @@
           rc=$?; rm -rf "${_p14_tmpdir}" /tmp/_p14_ldap_tmpdir 2>/dev/null; exit $rc
         executable: /bin/bash
       environment:
-        LDAPTLS_CACERT: "{{ ldap_tls_ca_cert_path | default(openldap_tls_cert_path | default('/etc/openldap/certs/ldap.crt')) }}"
+        LDAPTLS_CACERT: "{{ ldap_tls_ca_cert_path | default(ldap_server_tls_cert_path | default('/etc/openldap/certs/ldap.crt')) }}"
       changed_when: false
       no_log: true
       register: _p14_reboot_ldap
@@ -1088,10 +1088,10 @@
         label: 'Secret-adjacent tasks without no_log (missing protection check)'
         grep_args: >-
           -rn 'register:\s*_p14_totp\|register:\s*_p14_ssh_pass\|register:\s*_p14_ssh_key\|\|'
-      - pattern: 'openldap_credentials\.users\.'
+      - pattern: 'ldap_server_credentials\.users\.'
         label: 'OpenLDAP user credential direct interpolation'
         grep_args: >-
-          -rn 'openldap_credentials\.users\.'
+          -rn 'ldap_server_credentials\.users\.'
           --include="*.yml" --include="*.yaml"
           roles/ldap_client
       - pattern: 'LDAPTLS_REQCERT=never'

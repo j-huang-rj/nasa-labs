@@ -256,7 +256,7 @@
   tags:
     - dovecot
   vars:
-    _p15_ldap_creds: "{{ hostvars['ldap-01'].openldap_credentials | default({}) }}"
+    _p15_ldap_creds: "{{ hostvars['ldap-01'].ldap_server_credentials | default({}) }}"
     _p15_mail_ldap_uri: "{{ mail_ldap_uri | default(ldap_server_uri) }}"
     _p15_mail_ldap_ca_cert_path: >-
       {{ mail_ldap_ca_cert_path | default(ldap_tls_ca_cert_path | default('/etc/pki/ca-trust/source/anchors/ldap-ca.crt')) }}
@@ -342,7 +342,7 @@
               print('NOT_CONFIGURED')
               exit(0)
           secret = base64.b64decode(secret_b64)
-          t = int(time.time()) // {{ hostvars['ldap-01'].openldap_totp_time_step | default(60) }}
+          t = int(time.time()) // {{ hostvars['ldap-01'].ldap_server_totp_time_step | default(60) }}
           msg = struct.pack('>Q', t)
           h = hmac.new(secret, msg, hashlib.sha1).digest()
           offset = h[-1] & 0x0f
@@ -366,7 +366,7 @@
               print('NOT_CONFIGURED')
               exit(0)
           secret = base64.b64decode(secret_b64)
-          t = int(time.time()) // {{ hostvars['ldap-01'].openldap_totp_time_step | default(60) }}
+          t = int(time.time()) // {{ hostvars['ldap-01'].ldap_server_totp_time_step | default(60) }}
           msg = struct.pack('>Q', t)
           h = hmac.new(secret, msg, hashlib.sha1).digest()
           offset = h[-1] & 0x0f
@@ -727,7 +727,7 @@
   tags:
     - mail_flow
   vars:
-    _p15_ldap_creds: "{{ hostvars['ldap-01'].openldap_credentials | default({}) }}"
+    _p15_ldap_creds: "{{ hostvars['ldap-01'].ldap_server_credentials | default({}) }}"
   tasks:
     - name: "PHASE [mail_flow : START]"
       become: false
@@ -967,7 +967,7 @@
     - reboot
     - never
   vars:
-    _p15_ldap_creds: "{{ hostvars['ldap-01'].openldap_credentials | default({}) }}"
+    _p15_ldap_creds: "{{ hostvars['ldap-01'].ldap_server_credentials | default({}) }}"
   tasks:
     - name: "PHASE [reboot : Post-Reboot postfix check]"
       ansible.builtin.command:

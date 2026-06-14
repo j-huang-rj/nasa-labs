@@ -9,7 +9,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [sudo_roles : Extract Admin Bind Password]"
   ansible.builtin.set_fact:
-    _openldap_admin_password: "{{ openldap_credentials.directory_manager.password_plaintext }}"
+    _ldap_server_admin_password: "{{ ldap_server_credentials.directory_manager.password_plaintext }}"
   no_log: true
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@
 - name: "PHASE [sudo_roles : Write Temporary Admin Bind Password File]"
   ansible.builtin.copy:
     dest: /tmp/openldap-sudo-roles/.admin-password
-    content: "{{ _openldap_admin_password }}"
+    content: "{{ _ldap_server_admin_password }}"
     owner: root
     group: root
     mode: "0600"
@@ -39,7 +39,7 @@
 # ─────────────────────────────────────────────────────────────────────────
 - name: "PHASE [sudo_roles : Reconcile sudoRole Entry]"
   ansible.builtin.include_tasks: sudo_role_entry.yml
-  loop: "{{ openldap_sudo_roles | dict2items }}"
+  loop: "{{ ldap_server_sudo_roles | dict2items }}"
   loop_control:
     loop_var: _sudo_role_def
     label: "cn={{ _sudo_role_def.key }}"

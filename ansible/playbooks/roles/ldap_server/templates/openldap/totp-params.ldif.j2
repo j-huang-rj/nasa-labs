@@ -1,10 +1,10 @@
 # {{ ansible_managed }}
-{% set _totp_params_cn = openldap_totp_params_dn | regex_replace('^cn=([^,]+),.*$', '\\1') %}
-dn: {{ openldap_totp_params_dn }}
+{% set _totp_params_cn = ldap_server_totp_params_dn | regex_replace('^cn=([^,]+),.*$', '\\1') %}
+dn: {{ ldap_server_totp_params_dn }}
 objectClass: top
 objectClass: organizationalRole
 objectClass: oathTOTPParams
 cn: {{ _totp_params_cn }}
-oathOTPLength: {{ openldap_totp_length }}
-oathTOTPTimeStepPeriod: {{ openldap_totp_time_step }}
-oathHMACAlgorithm: {{ openldap_totp_hmac_algorithm }}
+oathOTPLength: {{ ldap_server_totp_length }}
+oathTOTPTimeStepPeriod: {{ ldap_server_totp_time_step }}
+oathHMACAlgorithm: {{ ldap_server_totp_hmac_algorithm }}

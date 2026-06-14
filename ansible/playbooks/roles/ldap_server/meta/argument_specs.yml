@@ -1,36 +1,36 @@
 ---
 argument_specs:
   main:
-    short_description: Validate openldap role variables
+    short_description: Validate ldap_server role variables
 
     options:
-      openldap_enabled:
+      ldap_server_enabled:
         type: bool
         required: true
-        description: Whether the openldap role should be active on this host
+        description: Whether the ldap_server role should be active on this host
 
-      openldap_epel_package:
+      ldap_server_epel_package:
         type: str
         required: false
         description: EPEL release package name for OpenLDAP server availability
 
-      openldap_packages:
+      ldap_server_packages:
         type: list
         elements: str
         required: false
         description: DNF packages to install for OpenLDAP server and client tools
 
-      openldap_service_name:
+      ldap_server_service_name:
         type: str
         required: false
         description: Systemd unit name for the OpenLDAP service (slapd)
 
-      openldap_module_dir:
+      ldap_server_module_dir:
         type: str
         required: false
         description: Directory containing OpenLDAP dynamically-loadable modules
 
-      openldap_required_modules:
+      ldap_server_required_modules:
         type: list
         elements: dict
         required: false
@@ -38,47 +38,47 @@ argument_specs:
           OpenLDAP modules to load idempotently. Each entry defines load (la name)
           and path (absolute filesystem path).
 
-      openldap_tls_cert_dir:
+      ldap_server_tls_cert_dir:
         type: str
         required: false
         description: Directory for the LDAPS TLS certificate file
 
-      openldap_tls_key_dir:
+      ldap_server_tls_key_dir:
         type: str
         required: false
         description: Directory for the LDAPS TLS private key file
 
-      openldap_tls_cert_path:
+      ldap_server_tls_cert_path:
         type: str
         required: false
         description: Absolute path to the LDAPS TLS certificate file
 
-      openldap_tls_key_path:
+      ldap_server_tls_key_path:
         type: str
         required: false
         description: Absolute path to the LDAPS TLS private key file
 
-      openldap_data_dir:
+      ldap_server_data_dir:
         type: str
         required: false
         description: Directory for the OpenLDAP MDB database files
 
-      openldap_database_suffix:
+      ldap_server_database_suffix:
         type: str
         required: false
         description: MDB database suffix (equal to ldap_base_dn)
 
-      openldap_root_dn:
+      ldap_server_root_dn:
         type: str
         required: false
         description: Root DN for the MDB database (cn=admin,<suffix>)
 
-      openldap_olc_database_dn:
+      ldap_server_olc_database_dn:
         type: str
         required: false
         description: OLC entry DN for the MDB database
 
-      openldap_schema_files:
+      ldap_server_schema_files:
         type: list
         elements: dict
         required: false
@@ -86,7 +86,7 @@ argument_specs:
           LDAP schema files to load idempotently. Each entry defines name (schema label)
           and path (absolute path to the LDIF schema file).
 
-      openldap_custom_schema_templates:
+      ldap_server_custom_schema_templates:
         type: list
         elements: dict
         required: false
@@ -94,7 +94,7 @@ argument_specs:
           Custom OLC schema definitions to load idempotently. Each entry defines
           a name and description for schema template rendering.
 
-      openldap_fortune_schema_oid_root:
+      ldap_server_fortune_schema_oid_root:
         type: str
         required: false
         description: >-
@@ -142,7 +142,7 @@ argument_specs:
         required: true
         description: posixAccount definitions keyed by username (e.g. generalta, mailta, stu)
 
-      openldap_credentials:
+      ldap_server_credentials:
         type: dict
         required: false
         description: >-
@@ -250,7 +250,7 @@ argument_specs:
                     no_log: true
                     description: Base64-encoded raw TOTP secret bytes.
 
-      openldap_tls_private_key:
+      ldap_server_tls_private_key:
         type: str
         required: false
         no_log: true
@@ -258,14 +258,14 @@ argument_specs:
           LDAPS TLS private key PEM content.
           Populated from gitignored host_vars/*/secrets.yml.
 
-      openldap_tls_certificate:
+      ldap_server_tls_certificate:
         type: str
         required: false
         description: >-
           LDAPS TLS certificate PEM content.
           Populated from gitignored host_vars/*/secrets.yml.
 
-      openldap_acl_secret_attrs:
+      ldap_server_acl_secret_attrs:
         type: list
         elements: str
         required: false
@@ -273,7 +273,7 @@ argument_specs:
           LDAP attributes whose read/search access must be restricted
           (userPassword, oathSecret, oathTOTPLastTimeStep, oathTOTPTimeStepDrift).
 
-      openldap_acl_delegate_dns:
+      ldap_server_acl_delegate_dns:
         type: list
         elements: str
         required: false
@@ -281,108 +281,108 @@ argument_specs:
           Full DNs of delegated administrators for data-tree write access
           (e.g., uid=generalta,ou=People,... and uid=mailta,ou=People,...).
 
-      openldap_ppolicy_default_dn:
+      ldap_server_ppolicy_default_dn:
         type: str
         required: false
         description: DN of the default ppolicy entry (cn=default,ou=Ppolicy,...)
 
-      openldap_ppolicy_check_module:
+      ldap_server_ppolicy_check_module:
         type: str
         required: false
         description: Absolute path to the password quality check module .so file
 
-      openldap_ppolicy_hash_cleartext:
+      ldap_server_ppolicy_hash_cleartext:
         type: bool
         required: false
         description: Whether OpenLDAP should hash cleartext passwords server-side
 
-      openldap_ppolicy_check_quality:
+      ldap_server_ppolicy_check_quality:
         type: int
         required: false
         description: Password quality check level (0=off, 1=accept, 2=refuse unchecked)
 
-      openldap_ppolicy_min_length:
+      ldap_server_ppolicy_min_length:
         type: int
         required: false
         description: Minimum password length enforced by ppolicy
 
-      openldap_ppolicy_in_history:
+      ldap_server_ppolicy_in_history:
         type: int
         required: false
         description: Number of previous passwords to retain in pwdHistory
 
-      openldap_ppolicy_use_check_module:
+      ldap_server_ppolicy_use_check_module:
         type: bool
         required: false
         description: Whether to invoke pwdCheckModule for extended quality checks
 
-      openldap_check_password_min_points:
+      ldap_server_check_password_min_points:
         type: int
         required: false
         description: Minimum character class points required by check_password.so
 
-      openldap_check_password_min_upper:
+      ldap_server_check_password_min_upper:
         type: int
         required: false
         description: Minimum uppercase characters (0 means no explicit minimum)
 
-      openldap_check_password_min_lower:
+      ldap_server_check_password_min_lower:
         type: int
         required: false
         description: Minimum lowercase characters (0 means no explicit minimum)
 
-      openldap_check_password_min_digit:
+      ldap_server_check_password_min_digit:
         type: int
         required: false
         description: Minimum digit characters (0 means no explicit minimum)
 
-      openldap_check_password_min_punct:
+      ldap_server_check_password_min_punct:
         type: int
         required: false
         description: Minimum punctuation characters (0 means no explicit minimum)
 
-      openldap_totp_params_dn:
+      ldap_server_totp_params_dn:
         type: str
         required: false
         description: DN of the shared OATH/TOTP parameters entry
 
-      openldap_totp_length:
+      ldap_server_totp_length:
         type: int
         required: false
         description: OATH TOTP code length (default 6)
 
-      openldap_totp_time_step:
+      ldap_server_totp_time_step:
         type: int
         required: false
         description: OATH TOTP time step period in seconds (default 60)
 
-      openldap_totp_hmac_algorithm:
+      ldap_server_totp_hmac_algorithm:
         type: str
         required: false
         description: >-
           OID for HMAC algorithm (SHA-1 OID 1.2.840.113549.2.7)
 
-      openldap_fortune_base_dn:
+      ldap_server_fortune_base_dn:
         type: str
         required: false
         description: DN of the Fortune container (ou=Fortune,...)
 
-      openldap_sssvlv_max:
+      ldap_server_sssvlv_max:
         type: int
         required: false
         description: Maximum concurrent SSS/VLV requests
 
-      openldap_sssvlv_max_keys:
+      ldap_server_sssvlv_max_keys:
         type: int
         required: false
         description: Maximum sort keys per SSS/VLV request
 
-      openldap_sssvlv_max_per_conn:
+      ldap_server_sssvlv_max_per_conn:
         type: int
         required: false
         description: Maximum SSS/VLV requests per connection
 
-      openldap_sudo_roles:
+      ldap_server_sudo_roles:
         type: dict
         required: false
         description: >-

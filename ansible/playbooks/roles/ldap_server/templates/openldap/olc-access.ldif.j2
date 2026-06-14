@@ -1,5 +1,5 @@
 # {{ ansible_managed }}
-dn: {{ _openldap_mdb_dn }}
+dn: {{ _ldap_server_mdb_dn }}
 changetype: modify
 replace: olcAccess
 olcAccess: {0}to attrs=userPassword

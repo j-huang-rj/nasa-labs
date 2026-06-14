@@ -35,7 +35,7 @@ firewall_rich_rules:
     rule: 'rule family="ipv4" source address="{{ lab_workstation2_ip }}/32" port port="2049" protocol="tcp" accept'
 
 # Service enablement
-openldap_enabled: true
+ldap_server_enabled: true
 nfs_server_enabled: true
 nfs_enabled: true
 

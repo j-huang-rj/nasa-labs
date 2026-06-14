@@ -1,8 +1,8 @@
 # {{ ansible_managed }}
-dn: olcOverlay=sssvlv,{{ _openldap_mdb_dn }}
+dn: olcOverlay=sssvlv,{{ _ldap_server_mdb_dn }}
 objectClass: olcOverlayConfig
 objectClass: olcSssVlvConfig
 olcOverlay: sssvlv
-olcSssVlvMax: {{ openldap_sssvlv_max | default(500) }}
-olcSssVlvMaxKeys: {{ openldap_sssvlv_max_keys | default(50) }}
-olcSssVlvMaxPerConn: {{ openldap_sssvlv_max_per_conn | default(10) }}
+olcSssVlvMax: {{ ldap_server_sssvlv_max | default(500) }}
+olcSssVlvMaxKeys: {{ ldap_server_sssvlv_max_keys | default(50) }}
+olcSssVlvMaxPerConn: {{ ldap_server_sssvlv_max_per_conn | default(10) }}

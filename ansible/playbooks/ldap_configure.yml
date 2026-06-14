@@ -3,22 +3,22 @@
 #   - bootstrap.yml
 #   - dns_configure.yml
 
-- name: LDAP And NFS Server Scaffolds
+- name: LDAP And NFS Server Configuration
   hosts: "ldap_servers:nfs_servers"
   gather_facts: false
   become: true
   tasks:
-    - name: Run OpenLDAP Role
+    - name: Run LDAP Server Role
       ansible.builtin.include_role:
-        name: openldap
-      when: openldap_enabled | default(false) | bool
+        name: ldap_server
+      when: ldap_server_enabled | default(false) | bool
 
     - name: Run NFS Role
       ansible.builtin.include_role:
         name: nfs
       when: nfs_enabled | default(false) | bool
 
-- name: LDAP Client And NFS Client Scaffolds
+- name: LDAP Client And NFS Client Configuration
   hosts: "ldap_clients:nfs_clients"
   gather_facts: false
   become: true

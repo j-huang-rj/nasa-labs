@@ -6,12 +6,12 @@
 
 - name: "PHASE [install : Ensure EPEL Repository Is Present]"
   ansible.builtin.dnf:
-    name: "{{ openldap_epel_package }}"
+    name: "{{ ldap_server_epel_package }}"
     state: present
 
 - name: "PHASE [install : Install OpenLDAP Packages]"
   ansible.builtin.dnf:
-    name: "{{ openldap_packages }}"
+    name: "{{ ldap_server_packages }}"
     state: present
 
 - name: "PHASE [install : Create OpenLDAP Systemd Override Directory]"
@@ -39,7 +39,7 @@
 
 - name: "PHASE [install : Enable And Start OpenLDAP Service]"
   ansible.builtin.systemd_service:
-    name: "{{ openldap_service_name }}"
+    name: "{{ ldap_server_service_name }}"
     enabled: true
     state: started
 
