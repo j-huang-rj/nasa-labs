@@ -9,33 +9,10 @@
     name: epel-release
     state: present
 
-- name: "PHASE [install : Install General Tools And Network Utilities]"
+- name: "PHASE [install : Install VM Integration Package]"
   ansible.builtin.dnf:
     name:
-      # DNF Repo Management
-      - dnf-plugins-core
-
-      # VM Integration
       - qemu-guest-agent
-
-      # General Tools
-      - wget
-      - git
-      - vim
-
-      # Connectivity
-      - traceroute
-      - mtr
-
-      # Scanning & Capture
-      - nmap
-      - nmap-ncat
-      - wireshark-cli
-      - whois
-
-      # Extra Packages
-      - fastfetch
-
     state: present
     update_cache: true
 

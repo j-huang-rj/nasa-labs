@@ -5,7 +5,7 @@
 - name: DNS Services
   ansible.builtin.import_playbook: dns_configure.yml
 
-- name: LDAP, NFS, And LDAP Client Scaffolds
+- name: LDAP, NFS, And LDAP Client Services
   ansible.builtin.import_playbook: ldap_configure.yml
 
 - name: Mail Services

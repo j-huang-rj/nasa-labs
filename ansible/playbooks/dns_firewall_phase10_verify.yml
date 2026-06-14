@@ -623,7 +623,7 @@
   tasks:
     - name: "PHASE [firewall-regression : START]"
       ansible.builtin.debug:
-        msg: "Phase 10 firewall regression validation — verifying old-lab HW1-0/HW1-1/HW1-2 behavior is preserved"
+        msg: "Phase 10 firewall regression validation — verifying required router and zone behavior is preserved"
 
     # --- NFS target gate ---
     - name: "PHASE [firewall-regression : Assert NFS Policy Target Is CONTINUE Not ACCEPT]"

@@ -1,45 +1,41 @@
 ---
-# ───────────────────────────── Feature flags ─────────────────────────────
+# Component gate
 nfs_enabled: false
 nfs_server_enabled: false
 nfs_client_enabled: false
 
-# ───────────────────────────── Package and service defaults ──────────────
+# Package and service defaults
+nfs_server_service_name: nfs-server
+
 nfs_server_packages:
   - nfs-utils
 
 nfs_client_packages:
   - nfs-utils
 
-nfs_server_service_name: nfs-server
-
-# ───────────────────────────── Filesystem paths ──────────────────────────
+# Filesystem paths
 nfs_export_root: "{{ lab_home_root }}"
 nfs_export_conf_path: /etc/exports.d/nasa-homes.exports
 nfs_export_conf_dir: /etc/exports.d
 
-# ───────────────────────────── Export shapes ────────────────────────────
-# Each item: { path, clients[], options[] }
+# Export shapes
 nfs_exports: []
 
-# Default export options used when nfs_exports items omit override fields
+# Default export options
 nfs_default_export_options:
   - rw
   - sync
   - root_squash
   - no_subtree_check
 
-# ───────────────────────────── Mount shapes ─────────────────────────────
-# Each item: { path, src, fstype, opts }
+# Mount shapes
 nfs_mounts: []
-
 nfs_default_mount_options: "rw,hard,noatime,nfsvers=4,proto=tcp,_netdev"
 
-# ───────────────────────────── Home tree ────────────────────────────────
-# Derived from ldap_users/ldap_groups at runtime; shape-only here
+# Home tree
 nfs_home_tree_entries: []
 
-# ───────────────────────────── SELinux ──────────────────────────────────
+# SELinux
 nfs_server_selinux_booleans:
   - name: nfs_export_all_rw
     state: true

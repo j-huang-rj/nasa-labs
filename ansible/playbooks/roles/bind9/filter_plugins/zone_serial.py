@@ -55,8 +55,8 @@ EXAMPLES = """
         current_serial=bind9_zone_current_state.get(item.file, {}).get('serial', 0),
         current_hash=bind9_zone_current_state.get(item.file, {}).get('hash', '')
     ) %}
-    ; zone-hash: {{ result.hash }}
     {{ result.serial }} ; serial
+    # The role persists result.hash to a <zone_file>.hash sidecar file.
 """
 
 RETURN = """

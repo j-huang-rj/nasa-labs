@@ -17,7 +17,6 @@ bind9_dynamic_zone_dir: /var/named/dynamic
 # SOA admin contact
 bind9_soa_admin: "admin"
 bind9_zone_ttl: 300
-# Empty means derive YYYYMMDD from ansible_date_time in role tasks.
 bind9_soa_serial_date: ""
 
 # ACL definitions

@@ -1,0 +1,31 @@
+---
+- name: "PHASE [setup : START]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Set up LDAP client"
+
+- name: "PHASE [setup : Install LDAP Client Packages]"
+  ansible.builtin.import_tasks: install.yml
+
+- name: "PHASE [setup : Deploy LDAP CA Certificate]"
+  ansible.builtin.import_tasks: ca.yml
+
+- name: "PHASE [setup : Configure Authselect]"
+  ansible.builtin.import_tasks: authselect.yml
+
+- name: "PHASE [setup : Configure SSSD]"
+  ansible.builtin.import_tasks: sssd.yml
+
+- name: "PHASE [setup : Configure SSH LDAP Key Lookup]"
+  ansible.builtin.import_tasks: sshd.yml
+
+- name: "PHASE [setup : Configure LDAP Sudo]"
+  ansible.builtin.import_tasks: sudo.yml
+
+- name: "PHASE [setup : Verify LDAP Client State]"
+  ansible.builtin.import_tasks: verify.yml
+
+- name: "PHASE [setup : END]"
+  become: false
+  ansible.builtin.debug:
+    msg: "Completed setup phase"

@@ -1,4 +1,8 @@
 ---
+- name: "PHASE [handler : Reload Systemd Daemon]"
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
 - name: "PHASE [handler : Restart Postfix]"
   ansible.builtin.systemd_service:
     name: "{{ mail_postfix_service_name }}"
