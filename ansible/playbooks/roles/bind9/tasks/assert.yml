@@ -303,7 +303,7 @@
       - mail_dmarc_value is defined and mail_dmarc_value | length > 0
     fail_msg: >-
       Mail zone record variables must be defined and non-empty. Ensure
-      group_vars/all/mail_dns.yml is loaded and host_vars/primary-ns-01/secrets.yml
+      group_vars/all/mail_identity.yml is loaded and host_vars/primary-ns-01/secrets.yml
       provides mail_dkim_txt_value.
   no_log: true
 

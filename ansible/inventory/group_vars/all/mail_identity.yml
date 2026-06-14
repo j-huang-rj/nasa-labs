@@ -1,5 +1,5 @@
 ---
-# Shared mail service DNS contract.
+# Shared mail service identity and DNS publication contract.
 
 # Mail hosts
 mail_smtp_host: smtp-01

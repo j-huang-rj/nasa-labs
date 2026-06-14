@@ -110,7 +110,7 @@
       - mail_dkim_selector | string == '2026-na'
     fail_msg: >-
       DKIM selector must be exactly '2026-na'. Got: '{{ mail_dkim_selector }}'.
-      Update the selector in group_vars/all/mail_dns.yml to match the published DNS key.
+      Update the selector in group_vars/all/mail_identity.yml to match the published DNS key.
   when: mail_opendkim_enabled | bool
 
 - name: "PHASE [assert : Check DKIM Private Keys Dict Is Defined]"
