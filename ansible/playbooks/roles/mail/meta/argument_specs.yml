@@ -108,6 +108,11 @@ argument_specs:
         description: >-
           Secondary virtual mailbox domain
 
+      mail_smtp_fqdn:
+        type: str
+        required: false
+        description: FQDN used as Postfix myhostname and an OpenDKIM trusted host
+
       # Postfix
       mail_postfix_packages:
         type: list
@@ -173,6 +178,16 @@ argument_specs:
         required: false
         description: >-
           Path for the Dovecot LMTP socket inside the Postfix chroot for mailbox delivery
+
+      mail_lmtp_private_ip:
+        type: str
+        required: false
+        description: Private IMAP-host address used as the default LMTP TCP listener address
+
+      mail_lmtp_port:
+        type: int
+        required: false
+        description: Port used as the default LMTP TCP listener port
 
       mail_dovecot_lmtp_listen_address:
         type: str
@@ -255,7 +270,7 @@ argument_specs:
         required: false
         description: >-
           PEM-encoded TLS certificate content.
-          Asserted non-empty at runtime when mail_enabled is true (no_log: true).
+          Asserted non-empty at runtime when mail_enabled is true.
 
       mail_tls_private_key:
         type: str

@@ -41,7 +41,7 @@ argument_specs:
       nfs_export_root:
         type: str
         required: false
-        default: /u
+        default: "{{ lab_home_root }}"
         description: Root directory for NFS exports, normally lab_home_root
 
       nfs_export_conf_path:

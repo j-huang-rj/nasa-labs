@@ -1,5 +1,5 @@
 ---
-# Component gate. Hosts opt into Docker by setting this true in host_vars.
+# Component gate
 docker_enabled: false
 
 docker_image_archives: []

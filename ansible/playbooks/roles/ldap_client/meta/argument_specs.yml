@@ -92,7 +92,7 @@ argument_specs:
         required: false
         description: >-
           Whether to enable authselect with-mkhomedir or oddjob-mkhomedir.
-          Must remain false because Phase 13 NFS lab_home_root is the required home path.
+          Must remain false because NFS-provided lab_home_root is the required home path.
 
       ldap_client_sssd_domain:
         type: str
@@ -103,19 +103,19 @@ argument_specs:
         type: str
         required: false
         description: >-
-          FQDN of the LDAP service. Shape-only in Phase 9.
+          FQDN of the LDAP service used by workstation client configuration.
 
       ldap_server_uri:
         type: str
         required: false
         description: >-
-          LDAPS URI for the LDAP server. Shape-only in Phase 9.
+          LDAPS URI for LDAP client searches and SSSD configuration.
 
       ldap_base_dn:
         type: str
         required: false
         description: >-
-          LDAP base DN for consumer searches. Shape-only in Phase 9.
+          LDAP base DN for client searches and SSSD search bases.
 
       ldap_tls_ca_certificate:
         type: str
@@ -145,9 +145,3 @@ argument_specs:
         description: >-
           Absolute path on ldap_tls_ca_source_host to the OpenLDAP CA certificate
           file. Defaults to /etc/openldap/certs/ldap.crt.
-
-      ldap_client_sssd_config:
-        type: dict
-        required: false
-        description: >-
-          SSSD configuration override. Shape-only in Phase 9; expanded in Phase 14.

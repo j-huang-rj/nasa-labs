@@ -1,5 +1,5 @@
 ---
-# Component gate. Hosts opt into BIND by setting this true in host_vars.
+# Component gate
 bind9_enabled: false
 
 # Package and service defaults

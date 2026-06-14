@@ -146,6 +146,7 @@ argument_specs:
       bind9_soa_serial_date:
         type: str
         required: false
+        default: ""
         description: >-
           Optional YYYYMMDD floor override used by the bind9_zone_serial filter for first-deploy
           and date-rollover bumps. When empty (default), the role derives the value from

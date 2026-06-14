@@ -1,5 +1,5 @@
 ---
-# Component gate. Hosts opt into mail by setting this true in host_vars.
+# Component gate
 mail_enabled: false
 
 # Feature gates. Defaults represent a unified mail host (Postfix + Dovecot
